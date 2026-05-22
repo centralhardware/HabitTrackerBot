@@ -15,7 +15,7 @@ object ReminderScheduler {
                 sendMessage(
                     chatId = reminder.userId.toChatId(),
                     text = "⏳ ${reminder.reminderTime.format(Keyboards.TIME_FMT)} — ${reminder.name}",
-                    replyMarkup = Keyboards.checkIn(reminder.habitId, reminder.reminderTime, reminder.userDate)
+                    replyMarkup = Keyboards.checkIn(reminder.reminderId, reminder.userDate)
                 )
             }.onFailure { e ->
                 KSLog.info("Failed to send reminder to ${reminder.userId}: ${e.message}")

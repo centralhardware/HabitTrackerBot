@@ -122,7 +122,7 @@ object HabitService {
     }
 
     data class DueReminder(
-        val habitId: Long,
+        val reminderId: Long,
         val userId: Long,
         val name: String,
         val reminderTime: LocalTime,
@@ -134,13 +134,12 @@ object HabitService {
         val rows = sessionOf(DatabaseService.dataSource).run(
             queryOf(
                 """
-                SELECT h.id AS habit_id, h.user_id, h.name, r.reminder_time, us.timezone AS tz
+                SELECT r.id AS reminder_id, h.user_id, h.name, r.reminder_time, us.timezone AS tz
                 FROM habit_reminders r
                 JOIN habits h ON h.id = r.habit_id
                 JOIN user_settings us ON us.user_id = h.user_id
                 LEFT JOIN checkins c
-                    ON c.habit_id = h.id
-                   AND c.reminder_time = r.reminder_time
+                    ON c.reminder_id = r.id
                    AND c.check_date = (now() AT TIME ZONE us.timezone)::date
                 WHERE h.deleted_at IS NULL
                   AND h.paused_at IS NULL
@@ -148,7 +147,7 @@ object HabitService {
                 """.trimIndent()
             ).map { row ->
                 RawDue(
-                    habitId = row.long("habit_id"),
+                    reminderId = row.long("reminder_id"),
                     userId = row.long("user_id"),
                     name = row.string("name"),
                     reminderTime = row.localTime("reminder_time"),
@@ -163,7 +162,7 @@ object HabitService {
             val localMinute = zdt.toLocalTime().withSecond(0).withNano(0)
             if (localMinute != r.reminderTime) return@mapNotNull null
             DueReminder(
-                habitId = r.habitId,
+                reminderId = r.reminderId,
                 userId = r.userId,
                 name = r.name,
                 reminderTime = r.reminderTime,
@@ -173,7 +172,7 @@ object HabitService {
     }
 
     private data class RawDue(
-        val habitId: Long,
+        val reminderId: Long,
         val userId: Long,
         val name: String,
         val reminderTime: LocalTime,

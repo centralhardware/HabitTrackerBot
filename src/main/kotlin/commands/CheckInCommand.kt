@@ -18,24 +18,25 @@ fun BehaviourContext.registerCheckInCommand() {
             return@onCommand
         }
         val today = LocalDate.now(tz)
-        val items = CheckInService.todaysCheckIns(userId, today)
+        val yesterday = today.minusDays(1)
+        val items = CheckInService.pendingCheckIns(userId, yesterday, today)
         if (items.isEmpty()) {
-            sendMessage(message.chat.id, "No habits scheduled for today.")
+            sendMessage(message.chat.id, "Nothing to check in.")
             return@onCommand
         }
 
-        sendMessage(message.chat.id, "Check-ins for $today:")
+        sendMessage(message.chat.id, "Pending check-ins:")
         items.forEach { item ->
             val time = item.reminderTime.format(Keyboards.TIME_FMT)
-            val statusIcon = when (item.status) {
-                "done" -> "✅"
-                "skip" -> "❌"
-                else -> "⏳"
+            val dayLabel = when (item.date) {
+                today -> "today"
+                yesterday -> "yesterday"
+                else -> item.date.toString()
             }
             sendMessage(
                 chatId = message.chat.id,
-                text = "$statusIcon $time — ${item.name}",
-                replyMarkup = Keyboards.checkIn(item.habitId, item.reminderTime, today)
+                text = "⏳ $dayLabel $time — ${item.name}",
+                replyMarkup = Keyboards.checkIn(item.reminderId, item.date)
             )
         }
     }

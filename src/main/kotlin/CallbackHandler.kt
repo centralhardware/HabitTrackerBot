@@ -4,7 +4,6 @@ import dev.inmo.tgbotapi.extensions.behaviour_builder.BehaviourContext
 import dev.inmo.tgbotapi.extensions.behaviour_builder.triggers_handling.onMessageDataCallbackQuery
 import dev.inmo.tgbotapi.types.queries.callback.MessageDataCallbackQuery
 import java.time.LocalDate
-import java.time.LocalTime
 
 fun BehaviourContext.registerCallbackHandler() {
     onMessageDataCallbackQuery { query ->
@@ -26,27 +25,21 @@ private suspend fun BehaviourContext.handleCheckIn(
     userId: Long
 ) {
     val parts = data.split("|")
-    if (parts.size != 5) {
+    if (parts.size != 4) {
         answerCallbackQuery(query, text = "Bad button")
         return
     }
-    val habitId = parts[1].toLongOrNull() ?: run {
+    val reminderId = parts[1].toLongOrNull() ?: run {
         answerCallbackQuery(query, text = "Error")
         return
     }
-    val time = try {
-        LocalTime.parse(parts[2], Keyboards.TIME_FMT)
-    } catch (_: Exception) {
-        answerCallbackQuery(query, text = "Bad time")
-        return
-    }
     val date = try {
-        LocalDate.parse(parts[3])
+        LocalDate.parse(parts[2])
     } catch (_: Exception) {
         answerCallbackQuery(query, text = "Bad date")
         return
     }
-    val status = when (parts[4]) {
+    val status = when (parts[3]) {
         "done" -> CheckInService.Status.DONE
         "skip" -> CheckInService.Status.SKIP
         else -> {
@@ -55,7 +48,11 @@ private suspend fun BehaviourContext.handleCheckIn(
         }
     }
 
-    CheckInService.record(habitId, userId, time, date, status)
+    val ok = CheckInService.record(reminderId, userId, date, status)
+    if (!ok) {
+        answerCallbackQuery(query, text = "Not found")
+        return
+    }
 
     val icon = if (status == CheckInService.Status.DONE) "✅" else "❌"
     val msg = query.message

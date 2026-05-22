@@ -10,28 +10,24 @@ object CheckInService {
         SKIP("skip")
     }
 
-    fun record(
-        habitId: Long,
-        userId: Long,
-        reminderTime: LocalTime,
-        date: LocalDate,
-        status: Status
-    ): Boolean {
+    fun record(reminderId: Long, userId: Long, date: LocalDate, status: Status): Boolean {
         return sessionOf(DatabaseService.dataSource).use { session ->
             session.update(
                 queryOf(
                     """
-                    INSERT INTO checkins (habit_id, user_id, reminder_time, check_date, status)
-                    VALUES (?, ?, ?, ?, ?)
-                    ON CONFLICT (habit_id, check_date, reminder_time) DO UPDATE
+                    INSERT INTO checkins (reminder_id, check_date, status)
+                    SELECT r.id, ?, ?
+                    FROM habit_reminders r
+                    JOIN habits h ON h.id = r.habit_id
+                    WHERE r.id = ? AND h.user_id = ? AND h.deleted_at IS NULL
+                    ON CONFLICT (reminder_id, check_date) DO UPDATE
                         SET status = EXCLUDED.status,
                             checked_at = now()
                     """.trimIndent(),
-                    habitId,
-                    userId,
-                    reminderTime,
                     date,
-                    status.value
+                    status.value,
+                    reminderId,
+                    userId
                 )
             ) > 0
         }
@@ -51,11 +47,12 @@ object CheckInService {
             queryOf(
                 """
                 SELECT h.id, h.name,
-                       COUNT(DISTINCT c.check_date)                                       AS total_days,
-                       COUNT(*) FILTER (WHERE c.status = 'done')                          AS done_count,
-                       COUNT(*) FILTER (WHERE c.status = 'skip')                          AS skip_count
+                       COUNT(DISTINCT c.check_date)                       AS total_days,
+                       COUNT(*) FILTER (WHERE c.status = 'done')          AS done_count,
+                       COUNT(*) FILTER (WHERE c.status = 'skip')          AS skip_count
                 FROM habits h
-                LEFT JOIN checkins c ON c.habit_id = h.id
+                LEFT JOIN habit_reminders r ON r.habit_id = h.id
+                LEFT JOIN checkins c ON c.reminder_id = r.id
                 WHERE h.user_id = ? AND h.deleted_at IS NULL
                 GROUP BY h.id, h.name
                 ORDER BY h.created_at
@@ -80,11 +77,12 @@ object CheckInService {
             queryOf(
                 """
                 WITH daily AS (
-                    SELECT check_date,
-                           BOOL_OR(status = 'done') AS any_done
-                    FROM checkins
-                    WHERE habit_id = ?
-                    GROUP BY check_date
+                    SELECT c.check_date,
+                           BOOL_OR(c.status = 'done') AS any_done
+                    FROM checkins c
+                    JOIN habit_reminders r ON r.id = c.reminder_id
+                    WHERE r.habit_id = ?
+                    GROUP BY c.check_date
                 ),
                 with_gap AS (
                     SELECT check_date,
@@ -104,40 +102,46 @@ object CheckInService {
         ) ?: 0
     }
 
-    fun todaysCheckIns(userId: Long, date: LocalDate): List<TodayCheckIn> {
+    data class PendingCheckIn(
+        val reminderId: Long,
+        val name: String,
+        val reminderTime: LocalTime,
+        val date: LocalDate
+    )
+
+    fun pendingCheckIns(userId: Long, fromDate: LocalDate, toDate: LocalDate): List<PendingCheckIn> {
         return sessionOf(DatabaseService.dataSource).run(
             queryOf(
                 """
-                SELECT h.id        AS habit_id,
-                       h.name      AS name,
-                       r.reminder_time,
-                       c.status
+                WITH date_range AS (
+                    SELECT generate_series(?::date, ?::date, '1 day')::date AS d
+                )
+                SELECT r.id AS reminder_id, h.name, r.reminder_time, dr.d AS check_date
                 FROM habits h
                 JOIN habit_reminders r ON r.habit_id = h.id
+                JOIN user_settings us ON us.user_id = h.user_id
+                CROSS JOIN date_range dr
                 LEFT JOIN checkins c
-                    ON c.habit_id = h.id
-                   AND c.reminder_time = r.reminder_time
-                   AND c.check_date = ?
-                WHERE h.user_id = ? AND h.deleted_at IS NULL
-                ORDER BY r.reminder_time, h.created_at
+                    ON c.reminder_id = r.id
+                   AND c.check_date = dr.d
+                WHERE h.user_id = ?
+                  AND h.deleted_at IS NULL
+                  AND h.paused_at IS NULL
+                  AND c.id IS NULL
+                  AND dr.d >= (h.created_at AT TIME ZONE us.timezone)::date
+                ORDER BY dr.d, r.reminder_time, h.created_at
                 """.trimIndent(),
-                date,
+                fromDate,
+                toDate,
                 userId
             ).map { row ->
-                TodayCheckIn(
-                    habitId = row.long("habit_id"),
+                PendingCheckIn(
+                    reminderId = row.long("reminder_id"),
                     name = row.string("name"),
                     reminderTime = row.localTime("reminder_time"),
-                    status = row.stringOrNull("status")
+                    date = row.localDate("check_date")
                 )
             }.asList
         )
     }
-
-    data class TodayCheckIn(
-        val habitId: Long,
-        val name: String,
-        val reminderTime: LocalTime,
-        val status: String?
-    )
 }
