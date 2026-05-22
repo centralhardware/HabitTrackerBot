@@ -5,11 +5,13 @@ import java.time.ZoneId
 object UserSettingsService {
 
     fun getTimezone(userId: Long): ZoneId? {
-        val stored = sessionOf(DatabaseService.dataSource).run(
-            queryOf("SELECT timezone FROM user_settings WHERE user_id = ?", userId)
-                .map { it.string("timezone") }
-                .asSingle
-        ) ?: return null
+        val stored = sessionOf(DatabaseService.dataSource).use { session ->
+            session.run(
+                queryOf("SELECT timezone FROM user_settings WHERE user_id = ?", userId)
+                    .map { it.string("timezone") }
+                    .asSingle
+            )
+        } ?: return null
         return runCatching { ZoneId.of(stored) }.getOrNull()
     }
 

@@ -43,8 +43,9 @@ object HabitService {
     }
 
     fun listActive(userId: Long): List<Habit> {
-        return sessionOf(DatabaseService.dataSource).run(
-            queryOf(
+        return sessionOf(DatabaseService.dataSource).use { session ->
+            session.run(
+                queryOf(
                 """
                 SELECT h.id, h.user_id, h.name, h.paused_at,
                        COALESCE(
@@ -70,7 +71,8 @@ object HabitService {
                     pausedAt = row.instantOrNull("paused_at")
                 )
             }.asList
-        )
+            )
+        }
     }
 
     fun softDelete(habitId: Long, userId: Long): Boolean {
@@ -131,8 +133,9 @@ object HabitService {
 
     fun findDue(): List<DueReminder> {
         val now = Instant.now()
-        val rows = sessionOf(DatabaseService.dataSource).run(
-            queryOf(
+        val rows = sessionOf(DatabaseService.dataSource).use { session ->
+            session.run(
+                queryOf(
                 """
                 SELECT r.id AS reminder_id, h.user_id, h.name, r.reminder_time, us.timezone AS tz
                 FROM habit_reminders r
@@ -154,7 +157,8 @@ object HabitService {
                     tzId = row.string("tz")
                 )
             }.asList
-        )
+            )
+        }
 
         return rows.mapNotNull { r ->
             val tz = runCatching { ZoneId.of(r.tzId) }.getOrNull() ?: return@mapNotNull null

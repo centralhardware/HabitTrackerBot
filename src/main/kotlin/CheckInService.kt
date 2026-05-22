@@ -1,3 +1,4 @@
+import kotliquery.Session
 import kotliquery.queryOf
 import kotliquery.sessionOf
 import java.time.LocalDate
@@ -43,37 +44,55 @@ object CheckInService {
     )
 
     fun userStats(userId: Long): List<HabitStat> {
-        return sessionOf(DatabaseService.dataSource).run(
-            queryOf(
-                """
-                SELECT h.id, h.name,
-                       COUNT(DISTINCT c.check_date)                       AS total_days,
-                       COUNT(*) FILTER (WHERE c.status = 'done')          AS done_count,
-                       COUNT(*) FILTER (WHERE c.status = 'skip')          AS skip_count
-                FROM habits h
-                LEFT JOIN habit_reminders r ON r.habit_id = h.id
-                LEFT JOIN checkins c ON c.reminder_id = r.id
-                WHERE h.user_id = ? AND h.deleted_at IS NULL
-                GROUP BY h.id, h.name
-                ORDER BY h.created_at
-                """.trimIndent(),
-                userId
-            ).map { row ->
-                val habitId = row.long("id")
+        return sessionOf(DatabaseService.dataSource).use { session ->
+            val raw = session.run(
+                queryOf(
+                    """
+                    SELECT h.id, h.name,
+                           COUNT(DISTINCT c.check_date)                       AS total_days,
+                           COUNT(*) FILTER (WHERE c.status = 'done')          AS done_count,
+                           COUNT(*) FILTER (WHERE c.status = 'skip')          AS skip_count
+                    FROM habits h
+                    LEFT JOIN habit_reminders r ON r.habit_id = h.id
+                    LEFT JOIN checkins c ON c.reminder_id = r.id
+                    WHERE h.user_id = ? AND h.deleted_at IS NULL
+                    GROUP BY h.id, h.name
+                    ORDER BY h.created_at
+                    """.trimIndent(),
+                    userId
+                ).map { row ->
+                    StatRow(
+                        habitId = row.long("id"),
+                        name = row.string("name"),
+                        totalDays = row.int("total_days"),
+                        doneCount = row.int("done_count"),
+                        skipCount = row.int("skip_count")
+                    )
+                }.asList
+            )
+            raw.map { r ->
                 HabitStat(
-                    habitId = habitId,
-                    name = row.string("name"),
-                    totalDays = row.int("total_days"),
-                    doneCount = row.int("done_count"),
-                    skipCount = row.int("skip_count"),
-                    streak = currentStreak(habitId)
+                    habitId = r.habitId,
+                    name = r.name,
+                    totalDays = r.totalDays,
+                    doneCount = r.doneCount,
+                    skipCount = r.skipCount,
+                    streak = currentStreak(session, r.habitId)
                 )
-            }.asList
-        )
+            }
+        }
     }
 
-    private fun currentStreak(habitId: Long): Int {
-        return sessionOf(DatabaseService.dataSource).run(
+    private data class StatRow(
+        val habitId: Long,
+        val name: String,
+        val totalDays: Int,
+        val doneCount: Int,
+        val skipCount: Int
+    )
+
+    private fun currentStreak(session: Session, habitId: Long): Int {
+        return session.run(
             queryOf(
                 """
                 WITH daily AS (
@@ -110,39 +129,41 @@ object CheckInService {
     )
 
     fun pendingCheckIns(userId: Long, fromDate: LocalDate, toDate: LocalDate): List<PendingCheckIn> {
-        return sessionOf(DatabaseService.dataSource).run(
-            queryOf(
-                """
-                WITH date_range AS (
-                    SELECT generate_series(?::date, ?::date, '1 day')::date AS d
-                )
-                SELECT r.id AS reminder_id, h.name, r.reminder_time, dr.d AS check_date
-                FROM habits h
-                JOIN habit_reminders r ON r.habit_id = h.id
-                JOIN user_settings us ON us.user_id = h.user_id
-                CROSS JOIN date_range dr
-                LEFT JOIN checkins c
-                    ON c.reminder_id = r.id
-                   AND c.check_date = dr.d
-                WHERE h.user_id = ?
-                  AND h.deleted_at IS NULL
-                  AND h.paused_at IS NULL
-                  AND c.id IS NULL
-                  AND ((dr.d + r.reminder_time) AT TIME ZONE us.timezone) > h.created_at
-                ORDER BY dr.d, r.reminder_time, h.created_at
-                """.trimIndent(),
-                fromDate,
-                toDate,
-                userId
-            ).map { row ->
-                PendingCheckIn(
-                    reminderId = row.long("reminder_id"),
-                    name = row.string("name"),
-                    reminderTime = row.localTime("reminder_time"),
-                    date = row.localDate("check_date")
-                )
-            }.asList
-        )
+        return sessionOf(DatabaseService.dataSource).use { session ->
+            session.run(
+                queryOf(
+                    """
+                    WITH date_range AS (
+                        SELECT generate_series(?::date, ?::date, '1 day')::date AS d
+                    )
+                    SELECT r.id AS reminder_id, h.name, r.reminder_time, dr.d AS check_date
+                    FROM habits h
+                    JOIN habit_reminders r ON r.habit_id = h.id
+                    JOIN user_settings us ON us.user_id = h.user_id
+                    CROSS JOIN date_range dr
+                    LEFT JOIN checkins c
+                        ON c.reminder_id = r.id
+                       AND c.check_date = dr.d
+                    WHERE h.user_id = ?
+                      AND h.deleted_at IS NULL
+                      AND h.paused_at IS NULL
+                      AND c.id IS NULL
+                      AND ((dr.d + r.reminder_time) AT TIME ZONE us.timezone) > h.created_at
+                    ORDER BY dr.d, r.reminder_time, h.created_at
+                    """.trimIndent(),
+                    fromDate,
+                    toDate,
+                    userId
+                ).map { row ->
+                    PendingCheckIn(
+                        reminderId = row.long("reminder_id"),
+                        name = row.string("name"),
+                        reminderTime = row.localTime("reminder_time"),
+                        date = row.localDate("check_date")
+                    )
+                }.asList
+            )
+        }
     }
 
     fun autoSkipOverdue() {
