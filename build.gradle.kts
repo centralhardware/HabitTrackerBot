@@ -18,7 +18,7 @@ val logbackVersion = "1.5.12"
 
 dependencies {
     implementation("dev.inmo:tgbotapi:$ktgbotapiVersion")
-    implementation("com.github.centralhardware:ktgbotapi-commons:8b9e69dd")
+    implementation("com.github.centralhardware:ktgbotapi-commons:33.1.0")
 
     implementation("org.postgresql:postgresql:42.7.4")
     implementation("com.zaxxer:HikariCP:6.2.1")
