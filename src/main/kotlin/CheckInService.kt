@@ -128,7 +128,7 @@ object CheckInService {
                   AND h.deleted_at IS NULL
                   AND h.paused_at IS NULL
                   AND c.id IS NULL
-                  AND dr.d >= (h.created_at AT TIME ZONE us.timezone)::date
+                  AND ((dr.d + r.reminder_time) AT TIME ZONE us.timezone) > h.created_at
                 ORDER BY dr.d, r.reminder_time, h.created_at
                 """.trimIndent(),
                 fromDate,
@@ -143,5 +143,36 @@ object CheckInService {
                 )
             }.asList
         )
+    }
+
+    fun autoSkipOverdue() {
+        sessionOf(DatabaseService.dataSource).use { session ->
+            session.execute(
+                queryOf(
+                    """
+                    WITH slots AS (
+                        SELECT r.id AS reminder_id, h.created_at, h.paused_at,
+                               r.reminder_time, us.timezone,
+                               generate_series(
+                                   (h.created_at AT TIME ZONE us.timezone)::date,
+                                   (now() AT TIME ZONE us.timezone)::date,
+                                   '1 day'
+                               )::date AS d
+                        FROM habit_reminders r
+                        JOIN habits h ON h.id = r.habit_id
+                        JOIN user_settings us ON us.user_id = h.user_id
+                        WHERE h.deleted_at IS NULL
+                    )
+                    INSERT INTO checkins (reminder_id, check_date, status)
+                    SELECT s.reminder_id, s.d, 'skip'
+                    FROM slots s
+                    WHERE ((s.d + s.reminder_time) AT TIME ZONE s.timezone) > s.created_at
+                      AND s.d < ((now() AT TIME ZONE s.timezone)::date - 1)
+                      AND (s.paused_at IS NULL OR ((s.d + s.reminder_time) AT TIME ZONE s.timezone) < s.paused_at)
+                    ON CONFLICT (reminder_id, check_date) DO NOTHING
+                    """.trimIndent()
+                )
+            )
+        }
     }
 }

@@ -7,6 +7,7 @@ import dev.inmo.tgbotapi.types.toChatId
 object ReminderScheduler {
 
     suspend fun BehaviourContext.runOnce() {
+        CheckInService.autoSkipOverdue()
         val due = HabitService.findDue()
         if (due.isEmpty()) return
 
