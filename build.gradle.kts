@@ -13,7 +13,7 @@ repositories {
 }
 
 val ktgbotapiVersion = "33.1.0"
-val flywayVersion = "11.10.0"
+val flywayVersion = "12.6.2"
 val logbackVersion = "1.5.12"
 
 dependencies {
