@@ -10,9 +10,7 @@ object DatabaseService {
     private fun initialize(): DataSource {
         val hikari = HikariConfig().apply {
             jdbcUrl = Config.DATABASE_URL
-            Config.DATABASE_USER?.let { username = it }
-            Config.DATABASE_PASSWORD?.let { password = it }
-            maximumPoolSize = 5
+            maximumPoolSize = 2
             driverClassName = "org.postgresql.Driver"
         }
         val ds = HikariDataSource(hikari)
