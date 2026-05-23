@@ -14,7 +14,6 @@ repositories {
 
 val ktgbotapiVersion = "33.1.0"
 val flywayVersion = "12.6.2"
-val logbackVersion = "1.5.32"
 
 dependencies {
     implementation("dev.inmo:tgbotapi:$ktgbotapiVersion")
@@ -28,8 +27,6 @@ dependencies {
     implementation("org.flywaydb:flyway-database-postgresql:$flywayVersion")
 
     implementation("dev.inmo:krontab:2.9.0")
-
-    implementation("ch.qos.logback:logback-classic:$logbackVersion")
 
     testImplementation(kotlin("test"))
     testImplementation("org.junit.jupiter:junit-jupiter-api:6.1.0")
