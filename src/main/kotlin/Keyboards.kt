@@ -7,13 +7,13 @@ object Keyboards {
 
     val TIME_FMT: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm")
 
-    fun checkIn(reminderId: Long, date: LocalDate): InlineKeyboardMarkup {
+    fun checkIn(reminderId: Long, date: LocalDate, lang: Lang): InlineKeyboardMarkup {
         return InlineKeyboardMarkup(
             listOf(
                 listOf(
-                    CallbackDataInlineKeyboardButton("✅ Done", "ci|$reminderId|$date|done"),
-                    CallbackDataInlineKeyboardButton("❌ Skip", "ci|$reminderId|$date|skip"),
-                    CallbackDataInlineKeyboardButton("🗑 Delete", "ci|$reminderId|$date|del")
+                    CallbackDataInlineKeyboardButton(Strings.btnDone(lang), "ci|$reminderId|$date|done"),
+                    CallbackDataInlineKeyboardButton(Strings.btnSkip(lang), "ci|$reminderId|$date|skip"),
+                    CallbackDataInlineKeyboardButton(Strings.btnDelete(lang), "ci|$reminderId|$date|del")
                 )
             )
         )

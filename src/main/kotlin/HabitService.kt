@@ -128,7 +128,8 @@ object HabitService {
         val userId: Long,
         val name: String,
         val reminderTime: LocalTime,
-        val userDate: LocalDate
+        val userDate: LocalDate,
+        val lang: Lang
     )
 
     fun findDue(): List<DueReminder> {
@@ -137,7 +138,8 @@ object HabitService {
             session.run(
                 queryOf(
                 """
-                SELECT r.id AS reminder_id, h.user_id, h.name, r.reminder_time, us.timezone AS tz
+                SELECT r.id AS reminder_id, h.user_id, h.name, r.reminder_time,
+                       us.timezone AS tz, us.language AS lang
                 FROM habit_reminders r
                 JOIN habits h ON h.id = r.habit_id
                 JOIN user_settings us ON us.user_id = h.user_id
@@ -146,6 +148,7 @@ object HabitService {
                    AND c.check_date = (now() AT TIME ZONE us.timezone)::date
                 WHERE h.deleted_at IS NULL
                   AND h.paused_at IS NULL
+                  AND us.timezone IS NOT NULL
                   AND c.id IS NULL
                 """.trimIndent()
             ).map { row ->
@@ -154,7 +157,8 @@ object HabitService {
                     userId = row.long("user_id"),
                     name = row.string("name"),
                     reminderTime = row.localTime("reminder_time"),
-                    tzId = row.string("tz")
+                    tzId = row.string("tz"),
+                    langCode = row.stringOrNull("lang")
                 )
             }.asList
             )
@@ -165,12 +169,14 @@ object HabitService {
             val zdt = now.atZone(tz)
             val localMinute = zdt.toLocalTime().withSecond(0).withNano(0)
             if (localMinute != r.reminderTime) return@mapNotNull null
+            val lang = r.langCode?.let { runCatching { Lang.valueOf(it) }.getOrNull() } ?: Lang.EN
             DueReminder(
                 reminderId = r.reminderId,
                 userId = r.userId,
                 name = r.name,
                 reminderTime = r.reminderTime,
-                userDate = zdt.toLocalDate()
+                userDate = zdt.toLocalDate(),
+                lang = lang
             )
         }
     }
@@ -180,6 +186,7 @@ object HabitService {
         val userId: Long,
         val name: String,
         val reminderTime: LocalTime,
-        val tzId: String
+        val tzId: String,
+        val langCode: String?
     )
 }

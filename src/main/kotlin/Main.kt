@@ -5,6 +5,7 @@ import commands.registerHabitsCommand
 import commands.registerPauseCommand
 import commands.registerRemoveHabitCommand
 import commands.registerResumeCommand
+import commands.registerLangCommand
 import commands.registerStartCommand
 import commands.registerStatsCommand
 import commands.registerTzCommand
@@ -22,17 +23,14 @@ suspend fun main() {
     DatabaseService.dataSource
 
     longPolling("HabitTrackerBot") {
-        setMyCommands(
-            BotCommand("start", "show help"),
-            BotCommand("addhabit", "add a habit (interactive)"),
-            BotCommand("habits", "list habits"),
-            BotCommand("removehabit", "remove a habit"),
-            BotCommand("pause", "pause a habit"),
-            BotCommand("resume", "resume a paused habit"),
-            BotCommand("checkin", "today's check-ins"),
-            BotCommand("stats", "statistics"),
-            BotCommand("tz", "show or set your timezone")
-        )
+        Lang.entries.forEach { lang ->
+            val commands = BotCommandsI18n.list(lang).map { (name, desc) -> BotCommand(name, desc) }
+            setMyCommands(
+                commands = commands,
+                scope = dev.inmo.tgbotapi.types.commands.BotCommandScope.Default,
+                languageCode = if (lang == Lang.RU) "ru" else "en"
+            )
+        }
 
         registerStartCommand()
         registerAddHabitCommand()
@@ -43,6 +41,7 @@ suspend fun main() {
         registerCheckInCommand()
         registerStatsCommand()
         registerTzCommand()
+        registerLangCommand()
         registerCallbackHandler()
 
         launch {

@@ -8,7 +8,7 @@ object UserSettingsService {
         val stored = sessionOf(DatabaseService.dataSource).use { session ->
             session.run(
                 queryOf("SELECT timezone FROM user_settings WHERE user_id = ?", userId)
-                    .map { it.string("timezone") }
+                    .map { it.stringOrNull("timezone") }
                     .asSingle
             )
         } ?: return null
@@ -27,6 +27,52 @@ object UserSettingsService {
                     """.trimIndent(),
                     userId,
                     tz.id
+                )
+            )
+        }
+    }
+
+    fun getLanguage(userId: Long): Lang? {
+        val stored = sessionOf(DatabaseService.dataSource).use { session ->
+            session.run(
+                queryOf("SELECT language FROM user_settings WHERE user_id = ?", userId)
+                    .map { it.stringOrNull("language") }
+                    .asSingle
+            )
+        } ?: return null
+        return runCatching { Lang.valueOf(stored) }.getOrNull()
+    }
+
+    fun touchLanguage(userId: Long, lang: Lang) {
+        sessionOf(DatabaseService.dataSource).use { session ->
+            session.execute(
+                queryOf(
+                    """
+                    INSERT INTO user_settings (user_id, language)
+                    VALUES (?, ?)
+                    ON CONFLICT (user_id) DO UPDATE
+                        SET language = EXCLUDED.language
+                        WHERE user_settings.language IS NULL
+                    """.trimIndent(),
+                    userId,
+                    lang.name
+                )
+            )
+        }
+    }
+
+    fun setLanguage(userId: Long, lang: Lang) {
+        sessionOf(DatabaseService.dataSource).use { session ->
+            session.execute(
+                queryOf(
+                    """
+                    INSERT INTO user_settings (user_id, language)
+                    VALUES (?, ?)
+                    ON CONFLICT (user_id) DO UPDATE
+                        SET language = EXCLUDED.language
+                    """.trimIndent(),
+                    userId,
+                    lang.name
                 )
             )
         }
