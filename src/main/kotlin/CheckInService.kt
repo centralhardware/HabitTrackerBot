@@ -149,6 +149,7 @@ object CheckInService {
                       AND h.paused_at IS NULL
                       AND c.id IS NULL
                       AND ((dr.d + r.reminder_time) AT TIME ZONE us.timezone) > h.created_at
+                      AND ((dr.d + r.reminder_time) AT TIME ZONE us.timezone) <= now()
                     ORDER BY dr.d, r.reminder_time, h.created_at
                     """.trimIndent(),
                     fromDate,
