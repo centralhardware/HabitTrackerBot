@@ -28,14 +28,9 @@ fun BehaviourContext.registerCheckInCommand() {
         sendMessage(message.chat.id, "Pending check-ins:")
         items.forEach { item ->
             val time = item.reminderTime.format(Keyboards.TIME_FMT)
-            val dayLabel = when (item.date) {
-                today -> "today"
-                yesterday -> "yesterday"
-                else -> item.date.toString()
-            }
             sendMessage(
                 chatId = message.chat.id,
-                text = "⏳ $dayLabel $time — ${item.name}",
+                text = "⏳ ${item.date} $time — ${item.name}",
                 replyMarkup = Keyboards.checkIn(item.reminderId, item.date)
             )
         }
