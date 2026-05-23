@@ -1,4 +1,5 @@
 import dev.inmo.tgbotapi.extensions.api.answers.answerCallbackQuery
+import dev.inmo.tgbotapi.extensions.api.deleteMessage
 import dev.inmo.tgbotapi.extensions.api.edit.text.editMessageText
 import dev.inmo.tgbotapi.extensions.behaviour_builder.BehaviourContext
 import dev.inmo.tgbotapi.extensions.behaviour_builder.triggers_handling.onMessageDataCallbackQuery
@@ -39,6 +40,13 @@ private suspend fun BehaviourContext.handleCheckIn(
         answerCallbackQuery(query, text = "Bad date")
         return
     }
+    if (parts[3] == "del") {
+        val msg = query.message
+        runCatching { deleteMessage(chatId = msg.chat.id, messageId = msg.messageId) }
+        answerCallbackQuery(query, text = "Deleted 🗑")
+        return
+    }
+
     val status = when (parts[3]) {
         "done" -> CheckInService.Status.DONE
         "skip" -> CheckInService.Status.SKIP

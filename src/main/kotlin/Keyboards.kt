@@ -12,7 +12,8 @@ object Keyboards {
             listOf(
                 listOf(
                     CallbackDataInlineKeyboardButton("✅ Done", "ci|$reminderId|$date|done"),
-                    CallbackDataInlineKeyboardButton("❌ Skip", "ci|$reminderId|$date|skip")
+                    CallbackDataInlineKeyboardButton("❌ Skip", "ci|$reminderId|$date|skip"),
+                    CallbackDataInlineKeyboardButton("🗑 Delete", "ci|$reminderId|$date|del")
                 )
             )
         )
