@@ -162,6 +162,31 @@ object Strings {
     private fun pick(l: Lang, en: String, ru: String): String = if (l == Lang.RU) ru else en
 }
 
+object BotProfileI18n {
+    fun name(l: Lang): String = when (l) {
+        Lang.EN -> "Habit Tracker"
+        Lang.RU -> "Трекер привычек"
+    }
+
+    fun description(l: Lang): String = when (l) {
+        Lang.EN -> """
+            Habit tracker bot. Set up daily habits, get reminders at the times you choose, and mark each one done or skipped.
+
+            Tap /start to begin or /addhabit to add your first habit.
+        """.trimIndent()
+        Lang.RU -> """
+            Бот для трекинга привычек. Заведите ежедневные привычки, получайте напоминания в нужное время и отмечайте «готово» или «пропуск».
+
+            Нажмите /start, чтобы начать, или /addhabit, чтобы добавить первую привычку.
+        """.trimIndent()
+    }
+
+    fun shortDescription(l: Lang): String = when (l) {
+        Lang.EN -> "Track daily habits with reminders, check-ins and streaks."
+        Lang.RU -> "Трекинг ежедневных привычек: напоминания, чек-ины и серии."
+    }
+}
+
 object BotCommandsI18n {
     fun list(l: Lang): List<Pair<String, String>> = when (l) {
         Lang.EN -> listOf(
