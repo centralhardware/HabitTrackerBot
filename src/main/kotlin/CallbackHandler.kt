@@ -7,25 +7,15 @@ import dev.inmo.tgbotapi.types.queries.callback.MessageDataCallbackQuery
 import java.time.LocalDate
 
 fun BehaviourContext.registerCallbackHandler() {
-    onMessageDataCallbackQuery { query ->
-        val data = query.data
-        val userId = query.user.id.chatId.long
-        when {
-            data.startsWith("ci|") -> handleCheckIn(query, data, userId)
-            data.startsWith("rm|") -> handleRemove(query, data, userId)
-            data.startsWith("ps|") -> handlePause(query, data, userId)
-            data.startsWith("rs|") -> handleResume(query, data, userId)
-            else -> answerCallbackQuery(query)
-        }
-    }
+    onMessageDataCallbackQuery(Regex("^ci\\|.*")) { handleCheckIn(it) }
+    onMessageDataCallbackQuery(Regex("^rm\\|.*")) { handleHabitAction(it, "rm|", HabitService::softDelete, "Removed", "Habit removed.") }
+    onMessageDataCallbackQuery(Regex("^ps\\|.*")) { handleHabitAction(it, "ps|", HabitService::pause, "Paused", "Habit paused.") }
+    onMessageDataCallbackQuery(Regex("^rs\\|.*")) { handleHabitAction(it, "rs|", HabitService::resume, "Resumed", "Habit resumed.") }
 }
 
-private suspend fun BehaviourContext.handleCheckIn(
-    query: MessageDataCallbackQuery,
-    data: String,
-    userId: Long
-) {
-    val parts = data.split("|")
+private suspend fun BehaviourContext.handleCheckIn(query: MessageDataCallbackQuery) {
+    val userId = query.user.id.chatId.long
+    val parts = query.data.split("|")
     if (parts.size != 4) {
         answerCallbackQuery(query, text = "Bad button")
         return
@@ -84,59 +74,26 @@ private suspend fun BehaviourContext.handleCheckIn(
     )
 }
 
-private suspend fun BehaviourContext.handleRemove(
+private suspend fun BehaviourContext.handleHabitAction(
     query: MessageDataCallbackQuery,
-    data: String,
-    userId: Long
-) {
-    val habitId = data.removePrefix("rm|").toLongOrNull() ?: run {
-        answerCallbackQuery(query, text = "Error")
-        return
-    }
-    val deleted = HabitService.softDelete(habitId, userId)
-    finishAction(query, deleted, doneText = "Removed", missingText = "Not found", editedText = "Habit removed.")
-}
-
-private suspend fun BehaviourContext.handlePause(
-    query: MessageDataCallbackQuery,
-    data: String,
-    userId: Long
-) {
-    val habitId = data.removePrefix("ps|").toLongOrNull() ?: run {
-        answerCallbackQuery(query, text = "Error")
-        return
-    }
-    val ok = HabitService.pause(habitId, userId)
-    finishAction(query, ok, doneText = "Paused", missingText = "Not found", editedText = "Habit paused.")
-}
-
-private suspend fun BehaviourContext.handleResume(
-    query: MessageDataCallbackQuery,
-    data: String,
-    userId: Long
-) {
-    val habitId = data.removePrefix("rs|").toLongOrNull() ?: run {
-        answerCallbackQuery(query, text = "Error")
-        return
-    }
-    val ok = HabitService.resume(habitId, userId)
-    finishAction(query, ok, doneText = "Resumed", missingText = "Not found", editedText = "Habit resumed.")
-}
-
-private suspend fun BehaviourContext.finishAction(
-    query: MessageDataCallbackQuery,
-    success: Boolean,
+    prefix: String,
+    action: (Long, Long) -> Boolean,
     doneText: String,
-    missingText: String,
     editedText: String
 ) {
-    if (success) {
+    val userId = query.user.id.chatId.long
+    val habitId = query.data.removePrefix(prefix).toLongOrNull() ?: run {
+        answerCallbackQuery(query, text = "Error")
+        return
+    }
+    val ok = action(habitId, userId)
+    if (ok) {
         val msg = query.message
         runCatching {
             editMessageText(chatId = msg.chat.id, messageId = msg.messageId, text = editedText)
         }
         answerCallbackQuery(query, text = doneText)
     } else {
-        answerCallbackQuery(query, text = missingText)
+        answerCallbackQuery(query, text = "Not found")
     }
 }
