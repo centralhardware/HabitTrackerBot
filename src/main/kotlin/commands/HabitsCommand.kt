@@ -22,7 +22,7 @@ fun BehaviourContext.registerHabitsCommand() {
         val text = buildString {
             appendLine(Strings.yourHabits(lang))
             habits.forEach { habit ->
-                val flag = if (habit.pausedAt != null) " ⏸" else ""
+                val flag = if (habit.status == HabitService.Status.PAUSED) " ⏸" else ""
                 val typeLabel = Strings.habitTypeLabel(lang, habit)
                 val times = habit.reminders.joinToString(", ") { it.format(Keyboards.TIME_FMT) }
                 val tail = when {

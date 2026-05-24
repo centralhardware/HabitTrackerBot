@@ -13,7 +13,7 @@ fun BehaviourContext.registerPauseCommand() {
     onCommand("pause") { message ->
         val userId = message.senderUserId() ?: return@onCommand
         val lang = message.senderLang()
-        val active = HabitService.listActive(userId).filter { it.pausedAt == null }
+        val active = HabitService.listActive(userId).filter { it.status == HabitService.Status.ACTIVE }
         if (active.isEmpty()) {
             sendMessage(message.chat.id, Strings.noActiveToPause(lang))
             return@onCommand
@@ -30,7 +30,7 @@ fun BehaviourContext.registerResumeCommand() {
     onCommand("resume") { message ->
         val userId = message.senderUserId() ?: return@onCommand
         val lang = message.senderLang()
-        val paused = HabitService.listActive(userId).filter { it.pausedAt != null }
+        val paused = HabitService.listActive(userId).filter { it.status == HabitService.Status.PAUSED }
         if (paused.isEmpty()) {
             sendMessage(message.chat.id, Strings.noPaused(lang))
             return@onCommand

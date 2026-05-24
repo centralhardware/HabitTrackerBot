@@ -26,6 +26,16 @@ object HabitService {
         }
     }
 
+    enum class Status(val value: String) {
+        ACTIVE("active"),
+        PAUSED("paused"),
+        DELETED("deleted");
+
+        companion object {
+            fun parse(s: String?): Status = entries.firstOrNull { it.value == s } ?: ACTIVE
+        }
+    }
+
     data class Habit(
         val id: Long,
         val userId: Long,
@@ -34,7 +44,7 @@ object HabitService {
         val dailyTarget: Int?,
         val direction: Direction?,
         val reminders: List<LocalTime>,
-        val pausedAt: Instant?
+        val status: Status
     )
 
     fun addHabit(
@@ -79,7 +89,7 @@ object HabitService {
                     dailyTarget = dailyTarget,
                     direction = direction,
                     reminders = reminders.sorted(),
-                    pausedAt = null
+                    status = Status.ACTIVE
                 )
             }
         }
@@ -90,7 +100,7 @@ object HabitService {
             session.run(
                 queryOf(
                 """
-                SELECT h.id, h.user_id, h.name, h.habit_type, h.daily_target, h.direction, h.paused_at,
+                SELECT h.id, h.user_id, h.name, h.habit_type, h.daily_target, h.direction, h.status,
                        COALESCE(
                            ARRAY_AGG(r.reminder_time ORDER BY r.reminder_time)
                                FILTER (WHERE r.reminder_time IS NOT NULL),
@@ -98,7 +108,7 @@ object HabitService {
                        ) AS times
                 FROM habits h
                 LEFT JOIN habit_reminders r ON r.habit_id = h.id
-                WHERE h.user_id = ? AND h.deleted_at IS NULL
+                WHERE h.user_id = ? AND h.status <> 'deleted'
                 GROUP BY h.id
                 ORDER BY h.created_at
                 """.trimIndent(),
@@ -114,7 +124,7 @@ object HabitService {
                     dailyTarget = row.intOrNull("daily_target"),
                     direction = Direction.parse(row.stringOrNull("direction")),
                     reminders = arr.map { it.toLocalTime() },
-                    pausedAt = row.instantOrNull("paused_at")
+                    status = Status.parse(row.stringOrNull("status"))
                 )
             }.asList
             )
@@ -127,8 +137,8 @@ object HabitService {
                 queryOf(
                     """
                     UPDATE habits
-                    SET deleted_at = now()
-                    WHERE id = ? AND user_id = ? AND deleted_at IS NULL
+                    SET status = 'deleted', deleted_at = now()
+                    WHERE id = ? AND user_id = ? AND status <> 'deleted'
                     """.trimIndent(),
                     habitId,
                     userId
@@ -143,8 +153,8 @@ object HabitService {
                 queryOf(
                     """
                     UPDATE habits
-                    SET paused_at = now()
-                    WHERE id = ? AND user_id = ? AND deleted_at IS NULL AND paused_at IS NULL
+                    SET status = 'paused', paused_at = now()
+                    WHERE id = ? AND user_id = ? AND status = 'active'
                     """.trimIndent(),
                     habitId,
                     userId
@@ -159,8 +169,8 @@ object HabitService {
                 queryOf(
                     """
                     UPDATE habits
-                    SET paused_at = NULL
-                    WHERE id = ? AND user_id = ? AND deleted_at IS NULL AND paused_at IS NOT NULL
+                    SET status = 'active'
+                    WHERE id = ? AND user_id = ? AND status = 'paused'
                     """.trimIndent(),
                     habitId,
                     userId
@@ -195,8 +205,7 @@ object HabitService {
                 LEFT JOIN checkins c
                     ON c.reminder_id = r.id
                    AND c.check_date = (now() AT TIME ZONE us.timezone)::date
-                WHERE h.deleted_at IS NULL
-                  AND h.paused_at IS NULL
+                WHERE h.status = 'active'
                   AND us.timezone IS NOT NULL
                   AND (h.habit_type <> 'scheduled' OR c.id IS NULL)
                 """.trimIndent()

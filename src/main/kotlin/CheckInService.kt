@@ -20,7 +20,7 @@ object CheckInService {
                     SELECT h.id, r.id, ?, ?
                     FROM habit_reminders r
                     JOIN habits h ON h.id = r.habit_id
-                    WHERE r.id = ? AND h.user_id = ? AND h.deleted_at IS NULL
+                    WHERE r.id = ? AND h.user_id = ? AND h.status <> 'deleted'
                     ON CONFLICT (reminder_id, check_date) WHERE reminder_id IS NOT NULL DO UPDATE
                         SET status = EXCLUDED.status,
                             checked_at = now()
@@ -42,7 +42,7 @@ object CheckInService {
                     INSERT INTO checkins (habit_id, reminder_id, check_date, status)
                     SELECT h.id, NULL, ?, 'done'
                     FROM habits h
-                    WHERE h.id = ? AND h.user_id = ? AND h.deleted_at IS NULL
+                    WHERE h.id = ? AND h.user_id = ? AND h.status <> 'deleted'
                       AND h.habit_type IN ('counter', 'tracker')
                     """.trimIndent(),
                     date,
@@ -410,8 +410,7 @@ object CheckInService {
                         ON c.reminder_id = r.id
                        AND c.check_date = dr.d
                     WHERE h.user_id = ?
-                      AND h.deleted_at IS NULL
-                      AND h.paused_at IS NULL
+                      AND h.status = 'active'
                       AND h.habit_type = 'scheduled'
                       AND c.id IS NULL
                       AND ((dr.d + r.reminder_time) AT TIME ZONE us.timezone) > h.created_at
@@ -440,7 +439,7 @@ object CheckInService {
                     """
                     WITH slots AS (
                         SELECT h.id AS habit_id, r.id AS reminder_id,
-                               h.created_at, h.paused_at,
+                               h.created_at, h.paused_at, h.status,
                                r.reminder_time, us.timezone,
                                generate_series(
                                    (h.created_at AT TIME ZONE us.timezone)::date,
@@ -450,7 +449,7 @@ object CheckInService {
                         FROM habit_reminders r
                         JOIN habits h ON h.id = r.habit_id
                         JOIN user_settings us ON us.user_id = h.user_id
-                        WHERE h.deleted_at IS NULL
+                        WHERE h.status <> 'deleted'
                           AND h.habit_type = 'scheduled'
                     )
                     INSERT INTO checkins (habit_id, reminder_id, check_date, status)
@@ -458,7 +457,7 @@ object CheckInService {
                     FROM slots s
                     WHERE ((s.d + s.reminder_time) AT TIME ZONE s.timezone) > s.created_at
                       AND s.d < ((now() AT TIME ZONE s.timezone)::date - 1)
-                      AND (s.paused_at IS NULL OR ((s.d + s.reminder_time) AT TIME ZONE s.timezone) < s.paused_at)
+                      AND (s.status = 'active' OR ((s.d + s.reminder_time) AT TIME ZONE s.timezone) < s.paused_at)
                     ON CONFLICT (reminder_id, check_date) WHERE reminder_id IS NOT NULL DO NOTHING
                     """.trimIndent()
                 )

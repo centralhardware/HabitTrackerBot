@@ -25,7 +25,7 @@ fun BehaviourContext.registerCheckInCommand() {
         val yesterday = today.minusDays(1)
         val scheduled = CheckInService.pendingCheckIns(userId, yesterday, today)
         val counters = HabitService.listActive(userId)
-            .filter { it.pausedAt == null && it.type == HabitService.Type.COUNTER }
+            .filter { it.status == HabitService.Status.ACTIVE && it.type == HabitService.Type.COUNTER }
 
         if (scheduled.isEmpty() && counters.isEmpty()) {
             sendMessage(message.chat.id, Strings.nothingToCheckIn(lang))
