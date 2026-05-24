@@ -8,22 +8,56 @@ import java.time.ZoneId
 
 object HabitService {
 
+    enum class Type(val value: String) {
+        SCHEDULED("scheduled"),
+        COUNTER("counter");
+
+        companion object {
+            fun parse(s: String?): Type = entries.firstOrNull { it.value == s } ?: SCHEDULED
+        }
+    }
+
+    enum class Direction(val value: String) {
+        MORE("more"),
+        LESS("less");
+
+        companion object {
+            fun parse(s: String?): Direction? = entries.firstOrNull { it.value == s }
+        }
+    }
+
     data class Habit(
         val id: Long,
         val userId: Long,
         val name: String,
+        val type: Type,
+        val dailyTarget: Int?,
+        val direction: Direction?,
         val reminders: List<LocalTime>,
         val pausedAt: Instant?
     )
 
-    fun addHabit(userId: Long, name: String, reminders: List<LocalTime>): Habit {
+    fun addHabit(
+        userId: Long,
+        name: String,
+        type: Type,
+        reminders: List<LocalTime>,
+        dailyTarget: Int? = null,
+        direction: Direction? = null
+    ): Habit {
         return using(sessionOf(DatabaseService.dataSource, returnGeneratedKey = true)) { session ->
             session.transaction { tx ->
                 val habitId = tx.updateAndReturnGeneratedKey(
                     queryOf(
-                        "INSERT INTO habits (user_id, name) VALUES (?, ?)",
+                        """
+                        INSERT INTO habits (user_id, name, habit_type, daily_target, direction)
+                        VALUES (?, ?, ?, ?, ?)
+                        """.trimIndent(),
                         userId,
-                        name
+                        name,
+                        type.value,
+                        dailyTarget,
+                        direction?.value
                     )
                 ) ?: error("Failed to insert habit")
 
@@ -37,7 +71,16 @@ object HabitService {
                     )
                 }
 
-                Habit(habitId, userId, name, reminders.sorted(), pausedAt = null)
+                Habit(
+                    id = habitId,
+                    userId = userId,
+                    name = name,
+                    type = type,
+                    dailyTarget = dailyTarget,
+                    direction = direction,
+                    reminders = reminders.sorted(),
+                    pausedAt = null
+                )
             }
         }
     }
@@ -47,7 +90,7 @@ object HabitService {
             session.run(
                 queryOf(
                 """
-                SELECT h.id, h.user_id, h.name, h.paused_at,
+                SELECT h.id, h.user_id, h.name, h.habit_type, h.daily_target, h.direction, h.paused_at,
                        COALESCE(
                            ARRAY_AGG(r.reminder_time ORDER BY r.reminder_time)
                                FILTER (WHERE r.reminder_time IS NOT NULL),
@@ -67,6 +110,9 @@ object HabitService {
                     id = row.long("id"),
                     userId = row.long("user_id"),
                     name = row.string("name"),
+                    type = Type.parse(row.stringOrNull("habit_type")),
+                    dailyTarget = row.intOrNull("daily_target"),
+                    direction = Direction.parse(row.stringOrNull("direction")),
                     reminders = arr.map { it.toLocalTime() },
                     pausedAt = row.instantOrNull("paused_at")
                 )
@@ -125,6 +171,8 @@ object HabitService {
 
     data class DueReminder(
         val reminderId: Long,
+        val habitId: Long,
+        val habitType: Type,
         val userId: Long,
         val name: String,
         val reminderTime: LocalTime,
@@ -138,7 +186,8 @@ object HabitService {
             session.run(
                 queryOf(
                 """
-                SELECT r.id AS reminder_id, h.user_id, h.name, r.reminder_time,
+                SELECT r.id AS reminder_id, h.id AS habit_id, h.habit_type,
+                       h.user_id, h.name, r.reminder_time,
                        us.timezone AS tz, us.language AS lang
                 FROM habit_reminders r
                 JOIN habits h ON h.id = r.habit_id
@@ -149,11 +198,13 @@ object HabitService {
                 WHERE h.deleted_at IS NULL
                   AND h.paused_at IS NULL
                   AND us.timezone IS NOT NULL
-                  AND c.id IS NULL
+                  AND (h.habit_type <> 'scheduled' OR c.id IS NULL)
                 """.trimIndent()
             ).map { row ->
                 RawDue(
                     reminderId = row.long("reminder_id"),
+                    habitId = row.long("habit_id"),
+                    habitType = Type.parse(row.stringOrNull("habit_type")),
                     userId = row.long("user_id"),
                     name = row.string("name"),
                     reminderTime = row.localTime("reminder_time"),
@@ -172,6 +223,8 @@ object HabitService {
             val lang = r.langCode?.let { runCatching { Lang.valueOf(it) }.getOrNull() } ?: Lang.EN
             DueReminder(
                 reminderId = r.reminderId,
+                habitId = r.habitId,
+                habitType = r.habitType,
                 userId = r.userId,
                 name = r.name,
                 reminderTime = r.reminderTime,
@@ -181,8 +234,13 @@ object HabitService {
         }
     }
 
+    fun findById(habitId: Long, userId: Long): Habit? =
+        listActive(userId).firstOrNull { it.id == habitId }
+
     private data class RawDue(
         val reminderId: Long,
+        val habitId: Long,
+        val habitType: Type,
         val userId: Long,
         val name: String,
         val reminderTime: LocalTime,

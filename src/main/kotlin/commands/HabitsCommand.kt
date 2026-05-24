@@ -22,9 +22,15 @@ fun BehaviourContext.registerHabitsCommand() {
         val text = buildString {
             appendLine(Strings.yourHabits(lang))
             habits.forEach { habit ->
-                val times = habit.reminders.joinToString(", ") { it.format(Keyboards.TIME_FMT) }
                 val flag = if (habit.pausedAt != null) " ⏸" else ""
-                appendLine("• ${habit.name}$flag — $times")
+                val typeLabel = Strings.habitTypeLabel(lang, habit)
+                val times = habit.reminders.joinToString(", ") { it.format(Keyboards.TIME_FMT) }
+                val tail = when {
+                    times.isNotEmpty() -> " — $times"
+                    habit.type == HabitService.Type.SCHEDULED -> ""
+                    else -> " — ${Strings.noReminders(lang)}"
+                }
+                appendLine("• ${habit.name}$flag [$typeLabel]$tail")
             }
         }
         sendMessage(message.chat.id, text)

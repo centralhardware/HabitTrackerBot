@@ -1,6 +1,7 @@
 package commands
 
 import CheckInService
+import HabitService
 import Keyboards
 import Strings
 import UserSettingsService
@@ -22,19 +23,32 @@ fun BehaviourContext.registerCheckInCommand() {
         }
         val today = LocalDate.now(tz)
         val yesterday = today.minusDays(1)
-        val items = CheckInService.pendingCheckIns(userId, yesterday, today)
-        if (items.isEmpty()) {
+        val scheduled = CheckInService.pendingCheckIns(userId, yesterday, today)
+        val counters = HabitService.listActive(userId)
+            .filter { it.pausedAt == null && it.type == HabitService.Type.COUNTER }
+
+        if (scheduled.isEmpty() && counters.isEmpty()) {
             sendMessage(message.chat.id, Strings.nothingToCheckIn(lang))
             return@onCommand
         }
 
         sendMessage(message.chat.id, Strings.pendingCheckIns(lang))
-        items.forEach { item ->
+
+        scheduled.forEach { item ->
             val time = item.reminderTime.format(Keyboards.TIME_FMT)
             sendMessage(
                 chatId = message.chat.id,
                 text = "⏳ ${item.date} $time — ${item.name}",
                 replyMarkup = Keyboards.checkIn(item.reminderId, item.date, lang)
+            )
+        }
+
+        counters.forEach { habit ->
+            val current = CheckInService.todayCount(habit.id, today)
+            sendMessage(
+                chatId = message.chat.id,
+                text = Strings.counterLine(lang, habit, current, today),
+                replyMarkup = Keyboards.logPlus(habit.id, today, lang)
             )
         }
     }

@@ -16,12 +16,12 @@ object CheckInService {
             session.update(
                 queryOf(
                     """
-                    INSERT INTO checkins (reminder_id, check_date, status)
-                    SELECT r.id, ?, ?
+                    INSERT INTO checkins (habit_id, reminder_id, check_date, status)
+                    SELECT h.id, r.id, ?, ?
                     FROM habit_reminders r
                     JOIN habits h ON h.id = r.habit_id
                     WHERE r.id = ? AND h.user_id = ? AND h.deleted_at IS NULL
-                    ON CONFLICT (reminder_id, check_date) DO UPDATE
+                    ON CONFLICT (reminder_id, check_date) WHERE reminder_id IS NOT NULL DO UPDATE
                         SET status = EXCLUDED.status,
                             checked_at = now()
                     """.trimIndent(),
@@ -34,62 +34,328 @@ object CheckInService {
         }
     }
 
-    data class HabitStat(
-        val habitId: Long,
-        val name: String,
-        val totalDays: Int,
-        val doneCount: Int,
-        val skipCount: Int,
-        val streak: Int
-    )
-
-    fun userStats(userId: Long): List<HabitStat> {
+    fun checkInCounter(habitId: Long, userId: Long, date: LocalDate): Boolean {
         return sessionOf(DatabaseService.dataSource).use { session ->
-            val raw = session.run(
+            session.update(
                 queryOf(
                     """
-                    SELECT h.id, h.name,
-                           COUNT(DISTINCT c.check_date)                       AS total_days,
-                           COUNT(*) FILTER (WHERE c.status = 'done')          AS done_count,
-                           COUNT(*) FILTER (WHERE c.status = 'skip')          AS skip_count
+                    INSERT INTO checkins (habit_id, reminder_id, check_date, status)
+                    SELECT h.id, NULL, ?, 'done'
                     FROM habits h
-                    LEFT JOIN habit_reminders r ON r.habit_id = h.id
-                    LEFT JOIN checkins c ON c.reminder_id = r.id
-                    WHERE h.user_id = ? AND h.deleted_at IS NULL
-                    GROUP BY h.id, h.name
-                    ORDER BY h.created_at
+                    WHERE h.id = ? AND h.user_id = ? AND h.deleted_at IS NULL
+                      AND h.habit_type IN ('counter', 'tracker')
                     """.trimIndent(),
+                    date,
+                    habitId,
                     userId
-                ).map { row ->
-                    StatRow(
-                        habitId = row.long("id"),
-                        name = row.string("name"),
-                        totalDays = row.int("total_days"),
-                        doneCount = row.int("done_count"),
-                        skipCount = row.int("skip_count")
-                    )
-                }.asList
-            )
-            raw.map { r ->
-                HabitStat(
-                    habitId = r.habitId,
-                    name = r.name,
-                    totalDays = r.totalDays,
-                    doneCount = r.doneCount,
-                    skipCount = r.skipCount,
-                    streak = currentStreak(session, r.habitId)
                 )
+            ) > 0
+        }
+    }
+
+    fun todayCount(habitId: Long, date: LocalDate): Int {
+        return sessionOf(DatabaseService.dataSource).use { session ->
+            session.run(
+                queryOf(
+                    """
+                    SELECT COUNT(*) AS cnt
+                    FROM checkins
+                    WHERE habit_id = ? AND reminder_id IS NULL AND check_date = ?
+                    """.trimIndent(),
+                    habitId,
+                    date
+                ).map { it.int("cnt") }.asSingle
+            ) ?: 0
+        }
+    }
+
+    private data class CounterTotals(val today: Int, val total: Int, val days: Int)
+
+    private fun counterTotals(habitId: Long, today: LocalDate): CounterTotals {
+        return sessionOf(DatabaseService.dataSource).use { session ->
+            session.run(
+                queryOf(
+                    """
+                    SELECT
+                        COUNT(*) FILTER (WHERE check_date = ?) AS today_count,
+                        COUNT(*)                               AS grand_total,
+                        COUNT(DISTINCT check_date)             AS days_logged
+                    FROM checkins
+                    WHERE habit_id = ? AND reminder_id IS NULL
+                    """.trimIndent(),
+                    today,
+                    habitId
+                ).map { row ->
+                    CounterTotals(
+                        today = row.int("today_count"),
+                        total = row.int("grand_total"),
+                        days = row.int("days_logged")
+                    )
+                }.asSingle
+            ) ?: CounterTotals(0, 0, 0)
+        }
+    }
+
+    sealed class HabitStat {
+        abstract val habitId: Long
+        abstract val name: String
+
+        data class Scheduled(
+            override val habitId: Long,
+            override val name: String,
+            val totalDays: Int,
+            val doneCount: Int,
+            val skipCount: Int,
+            val streak: Int
+        ) : HabitStat()
+
+        sealed class Counter : HabitStat() {
+            abstract val todayCount: Int
+
+            data class WithTarget(
+                override val habitId: Long,
+                override val name: String,
+                val dailyTarget: Int,
+                val direction: HabitService.Direction?,
+                override val todayCount: Int,
+                val doneDays: Int,
+                val skipDays: Int,
+                val streak: Int
+            ) : Counter()
+
+            data class Trend(
+                override val habitId: Long,
+                override val name: String,
+                val direction: HabitService.Direction,
+                override val todayCount: Int,
+                val yesterdayCount: Int,
+                val grandTotal: Int,
+                val daysLogged: Int,
+                val overallAvg: Double,
+                val recent3Avg: Double,
+                val previous3Avg: Double,
+                val recent7Avg: Double,
+                val previous7Avg: Double
+            ) : Counter()
+
+            data class Plain(
+                override val habitId: Long,
+                override val name: String,
+                override val todayCount: Int,
+                val grandTotal: Int,
+                val daysLogged: Int
+            ) : Counter()
+        }
+    }
+
+    fun userStats(userId: Long, today: LocalDate): List<HabitStat> {
+        val habits = HabitService.listActive(userId)
+        return sessionOf(DatabaseService.dataSource).use { session ->
+            habits.map { h ->
+                when (h.type) {
+                    HabitService.Type.SCHEDULED -> scheduledStat(session, h)
+                    HabitService.Type.COUNTER -> counterStat(session, h, today)
+                }
             }
         }
     }
 
-    private data class StatRow(
-        val habitId: Long,
-        val name: String,
-        val totalDays: Int,
-        val doneCount: Int,
-        val skipCount: Int
+    private fun counterStat(session: Session, h: HabitService.Habit, today: LocalDate): HabitStat.Counter {
+        val target = h.dailyTarget
+        val direction = h.direction
+        return when {
+            target != null -> counterWithTarget(session, h, today, target)
+            direction != null -> counterTrend(session, h, today, direction)
+            else -> {
+                val t = counterTotals(h.id, today)
+                HabitStat.Counter.Plain(h.id, h.name, t.today, t.total, t.days)
+            }
+        }
+    }
+
+    private fun counterWithTarget(
+        session: Session,
+        h: HabitService.Habit,
+        today: LocalDate,
+        target: Int
+    ): HabitStat.Counter.WithTarget {
+        val hitExpr = if (h.direction == HabitService.Direction.LESS) "cnt <= ?" else "cnt >= ?"
+        val yesterday = today.minusDays(1)
+        val row = session.run(
+            queryOf(
+                """
+                WITH bounds AS (
+                    SELECT (h.created_at AT TIME ZONE us.timezone)::date AS start_d
+                    FROM habits h
+                    JOIN user_settings us ON us.user_id = h.user_id
+                    WHERE h.id = ?
+                ),
+                days AS (
+                    SELECT generate_series(b.start_d, ?::date, '1 day')::date AS d
+                    FROM bounds b
+                ),
+                counts AS (
+                    SELECT days.d, COALESCE(c.cnt, 0) AS cnt
+                    FROM days
+                    LEFT JOIN (
+                        SELECT check_date, COUNT(*) AS cnt
+                        FROM checkins
+                        WHERE habit_id = ? AND reminder_id IS NULL
+                        GROUP BY check_date
+                    ) c ON c.check_date = days.d
+                ),
+                met AS (
+                    SELECT d, cnt, $hitExpr AS hit FROM counts
+                ),
+                streak_groups AS (
+                    SELECT d, d + (ROW_NUMBER() OVER (ORDER BY d DESC))::int AS grp
+                    FROM met
+                    WHERE hit = TRUE
+                ),
+                streak AS (
+                    SELECT COUNT(*) AS s
+                    FROM streak_groups
+                    WHERE grp = (
+                        SELECT grp FROM streak_groups
+                        WHERE d >= ?::date
+                        ORDER BY d DESC LIMIT 1
+                    )
+                )
+                SELECT
+                    (SELECT cnt FROM counts WHERE d = ?::date)              AS today_count,
+                    (SELECT COUNT(*) FROM met WHERE d < ?::date AND hit)    AS done_days,
+                    (SELECT COUNT(*) FROM met WHERE d < ?::date AND NOT hit) AS skip_days,
+                    (SELECT COALESCE(s, 0) FROM streak)                    AS streak
+                """.trimIndent(),
+                h.id,
+                today,
+                h.id,
+                target,
+                yesterday,
+                today,
+                today,
+                today
+            ).map { r ->
+                StreakRow(
+                    todayCount = r.intOrNull("today_count") ?: 0,
+                    doneDays = r.int("done_days"),
+                    skipDays = r.int("skip_days"),
+                    streak = r.int("streak")
+                )
+            }.asSingle
+        ) ?: StreakRow(0, 0, 0, 0)
+
+        return HabitStat.Counter.WithTarget(
+            habitId = h.id,
+            name = h.name,
+            dailyTarget = target,
+            direction = h.direction,
+            todayCount = row.todayCount,
+            doneDays = row.doneDays,
+            skipDays = row.skipDays,
+            streak = row.streak
+        )
+    }
+
+    private fun counterTrend(
+        session: Session,
+        h: HabitService.Habit,
+        today: LocalDate,
+        direction: HabitService.Direction
+    ): HabitStat.Counter.Trend {
+        val totals = counterTotals(h.id, today)
+        val row = session.run(
+            queryOf(
+                """
+                WITH p AS (SELECT ?::date AS today),
+                days AS (
+                    SELECT generate_series(p.today - 13, p.today, '1 day')::date AS d FROM p
+                ),
+                counts AS (
+                    SELECT days.d, COALESCE(c.cnt, 0)::float AS cnt
+                    FROM days
+                    LEFT JOIN (
+                        SELECT check_date, COUNT(*) AS cnt
+                        FROM checkins
+                        WHERE habit_id = ? AND reminder_id IS NULL
+                        GROUP BY check_date
+                    ) c ON c.check_date = days.d
+                )
+                SELECT
+                    COALESCE((SELECT cnt FROM counts c, p WHERE c.d = p.today), 0)                                                   AS today_count,
+                    COALESCE((SELECT cnt FROM counts c, p WHERE c.d = p.today - 1), 0)                                               AS yesterday_count,
+                    COALESCE((SELECT AVG(cnt) FROM counts c, p WHERE c.d >= p.today - 2), 0)                                          AS recent3,
+                    COALESCE((SELECT AVG(cnt) FROM counts c, p WHERE c.d >= p.today - 5 AND c.d <= p.today - 3), 0)                  AS previous3,
+                    COALESCE((SELECT AVG(cnt) FROM counts c, p WHERE c.d >= p.today - 6), 0)                                          AS recent7,
+                    COALESCE((SELECT AVG(cnt) FROM counts c, p WHERE c.d >= p.today - 13 AND c.d <= p.today - 7), 0)                  AS previous7
+                """.trimIndent(),
+                today,
+                h.id
+            ).map { r ->
+                TrendRow(
+                    today = r.double("today_count"),
+                    yesterday = r.double("yesterday_count"),
+                    recent3 = r.double("recent3"),
+                    previous3 = r.double("previous3"),
+                    recent7 = r.double("recent7"),
+                    previous7 = r.double("previous7")
+                )
+            }.asSingle
+        ) ?: TrendRow(0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
+
+        val overallAvg = if (totals.days > 0) totals.total.toDouble() / totals.days else 0.0
+        return HabitStat.Counter.Trend(
+            habitId = h.id,
+            name = h.name,
+            direction = direction,
+            todayCount = totals.today,
+            yesterdayCount = row.yesterday.toInt(),
+            grandTotal = totals.total,
+            daysLogged = totals.days,
+            overallAvg = overallAvg,
+            recent3Avg = row.recent3,
+            previous3Avg = row.previous3,
+            recent7Avg = row.recent7,
+            previous7Avg = row.previous7
+        )
+    }
+
+    private data class TrendRow(
+        val today: Double,
+        val yesterday: Double,
+        val recent3: Double,
+        val previous3: Double,
+        val recent7: Double,
+        val previous7: Double
     )
+
+    private data class StreakRow(val todayCount: Int, val doneDays: Int, val skipDays: Int, val streak: Int)
+
+    private fun scheduledStat(session: Session, habit: HabitService.Habit): HabitStat.Scheduled {
+        val row = session.run(
+            queryOf(
+                """
+                SELECT COUNT(DISTINCT c.check_date)                       AS total_days,
+                       COUNT(*) FILTER (WHERE c.status = 'done')          AS done_count,
+                       COUNT(*) FILTER (WHERE c.status = 'skip')          AS skip_count
+                FROM checkins c
+                WHERE c.habit_id = ? AND c.reminder_id IS NOT NULL
+                """.trimIndent(),
+                habit.id
+            ).map { r ->
+                Triple(r.int("total_days"), r.int("done_count"), r.int("skip_count"))
+            }.asSingle
+        ) ?: Triple(0, 0, 0)
+
+        return HabitStat.Scheduled(
+            habitId = habit.id,
+            name = habit.name,
+            totalDays = row.first,
+            doneCount = row.second,
+            skipCount = row.third,
+            streak = currentStreak(session, habit.id)
+        )
+    }
 
     private fun currentStreak(session: Session, habitId: Long): Int {
         return session.run(
@@ -99,14 +365,13 @@ object CheckInService {
                     SELECT c.check_date,
                            BOOL_OR(c.status = 'done') AS any_done
                     FROM checkins c
-                    JOIN habit_reminders r ON r.id = c.reminder_id
-                    WHERE r.habit_id = ?
+                    WHERE c.habit_id = ? AND c.reminder_id IS NOT NULL
                     GROUP BY c.check_date
                 ),
                 with_gap AS (
                     SELECT check_date,
                            any_done,
-                           check_date - (ROW_NUMBER() OVER (ORDER BY check_date DESC))::int AS grp
+                           check_date + (ROW_NUMBER() OVER (ORDER BY check_date DESC))::int AS grp
                     FROM daily
                     WHERE any_done = TRUE
                 )
@@ -147,6 +412,7 @@ object CheckInService {
                     WHERE h.user_id = ?
                       AND h.deleted_at IS NULL
                       AND h.paused_at IS NULL
+                      AND h.habit_type = 'scheduled'
                       AND c.id IS NULL
                       AND ((dr.d + r.reminder_time) AT TIME ZONE us.timezone) > h.created_at
                       AND ((dr.d + r.reminder_time) AT TIME ZONE us.timezone) <= now()
@@ -173,7 +439,8 @@ object CheckInService {
                 queryOf(
                     """
                     WITH slots AS (
-                        SELECT r.id AS reminder_id, h.created_at, h.paused_at,
+                        SELECT h.id AS habit_id, r.id AS reminder_id,
+                               h.created_at, h.paused_at,
                                r.reminder_time, us.timezone,
                                generate_series(
                                    (h.created_at AT TIME ZONE us.timezone)::date,
@@ -184,14 +451,15 @@ object CheckInService {
                         JOIN habits h ON h.id = r.habit_id
                         JOIN user_settings us ON us.user_id = h.user_id
                         WHERE h.deleted_at IS NULL
+                          AND h.habit_type = 'scheduled'
                     )
-                    INSERT INTO checkins (reminder_id, check_date, status)
-                    SELECT s.reminder_id, s.d, 'skip'
+                    INSERT INTO checkins (habit_id, reminder_id, check_date, status)
+                    SELECT s.habit_id, s.reminder_id, s.d, 'skip'
                     FROM slots s
                     WHERE ((s.d + s.reminder_time) AT TIME ZONE s.timezone) > s.created_at
                       AND s.d < ((now() AT TIME ZONE s.timezone)::date - 1)
                       AND (s.paused_at IS NULL OR ((s.d + s.reminder_time) AT TIME ZONE s.timezone) < s.paused_at)
-                    ON CONFLICT (reminder_id, check_date) DO NOTHING
+                    ON CONFLICT (reminder_id, check_date) WHERE reminder_id IS NOT NULL DO NOTHING
                     """.trimIndent()
                 )
             )
