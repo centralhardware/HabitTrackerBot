@@ -30,6 +30,17 @@ object Keyboards {
         )
     }
 
+    fun logQuantity(habitId: Long, date: LocalDate, lang: Lang): InlineKeyboardMarkup {
+        return InlineKeyboardMarkup(
+            listOf(
+                listOf(
+                    CallbackDataInlineKeyboardButton(Strings.btnLog(lang), "lq|$habitId|$date|log"),
+                    CallbackDataInlineKeyboardButton(Strings.btnDelete(lang), "lq|$habitId|$date|del")
+                )
+            )
+        )
+    }
+
     fun pickHabit(prefix: String, habits: List<HabitService.Habit>, icon: String): InlineKeyboardMarkup {
         return InlineKeyboardMarkup(
             habits.map { habit ->

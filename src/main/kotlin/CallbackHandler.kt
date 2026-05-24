@@ -1,14 +1,19 @@
 import dev.inmo.tgbotapi.extensions.api.answers.answerCallbackQuery
 import dev.inmo.tgbotapi.extensions.api.deleteMessage
 import dev.inmo.tgbotapi.extensions.api.edit.text.editMessageText
+import dev.inmo.tgbotapi.extensions.api.send.sendMessage
 import dev.inmo.tgbotapi.extensions.behaviour_builder.BehaviourContext
+import dev.inmo.tgbotapi.extensions.behaviour_builder.expectations.waitTextMessage
 import dev.inmo.tgbotapi.extensions.behaviour_builder.triggers_handling.onMessageDataCallbackQuery
 import dev.inmo.tgbotapi.types.queries.callback.MessageDataCallbackQuery
+import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.first
 import java.time.LocalDate
 
 fun BehaviourContext.registerCallbackHandler() {
     onMessageDataCallbackQuery(Regex("^ci\\|.*")) { handleCheckIn(it) }
     onMessageDataCallbackQuery(Regex("^lg\\|.*")) { handleLog(it) }
+    onMessageDataCallbackQuery(Regex("^lq\\|.*")) { handleLogQuantity(it) }
     onMessageDataCallbackQuery(Regex("^rm\\|.*")) { handleHabitAction(it, "rm|", HabitService::softDelete, Strings::cbRemovedShort, Strings::cbRemovedFull) }
     onMessageDataCallbackQuery(Regex("^ps\\|.*")) { handleHabitAction(it, "ps|", HabitService::pause, Strings::cbPausedShort, Strings::cbPausedFull) }
     onMessageDataCallbackQuery(Regex("^rs\\|.*")) { handleHabitAction(it, "rs|", HabitService::resume, Strings::cbResumedShort, Strings::cbResumedFull) }
@@ -137,6 +142,79 @@ private suspend fun BehaviourContext.handleLog(query: MessageDataCallbackQuery) 
         )
     }
     answerCallbackQuery(query, text = Strings.cbLogged(lang))
+}
+
+private suspend fun BehaviourContext.handleLogQuantity(query: MessageDataCallbackQuery) {
+    val userId = query.user.id.chatId.long
+    val lang = queryLang(query)
+    val parts = query.data.split("|")
+    if (parts.size != 4) {
+        answerCallbackQuery(query, text = Strings.cbBadButton(lang))
+        return
+    }
+    val habitId = parts[1].toLongOrNull() ?: run {
+        answerCallbackQuery(query, text = Strings.cbError(lang))
+        return
+    }
+    val date = try {
+        LocalDate.parse(parts[2])
+    } catch (_: Exception) {
+        answerCallbackQuery(query, text = Strings.cbBadDate(lang))
+        return
+    }
+    if (parts[3] == "del") {
+        val msg = query.message
+        runCatching { deleteMessage(chatId = msg.chat.id, messageId = msg.messageId) }
+        answerCallbackQuery(query, text = Strings.cbDeleted(lang))
+        return
+    }
+    if (parts[3] != "log") {
+        answerCallbackQuery(query, text = Strings.cbBadButton(lang))
+        return
+    }
+
+    val habit = HabitService.findById(habitId, userId)
+    if (habit == null || habit.type != HabitService.Type.QUANTITY) {
+        answerCallbackQuery(query, text = Strings.cbNotFound(lang))
+        return
+    }
+
+    answerCallbackQuery(query)
+    val chatId = query.message.chat.id
+    val chatLong = chatId.chatId.long
+    sendMessage(chatId, Strings.sendAmount(lang, habit))
+
+    val reply = waitTextMessage()
+        .filter { it.chat.id.chatId.long == chatLong }
+        .first()
+    val raw = reply.content.text.trim().replace(',', '.')
+    if (raw.startsWith("/")) {
+        sendMessage(chatId, Strings.cancelled(lang))
+        return
+    }
+    val value = raw.toDoubleOrNull()
+    if (value == null || value <= 0.0 || value.isNaN() || value.isInfinite()) {
+        sendMessage(chatId, Strings.invalidAmount(lang))
+        return
+    }
+
+    val ok = CheckInService.recordQuantity(habitId, userId, date, value)
+    if (!ok) {
+        sendMessage(chatId, Strings.cbNotFound(lang))
+        return
+    }
+
+    val total = CheckInService.todayQuantity(habitId, date)
+    val msg = query.message
+    runCatching {
+        editMessageText(
+            chatId = msg.chat.id,
+            messageId = msg.messageId,
+            text = Strings.quantityLine(lang, habit, total, date),
+            replyMarkup = Keyboards.logQuantity(habitId, date, lang)
+        )
+    }
+    sendMessage(chatId, Strings.cbLogged(lang))
 }
 
 private suspend fun BehaviourContext.handleHabitAction(

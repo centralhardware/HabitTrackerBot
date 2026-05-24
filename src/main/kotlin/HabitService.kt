@@ -10,7 +10,8 @@ object HabitService {
 
     enum class Type(val value: String) {
         SCHEDULED("scheduled"),
-        COUNTER("counter");
+        COUNTER("counter"),
+        QUANTITY("quantity");
 
         companion object {
             fun parse(s: String?): Type = entries.firstOrNull { it.value == s } ?: SCHEDULED
@@ -42,6 +43,8 @@ object HabitService {
         val name: String,
         val type: Type,
         val dailyTarget: Int?,
+        val targetValue: Double?,
+        val unit: String?,
         val direction: Direction?,
         val reminders: List<LocalTime>,
         val status: Status
@@ -53,6 +56,8 @@ object HabitService {
         type: Type,
         reminders: List<LocalTime>,
         dailyTarget: Int? = null,
+        targetValue: Double? = null,
+        unit: String? = null,
         direction: Direction? = null
     ): Habit {
         return using(sessionOf(DatabaseService.dataSource, returnGeneratedKey = true)) { session ->
@@ -60,13 +65,15 @@ object HabitService {
                 val habitId = tx.updateAndReturnGeneratedKey(
                     queryOf(
                         """
-                        INSERT INTO habits (user_id, name, habit_type, daily_target, direction)
-                        VALUES (?, ?, ?, ?, ?)
+                        INSERT INTO habits (user_id, name, habit_type, daily_target, target_value, unit, direction)
+                        VALUES (?, ?, ?, ?, ?, ?, ?)
                         """.trimIndent(),
                         userId,
                         name,
                         type.value,
                         dailyTarget,
+                        targetValue,
+                        unit,
                         direction?.value
                     )
                 ) ?: error("Failed to insert habit")
@@ -87,6 +94,8 @@ object HabitService {
                     name = name,
                     type = type,
                     dailyTarget = dailyTarget,
+                    targetValue = targetValue,
+                    unit = unit,
                     direction = direction,
                     reminders = reminders.sorted(),
                     status = Status.ACTIVE
@@ -100,7 +109,8 @@ object HabitService {
             session.run(
                 queryOf(
                 """
-                SELECT h.id, h.user_id, h.name, h.habit_type, h.daily_target, h.direction, h.status,
+                SELECT h.id, h.user_id, h.name, h.habit_type, h.daily_target,
+                       h.target_value, h.unit, h.direction, h.status,
                        COALESCE(
                            ARRAY_AGG(r.reminder_time ORDER BY r.reminder_time)
                                FILTER (WHERE r.reminder_time IS NOT NULL),
@@ -122,6 +132,8 @@ object HabitService {
                     name = row.string("name"),
                     type = Type.parse(row.stringOrNull("habit_type")),
                     dailyTarget = row.intOrNull("daily_target"),
+                    targetValue = row.doubleOrNull("target_value"),
+                    unit = row.stringOrNull("unit"),
                     direction = Direction.parse(row.stringOrNull("direction")),
                     reminders = arr.map { it.toLocalTime() },
                     status = Status.parse(row.stringOrNull("status"))

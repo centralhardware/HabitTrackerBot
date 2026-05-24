@@ -24,10 +24,11 @@ fun BehaviourContext.registerCheckInCommand() {
         val today = LocalDate.now(tz)
         val yesterday = today.minusDays(1)
         val scheduled = CheckInService.pendingCheckIns(userId, yesterday, today)
-        val counters = HabitService.listActive(userId)
-            .filter { it.status == HabitService.Status.ACTIVE && it.type == HabitService.Type.COUNTER }
+        val active = HabitService.listActive(userId).filter { it.status == HabitService.Status.ACTIVE }
+        val counters = active.filter { it.type == HabitService.Type.COUNTER }
+        val quantities = active.filter { it.type == HabitService.Type.QUANTITY }
 
-        if (scheduled.isEmpty() && counters.isEmpty()) {
+        if (scheduled.isEmpty() && counters.isEmpty() && quantities.isEmpty()) {
             sendMessage(message.chat.id, Strings.nothingToCheckIn(lang))
             return@onCommand
         }
@@ -49,6 +50,15 @@ fun BehaviourContext.registerCheckInCommand() {
                 chatId = message.chat.id,
                 text = Strings.counterLine(lang, habit, current, today),
                 replyMarkup = Keyboards.logPlus(habit.id, today, lang)
+            )
+        }
+
+        quantities.forEach { habit ->
+            val current = CheckInService.todayQuantity(habit.id, today)
+            sendMessage(
+                chatId = message.chat.id,
+                text = Strings.quantityLine(lang, habit, current, today),
+                replyMarkup = Keyboards.logQuantity(habit.id, today, lang)
             )
         }
     }

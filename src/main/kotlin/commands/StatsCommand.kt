@@ -43,6 +43,15 @@ fun BehaviourContext.registerStatsCommand() {
                     is CheckInService.HabitStat.Counter.Plain -> {
                         appendLine("    ${Strings.statsCounterPlain(lang, s)}")
                     }
+                    is CheckInService.HabitStat.Quantity.WithTarget -> {
+                        Strings.statsQuantityTarget(lang, s).forEach { appendLine("    $it") }
+                    }
+                    is CheckInService.HabitStat.Quantity.Trend -> {
+                        Strings.statsQuantityTrend(lang, s).forEach { appendLine("    $it") }
+                    }
+                    is CheckInService.HabitStat.Quantity.Plain -> {
+                        appendLine("    ${Strings.statsQuantityPlain(lang, s)}")
+                    }
                 }
             }
         }

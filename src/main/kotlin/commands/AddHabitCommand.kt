@@ -74,6 +74,8 @@ fun BehaviourContext.registerAddHabitCommand() {
         }
 
         var dailyTarget: Int? = null
+        var targetValue: Double? = null
+        var unit: String? = null
         var direction: HabitService.Direction? = null
 
         if (type == HabitService.Type.COUNTER) {
@@ -90,6 +92,48 @@ fun BehaviourContext.registerAddHabitCommand() {
                     return@onCommand
                 }
                 dailyTarget = n
+            }
+
+            val dirChoice = pickFromKeyboard(
+                Strings.sendDirection(lang),
+                directionKeyboard(lang),
+                DIR_PREFIX
+            ) ?: run {
+                sendMessage(message.chat.id, Strings.cancelled(lang))
+                return@onCommand
+            }
+            direction = if (dirChoice == DIR_NONE) null
+                        else HabitService.Direction.entries.firstOrNull { it.value == dirChoice }
+            if (direction == null && dirChoice != DIR_NONE) {
+                sendMessage(message.chat.id, Strings.cancelled(lang))
+                return@onCommand
+            }
+        }
+
+        if (type == HabitService.Type.QUANTITY) {
+            sendMessage(message.chat.id, Strings.sendDailyTargetValue(lang))
+            val raw = nextText()
+            if (raw.startsWith("/")) {
+                sendMessage(message.chat.id, Strings.cancelled(lang))
+                return@onCommand
+            }
+            if (!isSkipped(raw)) {
+                val v = raw.replace(',', '.').toDoubleOrNull()
+                if (v == null || v <= 0.0 || v.isNaN() || v.isInfinite()) {
+                    sendMessage(message.chat.id, Strings.invalidTargetValue(lang))
+                    return@onCommand
+                }
+                targetValue = v
+            }
+
+            sendMessage(message.chat.id, Strings.sendUnit(lang))
+            val unitRaw = nextText()
+            if (unitRaw.startsWith("/")) {
+                sendMessage(message.chat.id, Strings.cancelled(lang))
+                return@onCommand
+            }
+            if (!isSkipped(unitRaw)) {
+                unit = unitRaw.take(16)
             }
 
             val dirChoice = pickFromKeyboard(
@@ -150,6 +194,8 @@ fun BehaviourContext.registerAddHabitCommand() {
             type = type,
             reminders = times,
             dailyTarget = dailyTarget,
+            targetValue = targetValue,
+            unit = unit,
             direction = direction
         )
         sendMessage(message.chat.id, Strings.habitAddedDetailed(lang, habit))

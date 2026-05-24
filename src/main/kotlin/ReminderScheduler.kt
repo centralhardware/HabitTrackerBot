@@ -19,6 +19,8 @@ object ReminderScheduler {
                         Keyboards.checkIn(reminder.reminderId, reminder.userDate, reminder.lang)
                     HabitService.Type.COUNTER ->
                         Keyboards.logPlus(reminder.habitId, reminder.userDate, reminder.lang)
+                    HabitService.Type.QUANTITY ->
+                        Keyboards.logQuantity(reminder.habitId, reminder.userDate, reminder.lang)
                 }
                 sendMessage(
                     chatId = reminder.userId.toChatId(),
