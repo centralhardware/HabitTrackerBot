@@ -1,4 +1,5 @@
 import ReminderScheduler.runOnce
+import WeeklySummaryScheduler.runWeeklyOnce
 import commands.registerAddHabitCommand
 import commands.registerCheckInCommand
 import commands.registerHabitsCommand
@@ -58,6 +59,7 @@ suspend fun main() {
         launch {
             doInfinity("0 /1 * * *") {
                 runOnce()
+                runWeeklyOnce()
             }
         }
     }.second.join()

@@ -275,6 +275,48 @@ object Strings {
             "today: ${s.todayCount}   total: ${s.grandTotal}   days: ${s.daysLogged}",
             "сегодня: ${s.todayCount}   всего: ${s.grandTotal}   дней: ${s.daysLogged}")
 
+    fun weeklySummary(
+        l: Lang,
+        from: LocalDate,
+        to: LocalDate,
+        stats: List<WeeklySummaryService.HabitWeekStat>
+    ): String? {
+        if (stats.isEmpty()) return null
+        val activity = stats.any { s ->
+            s.scheduledDone + s.scheduledSkip + s.counterTotal > 0
+        }
+        if (!activity) return null
+
+        return buildString {
+            appendLine(pick(l,
+                "📊 Past week ($from – $to):",
+                "📊 Прошлая неделя ($from – $to):"))
+            stats.forEach { s ->
+                appendLine("• ${s.name}")
+                when (s.type) {
+                    HabitService.Type.SCHEDULED -> {
+                        val total = s.scheduledDone + s.scheduledSkip
+                        val rate = if (total > 0) "%.0f%%".format(s.scheduledDone * 100.0 / total) else "—"
+                        appendLine("    ✅ ${s.scheduledDone}   ❌ ${s.scheduledSkip}   ${statsCompletion(l)}: $rate")
+                    }
+                    HabitService.Type.COUNTER -> {
+                        val avg = if (s.counterDays > 0) "%.1f".format(s.counterTotal.toDouble() / s.counterDays) else "0"
+                        val dirSuffix = s.direction?.let { "   (${directionShort(l, it)})" } ?: ""
+                        appendLine(pick(l,
+                            "    total: ${s.counterTotal}   days: ${s.counterDays}   avg/day: $avg$dirSuffix",
+                            "    всего: ${s.counterTotal}   дней: ${s.counterDays}   среднее: $avg$dirSuffix"))
+                        val target = s.dailyTarget
+                        if (target != null) {
+                            appendLine(pick(l,
+                                "    🎯 target hit: ${s.targetHitDays}/7",
+                                "    🎯 цель достигнута: ${s.targetHitDays}/7"))
+                        }
+                    }
+                }
+            }
+        }.trimEnd()
+    }
+
     fun tzNotSet(l: Lang) = pick(l,
         "Timezone is not set. Set it with /tz <IANA name>, e.g. /tz Europe/Moscow",
         "Часовой пояс не задан. Задайте через /tz <IANA>, например /tz Europe/Moscow")
