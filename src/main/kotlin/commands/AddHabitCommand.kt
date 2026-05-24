@@ -73,8 +73,7 @@ fun BehaviourContext.registerAddHabitCommand() {
             return@onCommand
         }
 
-        var dailyTarget: Int? = null
-        var targetValue: Double? = null
+        var dailyTarget: Double? = null
         var unit: String? = null
         var direction: HabitService.Direction? = null
 
@@ -91,7 +90,7 @@ fun BehaviourContext.registerAddHabitCommand() {
                     sendMessage(message.chat.id, Strings.invalidTarget(lang))
                     return@onCommand
                 }
-                dailyTarget = n
+                dailyTarget = n.toDouble()
             }
 
             val dirChoice = pickFromKeyboard(
@@ -123,7 +122,7 @@ fun BehaviourContext.registerAddHabitCommand() {
                     sendMessage(message.chat.id, Strings.invalidTargetValue(lang))
                     return@onCommand
                 }
-                targetValue = v
+                dailyTarget = v
             }
 
             sendMessage(message.chat.id, Strings.sendUnit(lang))
@@ -194,7 +193,6 @@ fun BehaviourContext.registerAddHabitCommand() {
             type = type,
             reminders = times,
             dailyTarget = dailyTarget,
-            targetValue = targetValue,
             unit = unit,
             direction = direction
         )

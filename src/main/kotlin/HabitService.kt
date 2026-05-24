@@ -42,8 +42,7 @@ object HabitService {
         val userId: Long,
         val name: String,
         val type: Type,
-        val dailyTarget: Int?,
-        val targetValue: Double?,
+        val dailyTarget: Double?,
         val unit: String?,
         val direction: Direction?,
         val reminders: List<LocalTime>,
@@ -55,8 +54,7 @@ object HabitService {
         name: String,
         type: Type,
         reminders: List<LocalTime>,
-        dailyTarget: Int? = null,
-        targetValue: Double? = null,
+        dailyTarget: Double? = null,
         unit: String? = null,
         direction: Direction? = null
     ): Habit {
@@ -65,14 +63,13 @@ object HabitService {
                 val habitId = tx.updateAndReturnGeneratedKey(
                     queryOf(
                         """
-                        INSERT INTO habits (user_id, name, habit_type, daily_target, target_value, unit, direction)
-                        VALUES (?, ?, ?, ?, ?, ?, ?)
+                        INSERT INTO habits (user_id, name, habit_type, daily_target, unit, direction)
+                        VALUES (?, ?, ?, ?, ?, ?)
                         """.trimIndent(),
                         userId,
                         name,
                         type.value,
                         dailyTarget,
-                        targetValue,
                         unit,
                         direction?.value
                     )
@@ -94,7 +91,6 @@ object HabitService {
                     name = name,
                     type = type,
                     dailyTarget = dailyTarget,
-                    targetValue = targetValue,
                     unit = unit,
                     direction = direction,
                     reminders = reminders.sorted(),
@@ -110,7 +106,7 @@ object HabitService {
                 queryOf(
                 """
                 SELECT h.id, h.user_id, h.name, h.habit_type, h.daily_target,
-                       h.target_value, h.unit, h.direction, h.status,
+                       h.unit, h.direction, h.status,
                        COALESCE(
                            ARRAY_AGG(r.reminder_time ORDER BY r.reminder_time)
                                FILTER (WHERE r.reminder_time IS NOT NULL),
@@ -131,8 +127,7 @@ object HabitService {
                     userId = row.long("user_id"),
                     name = row.string("name"),
                     type = Type.parse(row.stringOrNull("habit_type")),
-                    dailyTarget = row.intOrNull("daily_target"),
-                    targetValue = row.doubleOrNull("target_value"),
+                    dailyTarget = row.doubleOrNull("daily_target"),
                     unit = row.stringOrNull("unit"),
                     direction = Direction.parse(row.stringOrNull("direction")),
                     reminders = arr.map { it.toLocalTime() },

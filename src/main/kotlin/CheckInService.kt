@@ -267,7 +267,7 @@ object CheckInService {
     }
 
     private fun quantityStat(session: Session, h: HabitService.Habit, today: LocalDate): HabitStat.Quantity {
-        val target = h.targetValue
+        val target = h.dailyTarget
         val direction = h.direction
         return when {
             target != null -> quantityWithTarget(session, h, today, target)
@@ -431,7 +431,7 @@ object CheckInService {
     private data class QuantityStreakRow(val todayTotal: Double, val doneDays: Int, val skipDays: Int, val streak: Int)
 
     private fun counterStat(session: Session, h: HabitService.Habit, today: LocalDate): HabitStat.Counter {
-        val target = h.dailyTarget
+        val target = h.dailyTarget?.toInt()
         val direction = h.direction
         return when {
             target != null -> counterWithTarget(session, h, today, target)

@@ -9,8 +9,7 @@ object WeeklySummaryService {
         val name: String,
         val type: HabitService.Type,
         val direction: HabitService.Direction?,
-        val dailyTarget: Int?,
-        val targetValue: Double?,
+        val dailyTarget: Double?,
         val unit: String?,
         val scheduledDone: Int,
         val scheduledSkip: Int,
@@ -54,7 +53,7 @@ object WeeklySummaryService {
                 ) ?: WeekTotals(0, 0, 0, 0, 0.0, 0)
 
                 val targetHitDays = when (h.type) {
-                    HabitService.Type.COUNTER -> h.dailyTarget?.let { target ->
+                    HabitService.Type.COUNTER -> h.dailyTarget?.toInt()?.let { target ->
                         val hitExpr = if (h.direction == HabitService.Direction.LESS) "<=" else ">="
                         session.run(
                             queryOf(
@@ -72,7 +71,7 @@ object WeeklySummaryService {
                             ).map { it.int("hit") }.asSingle
                         ) ?: 0
                     } ?: 0
-                    HabitService.Type.QUANTITY -> h.targetValue?.let { target ->
+                    HabitService.Type.QUANTITY -> h.dailyTarget?.let { target ->
                         val hitExpr = if (h.direction == HabitService.Direction.LESS) "<=" else ">="
                         session.run(
                             queryOf(
@@ -99,7 +98,6 @@ object WeeklySummaryService {
                     type = h.type,
                     direction = h.direction,
                     dailyTarget = h.dailyTarget,
-                    targetValue = h.targetValue,
                     unit = h.unit,
                     scheduledDone = totals.done,
                     scheduledSkip = totals.skip,

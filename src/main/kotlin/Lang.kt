@@ -135,16 +135,16 @@ object Strings {
             when (h.type) {
                 HabitService.Type.SCHEDULED -> append(" — $times")
                 HabitService.Type.COUNTER -> {
-                    h.dailyTarget?.let { append(" — ${pick(l, "target: $it/day", "цель: $it/день")}") }
+                    h.dailyTarget?.toInt()?.let { append(" — ${pick(l, "target: $it/day", "цель: $it/день")}") }
                     h.direction?.let { append(" — ${directionLabel(l, it)}") }
                     if (times.isNotEmpty()) append(" — $times")
                 }
                 HabitService.Type.QUANTITY -> {
-                    h.targetValue?.let {
+                    h.dailyTarget?.let {
                         val unit = h.unit?.let { u -> " $u" } ?: ""
                         append(" — ${pick(l, "target: ${formatAmount(it)}$unit/day", "цель: ${formatAmount(it)}$unit/день")}")
                     }
-                    if (h.targetValue == null) {
+                    if (h.dailyTarget == null) {
                         h.unit?.let { append(" — ${pick(l, "unit: $it", "ед.: $it")}") }
                     }
                     h.direction?.let { append(" — ${directionLabel(l, it)}") }
@@ -180,7 +180,7 @@ object Strings {
     fun pendingCheckIns(l: Lang) = pick(l, "Pending check-ins:", "Ожидают чек-ина:")
 
     fun counterLine(l: Lang, h: HabitService.Habit, current: Int, date: LocalDate): String {
-        val target = h.dailyTarget
+        val target = h.dailyTarget?.toInt()
         val mark = when {
             target != null && current >= target -> "✅"
             target != null -> "⏳"
@@ -194,7 +194,7 @@ object Strings {
     }
 
     fun quantityLine(l: Lang, h: HabitService.Habit, current: Double, date: LocalDate): String {
-        val target = h.targetValue
+        val target = h.dailyTarget
         val unit = h.unit?.let { " $it" } ?: ""
         val hitOk = when (h.direction) {
             HabitService.Direction.LESS -> target != null && current <= target
@@ -421,8 +421,7 @@ object Strings {
                         appendLine(pick(l,
                             "    total: ${formatAmount(s.quantityTotal)}$unit   days: ${s.quantityDays}   avg/day: $avg$unit$dirSuffix",
                             "    всего: ${formatAmount(s.quantityTotal)}$unit   дней: ${s.quantityDays}   среднее: $avg$unit$dirSuffix"))
-                        val target = s.targetValue
-                        if (target != null) {
+                        if (s.dailyTarget != null) {
                             appendLine(pick(l,
                                 "    🎯 target hit: ${s.targetHitDays}/7",
                                 "    🎯 цель достигнута: ${s.targetHitDays}/7"))
