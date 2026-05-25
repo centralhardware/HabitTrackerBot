@@ -1,5 +1,10 @@
 import dev.inmo.tgbotapi.types.abstracts.WithOptionalLanguageCode
 import dev.inmo.tgbotapi.types.chat.User
+import dto.Direction
+import dto.Habit
+import dto.HabitStat
+import dto.HabitType
+import dto.HabitWeekStat
 import java.time.LocalDate
 
 enum class Lang {
@@ -70,15 +75,15 @@ object Strings {
         "Pick a habit type:\n• scheduled — fixed reminder times, done/skip\n• counter — count check-ins (optional daily target, optional direction)\n• quantity — log decimal amounts (optional target, unit, direction)",
         "Выберите тип привычки:\n• расписание — фиксированные напоминания, готово/пропуск\n• счётчик — считать чек-ины (опциональные цель и направление)\n• количество — вводить вещественные значения (опциональные цель, единица, направление)")
 
-    fun typeButtonLabel(l: Lang, t: HabitService.Type): String = when (t) {
-        HabitService.Type.SCHEDULED -> pick(l, "📅 scheduled", "📅 расписание")
-        HabitService.Type.COUNTER -> pick(l, "🔢 counter", "🔢 счётчик")
-        HabitService.Type.QUANTITY -> pick(l, "⚖️ quantity", "⚖️ количество")
+    fun typeButtonLabel(l: Lang, t: HabitType): String = when (t) {
+        HabitType.SCHEDULED -> pick(l, "📅 scheduled", "📅 расписание")
+        HabitType.COUNTER -> pick(l, "🔢 counter", "🔢 счётчик")
+        HabitType.QUANTITY -> pick(l, "⚖️ quantity", "⚖️ количество")
     }
 
-    fun directionButtonLabel(l: Lang, d: HabitService.Direction?): String = when (d) {
-        HabitService.Direction.MORE -> pick(l, "⬆ more is better", "⬆ больше — лучше")
-        HabitService.Direction.LESS -> pick(l, "⬇ less is better", "⬇ меньше — лучше")
+    fun directionButtonLabel(l: Lang, d: Direction?): String = when (d) {
+        Direction.MORE -> pick(l, "⬆ more is better", "⬆ больше — лучше")
+        Direction.LESS -> pick(l, "⬇ less is better", "⬇ меньше — лучше")
         null -> pick(l, "— no direction", "— без направления")
     }
 
@@ -102,7 +107,7 @@ object Strings {
         "Unit (e.g. km, kg, ml)? Send \"-\" to skip.",
         "Единица измерения (например км, кг, мл)? Отправьте «-», чтобы пропустить.")
 
-    fun sendAmount(l: Lang, h: HabitService.Habit) = pick(l,
+    fun sendAmount(l: Lang, h: Habit) = pick(l,
         "Send the amount for \"${h.name}\"${h.unit?.let { " ($it)" } ?: ""}:",
         "Отправьте количество для «${h.name}»${h.unit?.let { " ($it)" } ?: ""}:")
 
@@ -128,18 +133,18 @@ object Strings {
 
     fun noTimes(l: Lang) = pick(l, "No times provided.", "Время не указано.")
 
-    fun habitAddedDetailed(l: Lang, h: HabitService.Habit): String {
+    fun habitAddedDetailed(l: Lang, h: Habit): String {
         val type = habitTypeLabel(l, h)
         val times = h.reminders.joinToString(", ") { it.format(Keyboards.TIME_FMT) }
         val tail = buildString {
             when (h.type) {
-                HabitService.Type.SCHEDULED -> append(" — $times")
-                HabitService.Type.COUNTER -> {
+                HabitType.SCHEDULED -> append(" — $times")
+                HabitType.COUNTER -> {
                     h.dailyTarget?.toInt()?.let { append(" — ${pick(l, "target: $it/day", "цель: $it/день")}") }
                     h.direction?.let { append(" — ${directionLabel(l, it)}") }
                     if (times.isNotEmpty()) append(" — $times")
                 }
-                HabitService.Type.QUANTITY -> {
+                HabitType.QUANTITY -> {
                     h.dailyTarget?.let {
                         val unit = h.unit?.let { u -> " $u" } ?: ""
                         append(" — ${pick(l, "target: ${formatAmount(it)}$unit/day", "цель: ${formatAmount(it)}$unit/день")}")
@@ -179,7 +184,7 @@ object Strings {
 
     fun pendingCheckIns(l: Lang) = pick(l, "Pending check-ins:", "Ожидают чек-ина:")
 
-    fun counterLine(l: Lang, h: HabitService.Habit, current: Int, date: LocalDate): String {
+    fun counterLine(l: Lang, h: Habit, current: Int, date: LocalDate): String {
         val target = h.dailyTarget?.toInt()
         val mark = when {
             target != null && current >= target -> "✅"
@@ -193,11 +198,11 @@ object Strings {
         return "$mark $date — ${h.name}: $body"
     }
 
-    fun quantityLine(l: Lang, h: HabitService.Habit, current: Double, date: LocalDate): String {
+    fun quantityLine(l: Lang, h: Habit, current: Double, date: LocalDate): String {
         val target = h.dailyTarget
         val unit = h.unit?.let { " $it" } ?: ""
         val hitOk = when (h.direction) {
-            HabitService.Direction.LESS -> target != null && current <= target
+            Direction.LESS -> target != null && current <= target
             else -> target != null && current >= target
         }
         val mark = when {
@@ -212,10 +217,10 @@ object Strings {
         return "$mark $date — ${h.name}: $body"
     }
 
-    fun habitTypeLabel(l: Lang, h: HabitService.Habit): String = when (h.type) {
-        HabitService.Type.SCHEDULED -> pick(l, "scheduled", "расписание")
-        HabitService.Type.COUNTER -> pick(l, "counter", "счётчик")
-        HabitService.Type.QUANTITY -> pick(l, "quantity", "количество")
+    fun habitTypeLabel(l: Lang, h: Habit): String = when (h.type) {
+        HabitType.SCHEDULED -> pick(l, "scheduled", "расписание")
+        HabitType.COUNTER -> pick(l, "counter", "счётчик")
+        HabitType.QUANTITY -> pick(l, "quantity", "количество")
     }
 
     fun formatAmount(v: Double): String {
@@ -225,15 +230,15 @@ object Strings {
                else String.format(java.util.Locale.ROOT, "%.3f", rounded).trimEnd('0').trimEnd('.')
     }
 
-    fun directionLabel(l: Lang, d: HabitService.Direction?): String = when (d) {
-        HabitService.Direction.MORE -> pick(l, "more is better", "больше — лучше")
-        HabitService.Direction.LESS -> pick(l, "less is better", "меньше — лучше")
+    fun directionLabel(l: Lang, d: Direction?): String = when (d) {
+        Direction.MORE -> pick(l, "more is better", "больше — лучше")
+        Direction.LESS -> pick(l, "less is better", "меньше — лучше")
         null -> pick(l, "no direction", "без направления")
     }
 
-    private fun directionShort(l: Lang, d: HabitService.Direction): String = when (d) {
-        HabitService.Direction.MORE -> pick(l, "more↑", "больше↑")
-        HabitService.Direction.LESS -> pick(l, "less↓", "меньше↓")
+    private fun directionShort(l: Lang, d: Direction): String = when (d) {
+        Direction.MORE -> pick(l, "more↑", "больше↑")
+        Direction.LESS -> pick(l, "less↓", "меньше↓")
     }
 
     fun noStats(l: Lang) = pick(l, "No habits to report on.", "Не по чем статистику показывать.")
@@ -246,12 +251,12 @@ object Strings {
         "🔥 streak: $days day(s)",
         "🔥 серия: $days дн.")
 
-    fun statsCounterTarget(l: Lang, s: CheckInService.HabitStat.Counter.WithTarget): List<String> {
+    fun statsCounterTarget(l: Lang, s: HabitStat.Counter.WithTarget): List<String> {
         val total = s.doneDays + s.skipDays
         val rate = if (total > 0) "%.0f%%".format(s.doneDays * 100.0 / total) else "—"
         val todayMark = run {
-            val ok = s.direction == HabitService.Direction.LESS && s.todayCount <= s.dailyTarget ||
-                     s.direction != HabitService.Direction.LESS && s.todayCount >= s.dailyTarget
+            val ok = s.direction == Direction.LESS && s.todayCount <= s.dailyTarget ||
+                     s.direction != Direction.LESS && s.todayCount >= s.dailyTarget
             if (ok) "✅" else "⏳"
         }
         val dirSuffix = s.direction?.let { "   (${directionShort(l, it)})" } ?: ""
@@ -264,7 +269,7 @@ object Strings {
         return listOf(first, second)
     }
 
-    fun statsCounterTrend(l: Lang, s: CheckInService.HabitStat.Counter.Trend): List<String> {
+    fun statsCounterTrend(l: Lang, s: HabitStat.Counter.Trend): List<String> {
         val dir = directionShort(l, s.direction)
         val avgFmt = "%.1f".format(s.overallAvg)
         val header = pick(l,
@@ -301,7 +306,7 @@ object Strings {
 
     private fun trendComparisonLine(
         l: Lang,
-        direction: HabitService.Direction,
+        direction: Direction,
         labelEn: String,
         labelRu: String,
         recent: Double,
@@ -318,8 +323,8 @@ object Strings {
         }
         val verdict = when {
             delta == 0.0 -> "→"
-            (direction == HabitService.Direction.MORE && delta > 0.0) ||
-            (direction == HabitService.Direction.LESS && delta < 0.0) -> "✅"
+            (direction == Direction.MORE && delta > 0.0) ||
+            (direction == Direction.LESS && delta < 0.0) -> "✅"
             else -> "⚠️"
         }
         val r = if (asInt) recent.toInt().toString() else "%.1f".format(recent)
@@ -329,17 +334,17 @@ object Strings {
             "$arrow $labelRu: $r против $p   $pct $verdict")
     }
 
-    fun statsCounterPlain(l: Lang, s: CheckInService.HabitStat.Counter.Plain): String =
+    fun statsCounterPlain(l: Lang, s: HabitStat.Counter.Plain): String =
         pick(l,
             "today: ${s.todayCount}   total: ${s.grandTotal}   days: ${s.daysLogged}",
             "сегодня: ${s.todayCount}   всего: ${s.grandTotal}   дней: ${s.daysLogged}")
 
-    fun statsQuantityTarget(l: Lang, s: CheckInService.HabitStat.Quantity.WithTarget): List<String> {
+    fun statsQuantityTarget(l: Lang, s: HabitStat.Quantity.WithTarget): List<String> {
         val total = s.doneDays + s.skipDays
         val rate = if (total > 0) "%.0f%%".format(java.util.Locale.ROOT, s.doneDays * 100.0 / total) else "—"
         val todayMark = run {
-            val ok = s.direction == HabitService.Direction.LESS && s.todayTotal <= s.dailyTarget ||
-                     s.direction != HabitService.Direction.LESS && s.todayTotal >= s.dailyTarget
+            val ok = s.direction == Direction.LESS && s.todayTotal <= s.dailyTarget ||
+                     s.direction != Direction.LESS && s.todayTotal >= s.dailyTarget
             if (ok) "✅" else "⏳"
         }
         val dirSuffix = s.direction?.let { "   (${directionShort(l, it)})" } ?: ""
@@ -355,7 +360,7 @@ object Strings {
         return listOf(first, second)
     }
 
-    fun statsQuantityTrend(l: Lang, s: CheckInService.HabitStat.Quantity.Trend): List<String> {
+    fun statsQuantityTrend(l: Lang, s: HabitStat.Quantity.Trend): List<String> {
         val dir = directionShort(l, s.direction)
         val unit = s.unit?.let { " $it" } ?: ""
         val avgFmt = formatAmount(s.overallAvg)
@@ -370,7 +375,7 @@ object Strings {
         return lines
     }
 
-    fun statsQuantityPlain(l: Lang, s: CheckInService.HabitStat.Quantity.Plain): String {
+    fun statsQuantityPlain(l: Lang, s: HabitStat.Quantity.Plain): String {
         val unit = s.unit?.let { " $it" } ?: ""
         return pick(l,
             "today: ${formatAmount(s.todayTotal)}$unit   total: ${formatAmount(s.grandTotal)}$unit   days: ${s.daysLogged}",
@@ -381,7 +386,7 @@ object Strings {
         l: Lang,
         from: LocalDate,
         to: LocalDate,
-        stats: List<WeeklySummaryService.HabitWeekStat>
+        stats: List<HabitWeekStat>
     ): String? {
         if (stats.isEmpty()) return null
         val activity = stats.any { s ->
@@ -396,12 +401,12 @@ object Strings {
             stats.forEach { s ->
                 appendLine("• ${s.name}")
                 when (s.type) {
-                    HabitService.Type.SCHEDULED -> {
+                    HabitType.SCHEDULED -> {
                         val total = s.scheduledDone + s.scheduledSkip
                         val rate = if (total > 0) "%.0f%%".format(java.util.Locale.ROOT, s.scheduledDone * 100.0 / total) else "—"
                         appendLine("    ✅ ${s.scheduledDone}   ❌ ${s.scheduledSkip}   ${statsCompletion(l)}: $rate")
                     }
-                    HabitService.Type.COUNTER -> {
+                    HabitType.COUNTER -> {
                         val avg = if (s.counterDays > 0) "%.1f".format(java.util.Locale.ROOT, s.counterTotal.toDouble() / s.counterDays) else "0"
                         val dirSuffix = s.direction?.let { "   (${directionShort(l, it)})" } ?: ""
                         appendLine(pick(l,
@@ -414,7 +419,7 @@ object Strings {
                                 "    🎯 цель достигнута: ${s.targetHitDays}/7"))
                         }
                     }
-                    HabitService.Type.QUANTITY -> {
+                    HabitType.QUANTITY -> {
                         val unit = s.unit?.let { " $it" } ?: ""
                         val avg = if (s.quantityDays > 0) formatAmount(s.quantityTotal / s.quantityDays) else "0"
                         val dirSuffix = s.direction?.let { "   (${directionShort(l, it)})" } ?: ""

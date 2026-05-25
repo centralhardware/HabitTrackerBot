@@ -15,6 +15,8 @@ import dev.inmo.tgbotapi.extensions.behaviour_builder.triggers_handling.onComman
 import dev.inmo.tgbotapi.types.MessageId
 import dev.inmo.tgbotapi.types.buttons.InlineKeyboardButtons.CallbackDataInlineKeyboardButton
 import dev.inmo.tgbotapi.types.buttons.InlineKeyboardMarkup
+import dto.Direction
+import dto.HabitType
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
 import senderLang
@@ -67,7 +69,7 @@ fun BehaviourContext.registerAddHabitCommand() {
             sendMessage(message.chat.id, Strings.cancelled(lang))
             return@onCommand
         }
-        val type = HabitService.Type.entries.firstOrNull { it.value == typeChoice }
+        val type = HabitType.entries.firstOrNull { it.value == typeChoice }
         if (type == null) {
             sendMessage(message.chat.id, Strings.cancelled(lang))
             return@onCommand
@@ -75,9 +77,9 @@ fun BehaviourContext.registerAddHabitCommand() {
 
         var dailyTarget: Double? = null
         var unit: String? = null
-        var direction: HabitService.Direction? = null
+        var direction: Direction? = null
 
-        if (type == HabitService.Type.COUNTER) {
+        if (type == HabitType.COUNTER) {
             sendMessage(message.chat.id, Strings.sendDailyTarget(lang))
             val raw = nextText()
             if (raw.startsWith("/")) {
@@ -102,14 +104,14 @@ fun BehaviourContext.registerAddHabitCommand() {
                 return@onCommand
             }
             direction = if (dirChoice == DIR_NONE) null
-                        else HabitService.Direction.entries.firstOrNull { it.value == dirChoice }
+                        else Direction.entries.firstOrNull { it.value == dirChoice }
             if (direction == null && dirChoice != DIR_NONE) {
                 sendMessage(message.chat.id, Strings.cancelled(lang))
                 return@onCommand
             }
         }
 
-        if (type == HabitService.Type.QUANTITY) {
+        if (type == HabitType.QUANTITY) {
             sendMessage(message.chat.id, Strings.sendDailyTargetValue(lang))
             val raw = nextText()
             if (raw.startsWith("/")) {
@@ -144,14 +146,14 @@ fun BehaviourContext.registerAddHabitCommand() {
                 return@onCommand
             }
             direction = if (dirChoice == DIR_NONE) null
-                        else HabitService.Direction.entries.firstOrNull { it.value == dirChoice }
+                        else Direction.entries.firstOrNull { it.value == dirChoice }
             if (direction == null && dirChoice != DIR_NONE) {
                 sendMessage(message.chat.id, Strings.cancelled(lang))
                 return@onCommand
             }
         }
 
-        val times: List<LocalTime> = if (type == HabitService.Type.SCHEDULED) {
+        val times: List<LocalTime> = if (type == HabitType.SCHEDULED) {
             sendMessage(message.chat.id, Strings.sendTimes(lang))
             val timesText = nextText()
             if (timesText.startsWith("/")) {
@@ -205,7 +207,7 @@ private const val DIR_PREFIX = "ad"
 private const val DIR_NONE = "none"
 
 private fun typeKeyboard(lang: Lang) = InlineKeyboardMarkup(
-    HabitService.Type.entries.map { t ->
+    HabitType.entries.map { t ->
         listOf(
             CallbackDataInlineKeyboardButton(
                 Strings.typeButtonLabel(lang, t),
@@ -216,7 +218,7 @@ private fun typeKeyboard(lang: Lang) = InlineKeyboardMarkup(
 )
 
 private fun directionKeyboard(lang: Lang): InlineKeyboardMarkup {
-    val rows = HabitService.Direction.entries.map { d ->
+    val rows = Direction.entries.map { d ->
         listOf(
             CallbackDataInlineKeyboardButton(
                 Strings.directionButtonLabel(lang, d),

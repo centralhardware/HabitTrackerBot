@@ -6,6 +6,7 @@ import Strings
 import dev.inmo.tgbotapi.extensions.api.send.sendMessage
 import dev.inmo.tgbotapi.extensions.behaviour_builder.BehaviourContext
 import dev.inmo.tgbotapi.extensions.behaviour_builder.triggers_handling.onCommand
+import dto.HabitStatus
 import senderLang
 import senderUserId
 
@@ -13,7 +14,7 @@ fun BehaviourContext.registerPauseCommand() {
     onCommand("pause") { message ->
         val userId = message.senderUserId() ?: return@onCommand
         val lang = message.senderLang()
-        val active = HabitService.listActive(userId).filter { it.status == HabitService.Status.ACTIVE }
+        val active = HabitService.listActive(userId).filter { it.status == HabitStatus.ACTIVE }
         if (active.isEmpty()) {
             sendMessage(message.chat.id, Strings.noActiveToPause(lang))
             return@onCommand
@@ -30,7 +31,7 @@ fun BehaviourContext.registerResumeCommand() {
     onCommand("resume") { message ->
         val userId = message.senderUserId() ?: return@onCommand
         val lang = message.senderLang()
-        val paused = HabitService.listActive(userId).filter { it.status == HabitService.Status.PAUSED }
+        val paused = HabitService.listActive(userId).filter { it.status == HabitStatus.PAUSED }
         if (paused.isEmpty()) {
             sendMessage(message.chat.id, Strings.noPaused(lang))
             return@onCommand

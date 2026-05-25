@@ -1,5 +1,6 @@
 import dev.inmo.tgbotapi.types.buttons.InlineKeyboardButtons.CallbackDataInlineKeyboardButton
 import dev.inmo.tgbotapi.types.buttons.InlineKeyboardMarkup
+import dto.Habit
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 
@@ -41,7 +42,7 @@ object Keyboards {
         )
     }
 
-    fun pickHabit(prefix: String, habits: List<HabitService.Habit>, icon: String): InlineKeyboardMarkup {
+    fun pickHabit(prefix: String, habits: List<Habit>, icon: String): InlineKeyboardMarkup {
         return InlineKeyboardMarkup(
             habits.map { habit ->
                 listOf(

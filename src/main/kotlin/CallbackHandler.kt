@@ -6,6 +6,9 @@ import dev.inmo.tgbotapi.extensions.behaviour_builder.BehaviourContext
 import dev.inmo.tgbotapi.extensions.behaviour_builder.expectations.waitTextMessage
 import dev.inmo.tgbotapi.extensions.behaviour_builder.triggers_handling.onMessageDataCallbackQuery
 import dev.inmo.tgbotapi.types.queries.callback.MessageDataCallbackQuery
+import db.CheckInRepository
+import dto.CheckinStatus
+import dto.HabitType
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
 import java.time.LocalDate
@@ -52,8 +55,8 @@ private suspend fun BehaviourContext.handleCheckIn(query: MessageDataCallbackQue
     }
 
     val status = when (parts[3]) {
-        "done" -> CheckInService.Status.DONE
-        "skip" -> CheckInService.Status.SKIP
+        "done" -> CheckinStatus.DONE
+        "skip" -> CheckinStatus.SKIP
         else -> {
             answerCallbackQuery(query, text = Strings.cbError(lang))
             return
@@ -66,7 +69,7 @@ private suspend fun BehaviourContext.handleCheckIn(query: MessageDataCallbackQue
         return
     }
 
-    val icon = if (status == CheckInService.Status.DONE) "✅" else "❌"
+    val icon = if (status == CheckinStatus.DONE) "✅" else "❌"
     val msg = query.message
     val originalText = (msg.content as? dev.inmo.tgbotapi.types.message.content.TextContent)?.text.orEmpty()
     val newText = if (originalText.isNotEmpty()) {
@@ -84,7 +87,7 @@ private suspend fun BehaviourContext.handleCheckIn(query: MessageDataCallbackQue
     }
     answerCallbackQuery(
         query,
-        text = if (status == CheckInService.Status.DONE) Strings.cbDone(lang) else Strings.cbSkipped(lang)
+        text = if (status == CheckinStatus.DONE) Strings.cbDone(lang) else Strings.cbSkipped(lang)
     )
 }
 
@@ -117,17 +120,16 @@ private suspend fun BehaviourContext.handleLog(query: MessageDataCallbackQuery) 
         return
     }
 
-    val ok = CheckInService.checkInCounter(habitId, userId, date)
-    if (!ok) {
+    if (!CheckInService.checkInCounter(habitId, userId, date)) {
         answerCallbackQuery(query, text = Strings.cbNotFound(lang))
         return
     }
 
     val habit = HabitService.findById(habitId, userId)
-    val total = CheckInService.todayCount(habitId, date)
+    val total = CheckInRepository.todayCounterCount(habitId, date)
     val msg = query.message
     val originalText = (msg.content as? dev.inmo.tgbotapi.types.message.content.TextContent)?.text.orEmpty()
-    val newText = if (habit != null && habit.type == HabitService.Type.COUNTER) {
+    val newText = if (habit != null && habit.type == HabitType.COUNTER) {
         Strings.counterLine(lang, habit, total, date)
     } else {
         originalText
@@ -174,7 +176,7 @@ private suspend fun BehaviourContext.handleLogQuantity(query: MessageDataCallbac
     }
 
     val habit = HabitService.findById(habitId, userId)
-    if (habit == null || habit.type != HabitService.Type.QUANTITY) {
+    if (habit == null || habit.type != HabitType.QUANTITY) {
         answerCallbackQuery(query, text = Strings.cbNotFound(lang))
         return
     }
@@ -185,8 +187,7 @@ private suspend fun BehaviourContext.handleLogQuantity(query: MessageDataCallbac
     sendMessage(chatId, Strings.sendAmount(lang, habit))
 
     val reply = waitTextMessage()
-        .filter { it.chat.id.chatId.long == chatLong }
-        .first()
+        .first { it.chat.id.chatId.long == chatLong }
     val raw = reply.content.text.trim().replace(',', '.')
     if (raw.startsWith("/")) {
         sendMessage(chatId, Strings.cancelled(lang))
@@ -198,13 +199,12 @@ private suspend fun BehaviourContext.handleLogQuantity(query: MessageDataCallbac
         return
     }
 
-    val ok = CheckInService.recordQuantity(habitId, userId, date, value)
-    if (!ok) {
+    if (!CheckInService.recordQuantity(habitId, userId, date, value)) {
         sendMessage(chatId, Strings.cbNotFound(lang))
         return
     }
 
-    val total = CheckInService.todayQuantity(habitId, date)
+    val total = CheckInRepository.todayQuantitySum(habitId, date)
     val msg = query.message
     runCatching {
         editMessageText(
@@ -230,8 +230,7 @@ private suspend fun BehaviourContext.handleHabitAction(
         answerCallbackQuery(query, text = Strings.cbError(lang))
         return
     }
-    val ok = action(habitId, userId)
-    if (ok) {
+    if (action(habitId, userId)) {
         val msg = query.message
         runCatching {
             editMessageText(chatId = msg.chat.id, messageId = msg.messageId, text = fullText(lang))

@@ -1,13 +1,15 @@
 package commands
 
-import CheckInService
 import HabitService
 import Keyboards
 import Strings
 import UserSettingsService
+import db.CheckInRepository
 import dev.inmo.tgbotapi.extensions.api.send.sendMessage
 import dev.inmo.tgbotapi.extensions.behaviour_builder.BehaviourContext
 import dev.inmo.tgbotapi.extensions.behaviour_builder.triggers_handling.onCommand
+import dto.HabitStatus
+import dto.HabitType
 import senderLang
 import senderUserId
 import java.time.LocalDate
@@ -23,10 +25,10 @@ fun BehaviourContext.registerCheckInCommand() {
         }
         val today = LocalDate.now(tz)
         val yesterday = today.minusDays(1)
-        val scheduled = CheckInService.pendingCheckIns(userId, yesterday, today)
-        val active = HabitService.listActive(userId).filter { it.status == HabitService.Status.ACTIVE }
-        val counters = active.filter { it.type == HabitService.Type.COUNTER }
-        val quantities = active.filter { it.type == HabitService.Type.QUANTITY }
+        val scheduled = CheckInRepository.pendingCheckIns(userId, yesterday, today)
+        val active = HabitService.listActive(userId).filter { it.status == HabitStatus.ACTIVE }
+        val counters = active.filter { it.type == HabitType.COUNTER }
+        val quantities = active.filter { it.type == HabitType.QUANTITY }
 
         if (scheduled.isEmpty() && counters.isEmpty() && quantities.isEmpty()) {
             sendMessage(message.chat.id, Strings.nothingToCheckIn(lang))
@@ -45,7 +47,7 @@ fun BehaviourContext.registerCheckInCommand() {
         }
 
         counters.forEach { habit ->
-            val current = CheckInService.todayCount(habit.id, today)
+            val current = CheckInRepository.todayCounterCount(habit.id, today)
             sendMessage(
                 chatId = message.chat.id,
                 text = Strings.counterLine(lang, habit, current, today),
@@ -54,7 +56,7 @@ fun BehaviourContext.registerCheckInCommand() {
         }
 
         quantities.forEach { habit ->
-            val current = CheckInService.todayQuantity(habit.id, today)
+            val current = CheckInRepository.todayQuantitySum(habit.id, today)
             sendMessage(
                 chatId = message.chat.id,
                 text = Strings.quantityLine(lang, habit, current, today),

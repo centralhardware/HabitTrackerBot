@@ -1,0 +1,1 @@
+ALTER TABLE checkins ALTER COLUMN status DROP NOT NULL;

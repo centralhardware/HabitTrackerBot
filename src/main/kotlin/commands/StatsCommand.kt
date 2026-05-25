@@ -6,6 +6,7 @@ import UserSettingsService
 import dev.inmo.tgbotapi.extensions.api.send.sendMessage
 import dev.inmo.tgbotapi.extensions.behaviour_builder.BehaviourContext
 import dev.inmo.tgbotapi.extensions.behaviour_builder.triggers_handling.onCommand
+import dto.HabitStat
 import senderLang
 import senderUserId
 import java.time.LocalDate
@@ -28,28 +29,28 @@ fun BehaviourContext.registerStatsCommand() {
             stats.forEach { s ->
                 appendLine("• ${s.name}")
                 when (s) {
-                    is CheckInService.HabitStat.Scheduled -> {
+                    is HabitStat.Scheduled -> {
                         val total = s.doneCount + s.skipCount
                         val rate = if (total > 0) "%.0f%%".format(s.doneCount * 100.0 / total) else "—"
                         appendLine("    ✅ ${s.doneCount}   ❌ ${s.skipCount}   ${Strings.statsCompletion(lang)}: $rate")
                         appendLine("    ${Strings.statsStreak(lang, s.streak)}")
                     }
-                    is CheckInService.HabitStat.Counter.WithTarget -> {
+                    is HabitStat.Counter.WithTarget -> {
                         Strings.statsCounterTarget(lang, s).forEach { appendLine("    $it") }
                     }
-                    is CheckInService.HabitStat.Counter.Trend -> {
+                    is HabitStat.Counter.Trend -> {
                         Strings.statsCounterTrend(lang, s).forEach { appendLine("    $it") }
                     }
-                    is CheckInService.HabitStat.Counter.Plain -> {
+                    is HabitStat.Counter.Plain -> {
                         appendLine("    ${Strings.statsCounterPlain(lang, s)}")
                     }
-                    is CheckInService.HabitStat.Quantity.WithTarget -> {
+                    is HabitStat.Quantity.WithTarget -> {
                         Strings.statsQuantityTarget(lang, s).forEach { appendLine("    $it") }
                     }
-                    is CheckInService.HabitStat.Quantity.Trend -> {
+                    is HabitStat.Quantity.Trend -> {
                         Strings.statsQuantityTrend(lang, s).forEach { appendLine("    $it") }
                     }
-                    is CheckInService.HabitStat.Quantity.Plain -> {
+                    is HabitStat.Quantity.Plain -> {
                         appendLine("    ${Strings.statsQuantityPlain(lang, s)}")
                     }
                 }

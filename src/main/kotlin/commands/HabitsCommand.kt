@@ -6,6 +6,8 @@ import Strings
 import dev.inmo.tgbotapi.extensions.api.send.sendMessage
 import dev.inmo.tgbotapi.extensions.behaviour_builder.BehaviourContext
 import dev.inmo.tgbotapi.extensions.behaviour_builder.triggers_handling.onCommand
+import dto.HabitStatus
+import dto.HabitType
 import senderLang
 import senderUserId
 
@@ -22,12 +24,12 @@ fun BehaviourContext.registerHabitsCommand() {
         val text = buildString {
             appendLine(Strings.yourHabits(lang))
             habits.forEach { habit ->
-                val flag = if (habit.status == HabitService.Status.PAUSED) " ⏸" else ""
+                val flag = if (habit.status == HabitStatus.PAUSED) " ⏸" else ""
                 val typeLabel = Strings.habitTypeLabel(lang, habit)
                 val times = habit.reminders.joinToString(", ") { it.format(Keyboards.TIME_FMT) }
                 val tail = when {
                     times.isNotEmpty() -> " — $times"
-                    habit.type == HabitService.Type.SCHEDULED -> ""
+                    habit.type == HabitType.SCHEDULED -> ""
                     else -> " — ${Strings.noReminders(lang)}"
                 }
                 appendLine("• ${habit.name}$flag [$typeLabel]$tail")
