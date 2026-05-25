@@ -467,6 +467,42 @@ object Strings {
 
     fun langSet(l: Lang) = pick(l, "Language set: EN", "Язык установлен: RU")
 
+    fun mcpTokenIssuedPrefix(l: Lang, label: String, url: String) = pick(l,
+        "MCP token issued for \"$label\". Use this header in your MCP client (URL: $url):\nAuthorization: Bearer",
+        "MCP-токен выдан для «$label». Используйте этот заголовок в MCP-клиенте (URL: $url):\nAuthorization: Bearer")
+
+    fun mcpTokenIssuedSuffix(l: Lang) = pick(l,
+        "Save it now — it won't be shown again. Manage with /mcp_list, /mcp_revoke <id>.",
+        "Сохраните прямо сейчас — снова показан не будет. Управление: /mcp_list, /mcp_revoke <id>.")
+
+    fun mcpTokenLimitReached(l: Lang, max: Int) = pick(l,
+        "Active token limit reached ($max). Revoke one with /mcp_revoke <id>.",
+        "Достигнут лимит активных токенов ($max). Отзовите один: /mcp_revoke <id>.")
+
+    fun mcpNoTokens(l: Lang) = pick(l,
+        "No active MCP tokens. Create one with /mcp_new [label].",
+        "Активных MCP-токенов нет. Создайте через /mcp_new [метка].")
+
+    fun mcpTokensHeader(l: Lang) = pick(l, "Active MCP tokens:", "Активные MCP-токены:")
+
+    fun mcpCreatedAt(l: Lang) = pick(l, "created", "создан")
+
+    fun mcpLastUsed(l: Lang) = pick(l, "last used", "последнее использование")
+
+    fun mcpNeverUsed(l: Lang) = pick(l, "never", "не использовался")
+
+    fun mcpRevokeUsage(l: Lang) = pick(l,
+        "Usage: /mcp_revoke <id>  (see /mcp_list for ids)",
+        "Использование: /mcp_revoke <id>  (id см. в /mcp_list)")
+
+    fun mcpTokenRevoked(l: Lang, id: Long) = pick(l,
+        "Token #$id revoked.",
+        "Токен #$id отозван.")
+
+    fun mcpTokenNotFound(l: Lang, id: Long) = pick(l,
+        "Token #$id not found or already revoked.",
+        "Токен #$id не найден или уже отозван.")
+
     fun btnDone(l: Lang) = pick(l, "✅ Done", "✅ Готово")
     fun btnSkip(l: Lang) = pick(l, "❌ Skip", "❌ Пропуск")
     fun btnDelete(l: Lang) = pick(l, "🗑 Delete", "🗑 Удалить")
@@ -529,6 +565,9 @@ object BotCommandsI18n {
             "stats" to "statistics",
             "tz" to "show or set your timezone",
             "lang" to "switch language (en/ru)",
+            "mcp_new" to "create an MCP API token",
+            "mcp_list" to "list MCP API tokens",
+            "mcp_revoke" to "revoke an MCP API token",
         )
         Lang.RU -> listOf(
             "start" to "помощь",
@@ -541,6 +580,9 @@ object BotCommandsI18n {
             "stats" to "статистика",
             "tz" to "показать или задать часовой пояс",
             "lang" to "сменить язык (en/ru)",
+            "mcp_new" to "создать токен MCP API",
+            "mcp_list" to "список токенов MCP API",
+            "mcp_revoke" to "отозвать токен MCP API",
         )
     }
 }

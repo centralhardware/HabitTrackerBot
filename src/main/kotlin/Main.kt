@@ -3,6 +3,7 @@ import WeeklySummaryScheduler.sendWeeklySummaries
 import commands.registerAddHabitCommand
 import commands.registerCheckInCommand
 import commands.registerHabitsCommand
+import commands.registerMcpCommands
 import commands.registerPauseCommand
 import commands.registerRemoveHabitCommand
 import commands.registerResumeCommand
@@ -29,6 +30,8 @@ import kotlinx.coroutines.launch
 suspend fun main() {
     DatabaseService.dataSource
 
+    if (Config.MCP_ENABLED) McpServer.start()
+
     longPolling("HabitTrackerBot") {
         Lang.entries.forEach { lang ->
             val code = if (lang == Lang.RU) "ru" else "en"
@@ -54,6 +57,7 @@ suspend fun main() {
         registerStatsCommand()
         registerTzCommand()
         registerLangCommand()
+        registerMcpCommands()
         registerCallbackHandler()
 
         launch {

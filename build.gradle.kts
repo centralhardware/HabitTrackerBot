@@ -14,6 +14,8 @@ repositories {
 
 val ktgbotapiVersion = "33.1.0"
 val flywayVersion = "12.6.2"
+val mcpSdkVersion = "0.12.0"
+val ktorVersion = "3.3.3"
 
 dependencies {
     implementation("dev.inmo:tgbotapi:$ktgbotapiVersion")
@@ -27,6 +29,9 @@ dependencies {
     implementation("org.flywaydb:flyway-database-postgresql:$flywayVersion")
 
     implementation("dev.inmo:krontab:2.9.0")
+
+    implementation("io.modelcontextprotocol:kotlin-sdk-server:$mcpSdkVersion")
+    implementation("io.ktor:ktor-server-cio:$ktorVersion")
 
     testImplementation(kotlin("test"))
     testImplementation("org.junit.jupiter:junit-jupiter-api:6.1.0")
