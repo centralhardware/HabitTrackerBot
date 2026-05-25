@@ -11,6 +11,8 @@ ALTER TABLE checkins DROP CONSTRAINT IF EXISTS checkins_status_check;
 ALTER TABLE habits ALTER COLUMN habit_type DROP DEFAULT;
 ALTER TABLE habits ALTER COLUMN status DROP DEFAULT;
 
+DROP INDEX IF EXISTS idx_habits_user_active;
+
 ALTER TABLE habits
     ALTER COLUMN habit_type TYPE habit_type USING habit_type::habit_type,
     ALTER COLUMN direction  TYPE habit_direction USING direction::habit_direction,
@@ -21,3 +23,5 @@ ALTER TABLE checkins
 
 ALTER TABLE habits ALTER COLUMN habit_type SET DEFAULT 'scheduled';
 ALTER TABLE habits ALTER COLUMN status     SET DEFAULT 'active';
+
+CREATE INDEX idx_habits_user_active ON habits (user_id) WHERE status <> 'deleted'::habit_status;
