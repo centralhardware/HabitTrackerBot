@@ -18,6 +18,7 @@ data class CheckinRecordArgs(
     val date: String? = null,
     val reminderTime: String? = null,
     val status: String? = null,
+    val comment: String? = null,
 )
 
 @Serializable

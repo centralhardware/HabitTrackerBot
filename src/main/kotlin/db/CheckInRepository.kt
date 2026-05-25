@@ -26,8 +26,8 @@ object CheckInRepository {
             session.update(
                 queryOf(
                     """
-                    INSERT INTO checkins (habit_id, reminder_id, check_date, status, quantity)
-                    VALUES (?, ?, ?, ?, ?)
+                    INSERT INTO checkins (habit_id, reminder_id, check_date, status, quantity, comment)
+                    VALUES (?, ?, ?, ?, ?, ?)
                     ON CONFLICT (reminder_id, check_date) WHERE reminder_id IS NOT NULL DO UPDATE
                         SET status = EXCLUDED.status,
                             checked_at = now()
@@ -36,7 +36,8 @@ object CheckInRepository {
                     checkin.reminderId,
                     checkin.checkDate,
                     checkin.status?.value,
-                    checkin.quantity
+                    checkin.quantity,
+                    checkin.comment,
                 )
             ) > 0
         }
@@ -179,7 +180,7 @@ object CheckInRepository {
             session.run(
                 queryOf(
                     """
-                    SELECT c.check_date, c.status, c.quantity, r.reminder_time
+                    SELECT c.check_date, c.status, c.quantity, c.comment, r.reminder_time
                     FROM checkins c
                     LEFT JOIN habit_reminders r ON r.id = c.reminder_id
                     WHERE c.habit_id = ?

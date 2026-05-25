@@ -108,8 +108,8 @@ object Strings {
         "Единица измерения (например км, кг, мл)? Отправьте «-», чтобы пропустить.")
 
     fun sendAmount(l: Lang, h: Habit) = pick(l,
-        "Send the amount for \"${h.name}\"${h.unit?.let { " ($it)" } ?: ""}:",
-        "Отправьте количество для «${h.name}»${h.unit?.let { " ($it)" } ?: ""}:")
+        "Send the amount for \"${h.name}\"${h.unit?.let { " ($it)" } ?: ""} — optional comment after a space:",
+        "Отправьте количество для «${h.name}»${h.unit?.let { " ($it)" } ?: ""} — после пробела можно добавить комментарий:")
 
     fun invalidAmount(l: Lang) = pick(l,
         "Amount must be a positive number.",

@@ -24,10 +24,12 @@ object CheckInService {
         return CheckInRepository.upsert(Checkin(habitId, reminderId = null, date, CheckinStatus.DONE, quantity = null))
     }
 
-    fun recordQuantity(habitId: Long, userId: Long, date: LocalDate, value: Double): Boolean {
+    fun recordQuantity(habitId: Long, userId: Long, date: LocalDate, value: Double, comment: String? = null): Boolean {
         val habit = HabitService.findById(habitId, userId) ?: return false
         if (habit.type != HabitType.QUANTITY) return false
-        return CheckInRepository.upsert(Checkin(habitId, reminderId = null, date, CheckinStatus.DONE, quantity = value))
+        return CheckInRepository.upsert(
+            Checkin(habitId, reminderId = null, date, CheckinStatus.DONE, quantity = value, comment = comment)
+        )
     }
 
     fun listInRange(habitId: Long, userId: Long, from: LocalDate, to: LocalDate): List<CheckinRecord>? {

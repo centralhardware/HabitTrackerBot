@@ -19,7 +19,8 @@ data class Checkin(
     val reminderId: Long?,
     val checkDate: LocalDate,
     val status: CheckinStatus?,
-    val quantity: Double?
+    val quantity: Double?,
+    val comment: String? = null,
 )
 
 data class DayStatus(
@@ -40,6 +41,7 @@ data class CheckinRecord(
     val status: CheckinStatus?,
     @EncodeDefault(EncodeDefault.Mode.NEVER) val quantity: Double? = null,
     @EncodeDefault(EncodeDefault.Mode.NEVER) @Serializable(LocalTimeSerializer::class) val reminderTime: LocalTime? = null,
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val comment: String? = null,
 )
 
 data class DayCount(val date: LocalDate, val count: Int)
@@ -79,5 +81,6 @@ fun Row.toCheckinRecord(): CheckinRecord = CheckinRecord(
     date = localDate("check_date"),
     status = stringOrNull("status")?.let { v -> CheckinStatus.entries.firstOrNull { it.value == v } },
     quantity = doubleOrNull("quantity"),
-    reminderTime = localTimeOrNull("reminder_time")
+    reminderTime = localTimeOrNull("reminder_time"),
+    comment = stringOrNull("comment"),
 )

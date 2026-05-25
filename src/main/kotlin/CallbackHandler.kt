@@ -188,18 +188,21 @@ private suspend fun BehaviourContext.handleLogQuantity(query: MessageDataCallbac
 
     val reply = waitTextMessage()
         .first { it.chat.id.chatId.long == chatLong }
-    val raw = reply.content.text.trim().replace(',', '.')
+    val raw = reply.content.text.trim()
     if (raw.startsWith("/")) {
         sendMessage(chatId, Strings.cancelled(lang))
         return
     }
-    val value = raw.toDoubleOrNull()
+    val firstSpace = raw.indexOf(' ')
+    val amountStr = if (firstSpace < 0) raw else raw.substring(0, firstSpace)
+    val comment = if (firstSpace < 0) null else raw.substring(firstSpace + 1).trim().ifEmpty { null }
+    val value = amountStr.replace(',', '.').toDoubleOrNull()
     if (value == null || value <= 0.0 || value.isNaN() || value.isInfinite()) {
         sendMessage(chatId, Strings.invalidAmount(lang))
         return
     }
 
-    if (!CheckInService.recordQuantity(habitId, userId, date, value)) {
+    if (!CheckInService.recordQuantity(habitId, userId, date, value, comment)) {
         sendMessage(chatId, Strings.cbNotFound(lang))
         return
     }

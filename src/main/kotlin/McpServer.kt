@@ -89,7 +89,7 @@ object McpServer {
 
         server.addTool(
             name = "checkin_record",
-            description = "Record a check-in. counter: value is an integer count 1..100 (default 1). quantity: value is the amount (>0). scheduled: status is 'done' (default) or 'skip'; if the habit has more than one reminder, pass reminderTime (HH:MM). Date is optional (YYYY-MM-DD), defaults to today in the user's timezone. Future dates are rejected; for scheduled habits, the reminder slot must have already fired today.",
+            description = "Record a check-in. counter: value is an integer count 1..100 (default 1). quantity: value is the amount (>0); optional comment attaches a free-form note to this record. scheduled: status is 'done' (default) or 'skip'; if the habit has more than one reminder, pass reminderTime (HH:MM). Date is optional (YYYY-MM-DD), defaults to today in the user's timezone. Future dates are rejected; for scheduled habits, the reminder slot must have already fired today. 'comment' is only allowed for quantity habits.",
             inputSchema = toolSchema(
                 mapOf(
                     "habitId" to McpProp(type = "integer"),
@@ -97,6 +97,7 @@ object McpServer {
                     "date" to McpProp(type = "string", pattern = "^\\d{4}-\\d{2}-\\d{2}$"),
                     "reminderTime" to McpProp(type = "string", pattern = "^[0-2][0-9]:[0-5][0-9]$"),
                     "status" to McpProp(type = "string", enum = listOf("done", "skip")),
+                    "comment" to McpProp(type = "string"),
                 ),
                 required = listOf("habitId"),
             ),
@@ -115,6 +116,11 @@ object McpServer {
                 }
             } ?: today
             if (date.isAfter(today)) return@addTool failed(userId, "checkin_record", rawArgs, "Cannot check in for a future date ($date > $today in $tz)")
+
+            val comment = args.comment?.trim()?.ifEmpty { null }
+            if (comment != null && habit.type != HabitType.QUANTITY) {
+                return@addTool failed(userId, "checkin_record", rawArgs, "'comment' is only supported for quantity habits")
+            }
 
             when (habit.type) {
                 HabitType.SCHEDULED -> {
@@ -154,8 +160,8 @@ object McpServer {
                 HabitType.QUANTITY -> {
                     val value = args.value ?: return@addTool failed(userId, "checkin_record", rawArgs, "'value' is required for quantity habits")
                     if (value <= 0.0 || value.isNaN() || value.isInfinite()) return@addTool failed(userId, "checkin_record", rawArgs, "'value' must be > 0")
-                    CheckInService.recordQuantity(args.habitId, userId, date, value)
-                    KSLog.info("mcp checkin_record user=$userId habit=${args.habitId} date=$date amount=$value")
+                    CheckInService.recordQuantity(args.habitId, userId, date, value, comment)
+                    KSLog.info("mcp checkin_record user=$userId habit=${args.habitId} date=$date amount=$value comment=${comment != null}")
                     ok("""{"recorded":true,"habitId":${args.habitId},"date":"$date","amount":$value}""")
                 }
             }
@@ -163,7 +169,7 @@ object McpServer {
 
         server.addTool(
             name = "checkins_list",
-            description = "List past check-ins for a habit between two dates (inclusive). Defaults: from = today - 30 days, to = today (in the user's timezone). Maximum range 366 days. Returns each row with date, status (done/skip/null for pending), quantity (for quantity habits), and reminderTime (for scheduled habits).",
+            description = "List past check-ins for a habit between two dates (inclusive). Defaults: from = today - 30 days, to = today (in the user's timezone). Maximum range 366 days. Returns each row with date, status (done/skip/null for pending), quantity (for quantity habits), reminderTime (for scheduled habits), and comment (for quantity habits, when set).",
             inputSchema = toolSchema(
                 mapOf(
                     "habitId" to McpProp(type = "integer"),
