@@ -33,6 +33,7 @@ import kotlinx.serialization.json.putJsonObject
 import java.time.LocalDate
 import java.time.LocalTime
 import java.time.ZoneOffset
+import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 import java.time.format.DateTimeParseException
 
@@ -85,7 +86,7 @@ object McpServer {
 
         server.addTool(
             name = "checkin_record",
-            description = "Record a check-in. counter: value is an integer count 1..100 (default 1). quantity: value is the amount (>0). scheduled: status is 'done' (default) or 'skip'; if the habit has more than one reminder, pass reminderTime (HH:MM). Date is optional (YYYY-MM-DD), defaults to today in the user's timezone.",
+            description = "Record a check-in. counter: value is an integer count 1..100 (default 1). quantity: value is the amount (>0). scheduled: status is 'done' (default) or 'skip'; if the habit has more than one reminder, pass reminderTime (HH:MM). Date is optional (YYYY-MM-DD), defaults to today in the user's timezone. Future dates are rejected; for scheduled habits, the reminder slot must have already fired today.",
             inputSchema = ToolSchema(
                 properties = buildJsonObject {
                     putJsonObject("habitId") { put("type", "integer") }
@@ -103,11 +104,15 @@ object McpServer {
             val args = request.arguments ?: return@addTool err("arguments required")
             val habitId = args.lng("habitId") ?: return@addTool err("'habitId' is required")
             val habit = HabitService.findById(habitId, userId) ?: return@addTool err("Habit $habitId not found")
+            val tz = UserSettingsService.getTimezone(userId) ?: ZoneOffset.UTC
+            val nowLocal = ZonedDateTime.now(tz)
+            val today = nowLocal.toLocalDate()
             val date = args.str("date")?.let {
                 try { LocalDate.parse(it) } catch (_: DateTimeParseException) {
                     return@addTool err("Invalid date — use YYYY-MM-DD")
                 }
-            } ?: LocalDate.now(UserSettingsService.getTimezone(userId) ?: ZoneOffset.UTC)
+            } ?: today
+            if (date.isAfter(today)) return@addTool err("Cannot check in for a future date ($date > $today in $tz)")
 
             when (habit.type) {
                 HabitType.SCHEDULED -> {
@@ -118,20 +123,23 @@ object McpServer {
                             return@addTool err("Invalid reminderTime — use HH:MM")
                         }
                     }
-                    val reminderId = when {
-                        requestedTime != null -> reminders.firstOrNull { it.time == requestedTime }?.id
+                    val reminder = when {
+                        requestedTime != null -> reminders.firstOrNull { it.time == requestedTime }
                             ?: return@addTool err("No reminder at $requestedTime; available: ${reminders.joinToString { it.time.format(TimeFmt) }}")
-                        reminders.size == 1 -> reminders[0].id
+                        reminders.size == 1 -> reminders[0]
                         else -> return@addTool err("Habit has ${reminders.size} reminders; specify reminderTime (HH:MM). Available: ${reminders.joinToString { it.time.format(TimeFmt) }}")
+                    }
+                    if (date == today && nowLocal.toLocalTime() < reminder.time) {
+                        return@addTool err("Reminder ${reminder.time.format(TimeFmt)} hasn't fired yet today")
                     }
                     val status = when (val raw = args.str("status")?.lowercase()) {
                         null, "done" -> CheckinStatus.DONE
                         "skip" -> CheckinStatus.SKIP
                         else -> return@addTool err("Invalid status '$raw' — use 'done' or 'skip'")
                     }
-                    val recorded = CheckInService.record(reminderId, userId, date, status)
+                    val recorded = CheckInService.record(reminder.id, userId, date, status)
                     if (!recorded) return@addTool err("Failed to record check-in")
-                    ok("""{"recorded":true,"habitId":$habitId,"reminderId":$reminderId,"date":"$date","status":"${status.value}"}""")
+                    ok("""{"recorded":true,"habitId":$habitId,"reminderId":${reminder.id},"date":"$date","status":"${status.value}"}""")
                 }
                 HabitType.COUNTER -> {
                     val count = (args.dbl("value") ?: 1.0).toInt()
