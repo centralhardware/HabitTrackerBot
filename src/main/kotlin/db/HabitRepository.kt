@@ -49,7 +49,7 @@ object HabitRepository {
                     queryOf(
                         """
                         INSERT INTO habits (user_id, name, habit_type, daily_target, unit, direction, status)
-                        VALUES (?, ?, ?, ?, ?, ?, ?)
+                        VALUES (?, ?, ?::habit_type, ?, ?, ?::habit_direction, ?::habit_status)
                         """.trimIndent(),
                         habit.userId, habit.name, habit.type.value,
                         habit.dailyTarget, habit.unit, habit.direction?.value,
@@ -77,13 +77,13 @@ object HabitRepository {
                     """
                     UPDATE habits
                     SET name         = ?,
-                        habit_type   = ?,
+                        habit_type   = ?::habit_type,
                         daily_target = ?,
                         unit         = ?,
-                        direction    = ?,
-                        status       = ?,
-                        paused_at    = CASE WHEN ? = 'paused'  AND status <> 'paused'  THEN now() ELSE paused_at  END,
-                        deleted_at   = CASE WHEN ? = 'deleted' AND status <> 'deleted' THEN now() ELSE deleted_at END
+                        direction    = ?::habit_direction,
+                        status       = ?::habit_status,
+                        paused_at    = CASE WHEN ?::habit_status = 'paused'  AND status <> 'paused'  THEN now() ELSE paused_at  END,
+                        deleted_at   = CASE WHEN ?::habit_status = 'deleted' AND status <> 'deleted' THEN now() ELSE deleted_at END
                     WHERE id = ? AND user_id = ?
                     """.trimIndent(),
                     habit.name, habit.type.value, habit.dailyTarget, habit.unit, habit.direction?.value,

@@ -27,7 +27,7 @@ object CheckInRepository {
                 queryOf(
                     """
                     INSERT INTO checkins (habit_id, reminder_id, check_date, status, quantity, comment)
-                    VALUES (?, ?, ?, ?, ?, ?)
+                    VALUES (?, ?, ?, ?::checkin_status, ?, ?)
                     ON CONFLICT (reminder_id, check_date) WHERE reminder_id IS NOT NULL DO UPDATE
                         SET status = EXCLUDED.status,
                             checked_at = now()
