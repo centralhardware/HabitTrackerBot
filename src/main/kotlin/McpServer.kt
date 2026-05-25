@@ -1,4 +1,3 @@
-import dto.Direction
 import dto.Habit
 import dto.HabitStat
 import dto.HabitType
@@ -21,19 +20,16 @@ import io.modelcontextprotocol.kotlin.sdk.types.Implementation
 import io.modelcontextprotocol.kotlin.sdk.types.ServerCapabilities
 import io.modelcontextprotocol.kotlin.sdk.types.TextContent
 import io.modelcontextprotocol.kotlin.sdk.types.ToolSchema
-import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.add
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
-import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
 import kotlinx.serialization.json.putJsonObject
 import java.time.LocalDate
-import java.time.LocalTime
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 import java.time.format.DateTimeParseException
@@ -83,98 +79,6 @@ object McpServer {
             inputSchema = emptyObjectSchema(),
         ) { _ ->
             ok(buildJsonArray { HabitService.listActive(userId).forEach { add(it.toJson()) } }.toString())
-        }
-
-        server.addTool(
-            name = "habits_add",
-            description = "Add a habit. Required: name, type (scheduled|counter|quantity). Optional: dailyTarget (number), unit (string), direction (more|less), reminders (array of HH:MM). Reminders are required for scheduled habits.",
-            inputSchema = ToolSchema(
-                properties = buildJsonObject {
-                    putJsonObject("name") { put("type", "string"); put("minLength", 1) }
-                    putJsonObject("type") {
-                        put("type", "string")
-                        putJsonArray("enum") { add("scheduled"); add("counter"); add("quantity") }
-                    }
-                    putJsonObject("dailyTarget") { put("type", "number"); put("exclusiveMinimum", 0) }
-                    putJsonObject("unit") { put("type", "string") }
-                    putJsonObject("direction") {
-                        put("type", "string")
-                        putJsonArray("enum") { add("more"); add("less") }
-                    }
-                    putJsonObject("reminders") {
-                        put("type", "array")
-                        putJsonObject("items") { put("type", "string"); put("pattern", "^[0-2][0-9]:[0-5][0-9]$") }
-                    }
-                },
-                required = listOf("name", "type"),
-            ),
-        ) { request ->
-            val args = request.arguments ?: JsonObject(emptyMap())
-            val name = args.str("name")?.trim().orEmpty()
-            val typeRaw = args.str("type") ?: return@addTool err("'type' is required")
-            val type = HabitType.entries.firstOrNull { it.value == typeRaw }
-                ?: return@addTool err("Unknown type: $typeRaw")
-            if (name.isEmpty()) return@addTool err("'name' is required")
-            val reminders = parseReminders(args.array("reminders"))
-                ?: return@addTool err("Invalid reminders — use HH:MM strings")
-            if (type == HabitType.SCHEDULED && reminders.isEmpty()) {
-                return@addTool err("scheduled habits require at least one reminder")
-            }
-            val dailyTarget = args.dbl("dailyTarget")
-            val unit = args.str("unit")?.takeIf { it.isNotBlank() }?.take(16)
-            val direction = args.str("direction")?.let { Direction.parse(it) }
-
-            val habit = HabitService.addHabit(
-                userId = userId,
-                name = name,
-                type = type,
-                reminders = reminders,
-                dailyTarget = dailyTarget,
-                unit = unit,
-                direction = direction,
-            )
-            ok(habit.toJson().toString())
-        }
-
-        server.addTool(
-            name = "habits_remove",
-            description = "Soft-delete a habit by id.",
-            inputSchema = ToolSchema(
-                properties = buildJsonObject {
-                    putJsonObject("habitId") { put("type", "integer") }
-                },
-                required = listOf("habitId"),
-            ),
-        ) { request ->
-            val habitId = request.arguments?.lng("habitId") ?: return@addTool err("'habitId' is required")
-            if (HabitService.softDelete(habitId, userId)) ok("""{"removed":true,"habitId":$habitId}""")
-            else err("Habit $habitId not found")
-        }
-
-        server.addTool(
-            name = "habits_pause",
-            description = "Pause an active habit.",
-            inputSchema = ToolSchema(
-                properties = buildJsonObject { putJsonObject("habitId") { put("type", "integer") } },
-                required = listOf("habitId"),
-            ),
-        ) { request ->
-            val habitId = request.arguments?.lng("habitId") ?: return@addTool err("'habitId' is required")
-            if (HabitService.pause(habitId, userId)) ok("""{"paused":true,"habitId":$habitId}""")
-            else err("Habit $habitId is not active or not found")
-        }
-
-        server.addTool(
-            name = "habits_resume",
-            description = "Resume a paused habit.",
-            inputSchema = ToolSchema(
-                properties = buildJsonObject { putJsonObject("habitId") { put("type", "integer") } },
-                required = listOf("habitId"),
-            ),
-        ) { request ->
-            val habitId = request.arguments?.lng("habitId") ?: return@addTool err("'habitId' is required")
-            if (HabitService.resume(habitId, userId)) ok("""{"resumed":true,"habitId":$habitId}""")
-            else err("Habit $habitId is not paused or not found")
         }
 
         server.addTool(
@@ -237,15 +141,6 @@ private fun err(text: String): CallToolResult =
 
 private fun emptyObjectSchema(): ToolSchema = ToolSchema(properties = JsonObject(emptyMap()))
 
-private fun parseReminders(arr: List<String>?): List<LocalTime>? {
-    if (arr == null) return emptyList()
-    return try {
-        arr.map { LocalTime.parse(it, TimeFmt) }.distinct().sorted()
-    } catch (_: DateTimeParseException) {
-        null
-    }
-}
-
 private fun JsonObject.str(key: String): String? =
     (get(key) as? JsonPrimitive)?.contentOrNull
 
@@ -254,11 +149,6 @@ private fun JsonObject.dbl(key: String): Double? =
 
 private fun JsonObject.lng(key: String): Long? =
     (get(key) as? JsonPrimitive)?.contentOrNull?.toLongOrNull()
-
-private fun JsonObject.array(key: String): List<String>? {
-    val arr = get(key) as? JsonArray ?: return null
-    return arr.map { it.jsonPrimitive.content }
-}
 
 private fun Habit.toJson(): JsonObject = buildJsonObject {
     put("id", id)
