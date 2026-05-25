@@ -1,12 +1,17 @@
 package dto
 
+import kotlinx.serialization.EncodeDefault
+import kotlinx.serialization.ExperimentalSerializationApi
+import kotlinx.serialization.SerialName
+import kotlinx.serialization.Serializable
 import kotliquery.Row
 import java.time.LocalDate
 import java.time.LocalTime
 
+@Serializable
 enum class CheckinStatus(val value: String) {
-    DONE("done"),
-    SKIP("skip")
+    @SerialName("done") DONE("done"),
+    @SerialName("skip") SKIP("skip"),
 }
 
 data class Checkin(
@@ -27,6 +32,14 @@ data class PendingCheckIn(
     val name: String,
     val reminderTime: LocalTime,
     val date: LocalDate
+)
+
+@Serializable
+data class CheckinRecord(
+    @Serializable(LocalDateSerializer::class) val date: LocalDate,
+    val status: CheckinStatus?,
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val quantity: Double? = null,
+    @EncodeDefault(EncodeDefault.Mode.NEVER) @Serializable(LocalTimeSerializer::class) val reminderTime: LocalTime? = null,
 )
 
 data class DayCount(val date: LocalDate, val count: Int)
@@ -60,4 +73,11 @@ fun Row.toScheduledTotals(): ScheduledTotals = ScheduledTotals(
     totalDays = int("total_days"),
     doneCount = int("done_count"),
     skipCount = int("skip_count")
+)
+
+fun Row.toCheckinRecord(): CheckinRecord = CheckinRecord(
+    date = localDate("check_date"),
+    status = stringOrNull("status")?.let { v -> CheckinStatus.entries.firstOrNull { it.value == v } },
+    quantity = doubleOrNull("quantity"),
+    reminderTime = localTimeOrNull("reminder_time")
 )

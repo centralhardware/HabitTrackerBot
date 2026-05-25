@@ -2,11 +2,13 @@ package db
 
 import DatabaseService
 import dto.Checkin
+import dto.CheckinRecord
 import dto.DayAmount
 import dto.DayCount
 import dto.DayStatus
 import dto.PendingCheckIn
 import dto.ScheduledTotals
+import dto.toCheckinRecord
 import dto.toDayAmount
 import dto.toDayCount
 import dto.toDayStatus
@@ -168,6 +170,24 @@ object CheckInRepository {
                     """.trimIndent(),
                     habitId
                 ).map { it.toDayStatus() }.asList
+            )
+        }
+    }
+
+    fun findInRange(habitId: Long, from: LocalDate, to: LocalDate): List<CheckinRecord> {
+        return sessionOf(DatabaseService.dataSource).use { session ->
+            session.run(
+                queryOf(
+                    """
+                    SELECT c.check_date, c.status, c.quantity, r.reminder_time
+                    FROM checkins c
+                    LEFT JOIN habit_reminders r ON r.id = c.reminder_id
+                    WHERE c.habit_id = ?
+                      AND c.check_date BETWEEN ?::date AND ?::date
+                    ORDER BY c.check_date, r.reminder_time NULLS FIRST, c.id
+                    """.trimIndent(),
+                    habitId, from, to
+                ).map { it.toCheckinRecord() }.asList
             )
         }
     }

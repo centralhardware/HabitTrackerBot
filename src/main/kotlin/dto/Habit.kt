@@ -1,48 +1,57 @@
 package dto
 
+import kotlinx.serialization.EncodeDefault
+import kotlinx.serialization.ExperimentalSerializationApi
+import kotlinx.serialization.SerialName
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.Transient
 import kotliquery.Row
 import java.sql.Time
 import java.time.LocalTime
 
+@Serializable
 enum class HabitType(val value: String) {
-    SCHEDULED("scheduled"),
-    COUNTER("counter"),
-    QUANTITY("quantity");
+    @SerialName("scheduled") SCHEDULED("scheduled"),
+    @SerialName("counter") COUNTER("counter"),
+    @SerialName("quantity") QUANTITY("quantity");
 
     companion object {
         fun parse(s: String?): HabitType = entries.firstOrNull { it.value == s } ?: SCHEDULED
     }
 }
 
+@Serializable
 enum class Direction(val value: String) {
-    MORE("more"),
-    LESS("less");
+    @SerialName("more") MORE("more"),
+    @SerialName("less") LESS("less");
 
     companion object {
         fun parse(s: String?): Direction? = entries.firstOrNull { it.value == s }
     }
 }
 
+@Serializable
 enum class HabitStatus(val value: String) {
-    ACTIVE("active"),
-    PAUSED("paused"),
-    DELETED("deleted");
+    @SerialName("active") ACTIVE("active"),
+    @SerialName("paused") PAUSED("paused"),
+    @SerialName("deleted") DELETED("deleted");
 
     companion object {
         fun parse(s: String?): HabitStatus = entries.firstOrNull { it.value == s } ?: ACTIVE
     }
 }
 
+@Serializable
 data class Habit(
     val id: Long,
-    val userId: Long,
+    @Transient val userId: Long = 0,
     val name: String,
     val type: HabitType,
-    val dailyTarget: Double?,
-    val unit: String?,
-    val direction: Direction?,
-    val reminders: List<LocalTime>,
-    val status: HabitStatus
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val dailyTarget: Double? = null,
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val unit: String? = null,
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val direction: Direction? = null,
+    val reminders: List<@Serializable(LocalTimeSerializer::class) LocalTime>,
+    val status: HabitStatus,
 )
 
 fun Row.toHabit(): Habit {

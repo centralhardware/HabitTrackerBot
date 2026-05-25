@@ -1,6 +1,7 @@
 import db.CheckInRepository
 import db.HabitRepository
 import dto.Checkin
+import dto.CheckinRecord
 import dto.CheckinStatus
 import dto.Direction
 import dto.Habit
@@ -27,6 +28,11 @@ object CheckInService {
         val habit = HabitService.findById(habitId, userId) ?: return false
         if (habit.type != HabitType.QUANTITY) return false
         return CheckInRepository.upsert(Checkin(habitId, reminderId = null, date, CheckinStatus.DONE, quantity = value))
+    }
+
+    fun listInRange(habitId: Long, userId: Long, from: LocalDate, to: LocalDate): List<CheckinRecord>? {
+        HabitService.findById(habitId, userId) ?: return null
+        return CheckInRepository.findInRange(habitId, from, to)
     }
 
     fun userStats(userId: Long, today: LocalDate): List<HabitStat> {
