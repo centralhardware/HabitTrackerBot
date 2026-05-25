@@ -2,6 +2,7 @@ import db.HabitRepository
 import dto.Direction
 import dto.DueReminder
 import dto.Habit
+import dto.HabitReminder
 import dto.HabitStatus
 import dto.HabitType
 import java.time.Instant
@@ -35,6 +36,9 @@ object HabitService {
     fun listActive(userId: Long): List<Habit> = HabitRepository.listActive(userId)
 
     fun findById(habitId: Long, userId: Long): Habit? = HabitRepository.find(habitId, userId)
+
+    fun listReminders(habitId: Long, userId: Long): List<HabitReminder> =
+        HabitRepository.listReminders(habitId, userId)
 
     fun softDelete(habitId: Long, userId: Long): Boolean = transition(habitId, userId, HabitStatus.DELETED)
 

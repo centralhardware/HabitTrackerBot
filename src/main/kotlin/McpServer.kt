@@ -1,3 +1,4 @@
+import dto.CheckinStatus
 import dto.Habit
 import dto.HabitStat
 import dto.HabitType
@@ -30,6 +31,7 @@ import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
 import kotlinx.serialization.json.putJsonObject
 import java.time.LocalDate
+import java.time.LocalTime
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 import java.time.format.DateTimeParseException
@@ -83,12 +85,17 @@ object McpServer {
 
         server.addTool(
             name = "checkin_record",
-            description = "Record a check-in. For counter habits, value is an integer count (1..100, default 1). For quantity habits, value is the amount (>0). Date is optional (YYYY-MM-DD), defaults to today in the user's timezone. Scheduled habits are not supported here — use the Telegram bot.",
+            description = "Record a check-in. counter: value is an integer count 1..100 (default 1). quantity: value is the amount (>0). scheduled: status is 'done' (default) or 'skip'; if the habit has more than one reminder, pass reminderTime (HH:MM). Date is optional (YYYY-MM-DD), defaults to today in the user's timezone.",
             inputSchema = ToolSchema(
                 properties = buildJsonObject {
                     putJsonObject("habitId") { put("type", "integer") }
                     putJsonObject("value") { put("type", "number"); put("exclusiveMinimum", 0) }
                     putJsonObject("date") { put("type", "string"); put("pattern", "^\\d{4}-\\d{2}-\\d{2}$") }
+                    putJsonObject("reminderTime") { put("type", "string"); put("pattern", "^[0-2][0-9]:[0-5][0-9]$") }
+                    putJsonObject("status") {
+                        put("type", "string")
+                        putJsonArray("enum") { add("done"); add("skip") }
+                    }
                 },
                 required = listOf("habitId"),
             ),
@@ -103,7 +110,29 @@ object McpServer {
             } ?: LocalDate.now(UserSettingsService.getTimezone(userId) ?: ZoneOffset.UTC)
 
             when (habit.type) {
-                HabitType.SCHEDULED -> err("Scheduled habits cannot be checked in via MCP")
+                HabitType.SCHEDULED -> {
+                    val reminders = HabitService.listReminders(habitId, userId)
+                    if (reminders.isEmpty()) return@addTool err("Habit $habitId has no reminders configured")
+                    val requestedTime = args.str("reminderTime")?.let {
+                        try { LocalTime.parse(it, TimeFmt) } catch (_: DateTimeParseException) {
+                            return@addTool err("Invalid reminderTime — use HH:MM")
+                        }
+                    }
+                    val reminderId = when {
+                        requestedTime != null -> reminders.firstOrNull { it.time == requestedTime }?.id
+                            ?: return@addTool err("No reminder at $requestedTime; available: ${reminders.joinToString { it.time.format(TimeFmt) }}")
+                        reminders.size == 1 -> reminders[0].id
+                        else -> return@addTool err("Habit has ${reminders.size} reminders; specify reminderTime (HH:MM). Available: ${reminders.joinToString { it.time.format(TimeFmt) }}")
+                    }
+                    val status = when (val raw = args.str("status")?.lowercase()) {
+                        null, "done" -> CheckinStatus.DONE
+                        "skip" -> CheckinStatus.SKIP
+                        else -> return@addTool err("Invalid status '$raw' — use 'done' or 'skip'")
+                    }
+                    val recorded = CheckInService.record(reminderId, userId, date, status)
+                    if (!recorded) return@addTool err("Failed to record check-in")
+                    ok("""{"recorded":true,"habitId":$habitId,"reminderId":$reminderId,"date":"$date","status":"${status.value}"}""")
+                }
                 HabitType.COUNTER -> {
                     val count = (args.dbl("value") ?: 1.0).toInt()
                     if (count < 1 || count > 100) return@addTool err("'value' must be 1..100 for counter habits")

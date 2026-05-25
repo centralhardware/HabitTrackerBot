@@ -4,6 +4,11 @@ import kotliquery.Row
 import java.time.LocalDate
 import java.time.LocalTime
 
+data class HabitReminder(
+    val id: Long,
+    val time: LocalTime
+)
+
 data class DueReminder(
     val reminderId: Long,
     val habitId: Long,
