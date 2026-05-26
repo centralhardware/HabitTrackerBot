@@ -26,10 +26,39 @@ object CheckInService {
 
     fun recordQuantity(habitId: Long, userId: Long, date: LocalDate, value: Double, comment: String? = null): Boolean {
         val habit = HabitService.findById(habitId, userId) ?: return false
-        if (habit.type != HabitType.QUANTITY) return false
+        if (habit.type != HabitType.QUANTITY || habit.isGroupRoot) return false
+        val commentId = comment?.let { CheckInRepository.createComment(it) }
         return CheckInRepository.upsert(
-            Checkin(habitId, reminderId = null, date, CheckinStatus.DONE, quantity = value, comment = comment)
+            Checkin(habitId, reminderId = null, date, CheckinStatus.DONE, quantity = value, commentId = commentId)
         )
+    }
+
+    /**
+     * Записывает чек-ин-событие группы: одну строку в comments (общий коммент)
+     * и N строк checkins (по полю). Возвращает количество записанных строк.
+     */
+    fun recordQuantityGroup(
+        rootId: Long,
+        userId: Long,
+        date: LocalDate,
+        values: Map<Long, Double>,
+        comment: String? = null
+    ): Int {
+        if (values.isEmpty()) return 0
+        val root = HabitService.findById(rootId, userId) ?: return 0
+        if (!root.isGroupRoot) return 0
+        val allowedFieldIds = root.fields.map { it.id }.toSet()
+        val sanitized = values.filterKeys { it in allowedFieldIds }
+        if (sanitized.isEmpty()) return 0
+        val commentId = comment?.let { CheckInRepository.createComment(it) }
+        var wrote = 0
+        sanitized.forEach { (fieldId, value) ->
+            val ok = CheckInRepository.upsert(
+                Checkin(fieldId, reminderId = null, date, CheckinStatus.DONE, quantity = value, commentId = commentId)
+            )
+            if (ok) wrote++
+        }
+        return wrote
     }
 
     fun listInRange(habitId: Long, userId: Long, from: LocalDate, to: LocalDate): List<CheckinRecord>? {

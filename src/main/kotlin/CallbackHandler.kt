@@ -243,7 +243,7 @@ private suspend fun BehaviourContext.logQuantityGroup(
 ) {
     val chatId = query.message.chat.id
     val chatLong = chatId.chatId.long
-    var recordedAny = false
+    val values = mutableMapOf<Long, Double>()
 
     for (field in root.fields) {
         sendMessage(chatId, Strings.sendGroupFieldAmount(lang, root, field))
@@ -254,19 +254,32 @@ private suspend fun BehaviourContext.logQuantityGroup(
             return
         }
         if (raw == "-" || raw.isEmpty()) continue
-        val firstSpace = raw.indexOf(' ')
-        val amountStr = if (firstSpace < 0) raw else raw.substring(0, firstSpace)
-        val comment = if (firstSpace < 0) null else raw.substring(firstSpace + 1).trim().ifEmpty { null }
-        val value = amountStr.replace(',', '.').toDoubleOrNull()
+        val value = raw.replace(',', '.').toDoubleOrNull()
         if (value == null || value <= 0.0 || value.isNaN() || value.isInfinite()) {
             sendMessage(chatId, Strings.invalidAmount(lang))
             return
         }
-        if (!CheckInService.recordQuantity(field.id, userId, date, value, comment)) {
-            sendMessage(chatId, Strings.cbNotFound(lang))
-            return
-        }
-        recordedAny = true
+        values[field.id] = value
+    }
+
+    if (values.isEmpty()) {
+        sendMessage(chatId, Strings.cancelled(lang))
+        return
+    }
+
+    sendMessage(chatId, Strings.sendGroupComment(lang))
+    val commentReply = waitTextMessage().first { it.chat.id.chatId.long == chatLong }
+    val commentRaw = commentReply.content.text.trim()
+    if (commentRaw.startsWith("/")) {
+        sendMessage(chatId, Strings.cancelled(lang))
+        return
+    }
+    val comment = if (commentRaw == "-" || commentRaw.isEmpty()) null else commentRaw
+
+    val wrote = CheckInService.recordQuantityGroup(root.id, userId, date, values, comment)
+    if (wrote == 0) {
+        sendMessage(chatId, Strings.cbNotFound(lang))
+        return
     }
 
     val perField = root.fields.associateWith { f -> CheckInRepository.todayQuantitySum(f.id, date) }
@@ -279,8 +292,7 @@ private suspend fun BehaviourContext.logQuantityGroup(
             replyMarkup = Keyboards.logQuantity(root.id, date, lang)
         )
     }
-    if (recordedAny) sendMessage(chatId, Strings.cbLogged(lang))
-    else sendMessage(chatId, Strings.cancelled(lang))
+    sendMessage(chatId, Strings.cbLogged(lang))
 }
 
 private suspend fun BehaviourContext.handleHabitAction(

@@ -16,6 +16,7 @@ import dto.toPendingCheckIn
 import dto.toScheduledTotals
 import kotliquery.queryOf
 import kotliquery.sessionOf
+import kotliquery.using
 import java.time.Instant
 import java.time.LocalDate
 
@@ -26,7 +27,7 @@ object CheckInRepository {
             session.update(
                 queryOf(
                     """
-                    INSERT INTO checkins (habit_id, reminder_id, check_date, status, quantity, comment)
+                    INSERT INTO checkins (habit_id, reminder_id, check_date, status, quantity, comment_id)
                     VALUES (?, ?, ?, ?::checkin_status, ?, ?)
                     ON CONFLICT (reminder_id, check_date) WHERE reminder_id IS NOT NULL DO UPDATE
                         SET status = EXCLUDED.status,
@@ -37,9 +38,17 @@ object CheckInRepository {
                     checkin.checkDate,
                     checkin.status?.value,
                     checkin.quantity,
-                    checkin.comment,
+                    checkin.commentId,
                 )
             ) > 0
+        }
+    }
+
+    fun createComment(body: String?): Long {
+        return using(sessionOf(DatabaseService.dataSource, returnGeneratedKey = true)) { session ->
+            session.updateAndReturnGeneratedKey(
+                queryOf("INSERT INTO comments (body) VALUES (?)", body)
+            ) ?: error("Failed to create comment")
         }
     }
 
@@ -180,9 +189,10 @@ object CheckInRepository {
             session.run(
                 queryOf(
                     """
-                    SELECT c.check_date, c.status, c.quantity, c.comment, r.reminder_time
+                    SELECT c.check_date, c.status, c.quantity, cm.body AS comment, r.reminder_time
                     FROM checkins c
                     LEFT JOIN habit_reminders r ON r.id = c.reminder_id
+                    LEFT JOIN comments cm ON cm.id = c.comment_id
                     WHERE c.habit_id = ?
                       AND c.check_date BETWEEN ?::date AND ?::date
                     ORDER BY c.check_date, r.reminder_time NULLS FIRST, c.id

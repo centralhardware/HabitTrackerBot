@@ -7,6 +7,13 @@ import dto.CheckinsListArgs
 import dto.HabitType
 import dto.McpJson
 import dto.McpProp
+import dto.QuantityGroupRecordArgs
+import kotlinx.serialization.json.add
+import kotlinx.serialization.json.buildJsonArray
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
+import kotlinx.serialization.json.putJsonArray
+import kotlinx.serialization.json.putJsonObject
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.ApplicationCallPipeline
@@ -89,7 +96,7 @@ object McpServer {
 
         server.addTool(
             name = "checkin_record",
-            description = "Record a check-in. counter: value is an integer count 1..100 (default 1). quantity: value is the amount (>0); optional comment attaches a free-form note. For multi-field quantity habits, call this once per field — pass the field's habitId (taken from fields[].id in habits_list), not the group root's id. scheduled: status is 'done' (default) or 'skip'; if the habit has more than one reminder, pass reminderTime (HH:MM). Date is optional (YYYY-MM-DD), defaults to today in the user's timezone. Future dates are rejected; for scheduled habits, the reminder slot must have already fired today. 'comment' is only allowed for quantity habits.",
+            description = "Record a check-in. counter: value is an integer count 1..100 (default 1). quantity (single-field): value is the amount (>0); optional comment attaches a free-form note. For multi-field quantity habits prefer 'quantity_group_record' — it writes all fields with one shared comment in a single call; this tool will reject the group root's habitId. scheduled: status is 'done' (default) or 'skip'; if the habit has more than one reminder, pass reminderTime (HH:MM). Date is optional (YYYY-MM-DD), defaults to today in the user's timezone. Future dates are rejected; for scheduled habits, the reminder slot must have already fired today. 'comment' is only allowed for quantity habits.",
             inputSchema = toolSchema(
                 mapOf(
                     "habitId" to McpProp(type = "integer"),
@@ -172,6 +179,52 @@ object McpServer {
         }
 
         server.addTool(
+            name = "quantity_group_record",
+            description = "Record a multi-field quantity check-in in one call: writes one value per field under a single shared comment (one row in the comments table referenced by every checkin row of this event). 'habitId' is the group root id (where habits_list returns isGroupRoot/fields). 'values' is an array of { fieldId, value }; fieldId must be one of root.fields[].id; value must be > 0. Date is optional (YYYY-MM-DD), defaults to today in the user's timezone; future dates are rejected. 'comment' is optional and applies to the whole event.",
+            inputSchema = quantityGroupRecordSchema(),
+        ) { request ->
+            val rawArgs = request.arguments ?: return@addTool failed(userId, "quantity_group_record", null, "arguments required")
+            logCall(userId, "quantity_group_record", rawArgs)
+            val args = runCatching { McpJson.decodeFromJsonElement<QuantityGroupRecordArgs>(rawArgs) }
+                .getOrElse { return@addTool failed(userId, "quantity_group_record", rawArgs, "Invalid arguments: ${it.message}") }
+            val root = HabitService.findById(args.habitId, userId)
+                ?: return@addTool failed(userId, "quantity_group_record", rawArgs, "Habit ${args.habitId} not found")
+            if (!root.isGroupRoot) {
+                return@addTool failed(userId, "quantity_group_record", rawArgs,
+                    "Habit ${args.habitId} is not a multi-field group root; use checkin_record for single quantity habits")
+            }
+            if (args.values.isEmpty()) {
+                return@addTool failed(userId, "quantity_group_record", rawArgs, "'values' must be non-empty")
+            }
+            val tz = UserSettingsService.getTimezone(userId) ?: ZoneOffset.UTC
+            val today = LocalDate.now(tz)
+            val date = args.date?.let {
+                try { LocalDate.parse(it) } catch (_: DateTimeParseException) {
+                    return@addTool failed(userId, "quantity_group_record", rawArgs, "Invalid date — use YYYY-MM-DD")
+                }
+            } ?: today
+            if (date.isAfter(today)) {
+                return@addTool failed(userId, "quantity_group_record", rawArgs, "Cannot check in for a future date ($date > $today in $tz)")
+            }
+
+            val allowedIds = root.fields.map { it.id }.toSet()
+            val unknown = args.values.map { it.fieldId }.filter { it !in allowedIds }
+            if (unknown.isNotEmpty()) {
+                return@addTool failed(userId, "quantity_group_record", rawArgs,
+                    "Unknown fieldId(s) ${unknown.joinToString()}; allowed: ${allowedIds.joinToString()}")
+            }
+            args.values.firstOrNull { it.value <= 0.0 || it.value.isNaN() || it.value.isInfinite() }?.let {
+                return@addTool failed(userId, "quantity_group_record", rawArgs, "All 'value' entries must be > 0 (fieldId ${it.fieldId})")
+            }
+
+            val map = args.values.associate { it.fieldId to it.value }
+            val comment = args.comment?.trim()?.ifEmpty { null }
+            val wrote = CheckInService.recordQuantityGroup(args.habitId, userId, date, map, comment)
+            KSLog.info("mcp quantity_group_record user=$userId root=${args.habitId} date=$date fields=${map.size} wrote=$wrote comment=${comment != null}")
+            ok("""{"recorded":true,"habitId":${args.habitId},"date":"$date","fields":${map.size},"wrote":$wrote}""")
+        }
+
+        server.addTool(
             name = "checkins_list",
             description = "List past check-ins for a habit between two dates (inclusive). Defaults: from = today - 30 days, to = today (in the user's timezone). Maximum range 366 days. Returns each row with date, status (done/skip/null for pending), quantity (for quantity habits), reminderTime (for scheduled habits), and comment (for quantity habits, when set).",
             inputSchema = toolSchema(
@@ -247,4 +300,33 @@ private fun toolSchema(props: Map<String, McpProp>, required: List<String> = emp
         properties = McpJson.encodeToJsonElement(props).jsonObject,
         required = required,
     )
+
+private fun quantityGroupRecordSchema(): ToolSchema {
+    val props = buildJsonObject {
+        putJsonObject("habitId") { put("type", "integer") }
+        putJsonObject("values") {
+            put("type", "array")
+            put("minItems", 1)
+            putJsonObject("items") {
+                put("type", "object")
+                putJsonObject("properties") {
+                    putJsonObject("fieldId") { put("type", "integer") }
+                    putJsonObject("value") {
+                        put("type", "number")
+                        put("exclusiveMinimum", 0)
+                    }
+                }
+                putJsonArray("required") {
+                    add("fieldId"); add("value")
+                }
+            }
+        }
+        putJsonObject("date") {
+            put("type", "string")
+            put("pattern", "^\\d{4}-\\d{2}-\\d{2}$")
+        }
+        putJsonObject("comment") { put("type", "string") }
+    }
+    return ToolSchema(properties = props, required = listOf("habitId", "values"))
+}
 

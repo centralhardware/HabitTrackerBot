@@ -28,6 +28,20 @@ data class CheckinsListArgs(
     val to: String? = null,
 )
 
+@Serializable
+data class QuantityGroupRecordArgs(
+    val habitId: Long,
+    val values: List<FieldValueArg>,
+    val date: String? = null,
+    val comment: String? = null,
+)
+
+@Serializable
+data class FieldValueArg(
+    val fieldId: Long,
+    val value: Double,
+)
+
 @OptIn(ExperimentalSerializationApi::class)
 @Serializable
 data class McpProp(

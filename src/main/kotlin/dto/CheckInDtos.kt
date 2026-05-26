@@ -20,7 +20,7 @@ data class Checkin(
     val checkDate: LocalDate,
     val status: CheckinStatus?,
     val quantity: Double?,
-    val comment: String? = null,
+    val commentId: Long? = null,
 )
 
 data class DayStatus(

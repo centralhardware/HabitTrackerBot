@@ -118,6 +118,10 @@ object Strings {
             "[${root.name}] ${field.name}$unit — отправьте количество или «-», чтобы пропустить:")
     }
 
+    fun sendGroupComment(l: Lang) = pick(l,
+        "Comment for the whole event (or \"-\" to skip):",
+        "Комментарий ко всему событию (или «-», чтобы пропустить):")
+
     fun invalidAmount(l: Lang) = pick(l,
         "Amount must be a positive number.",
         "Количество должно быть положительным числом.")
