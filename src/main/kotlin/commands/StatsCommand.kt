@@ -53,6 +53,9 @@ fun BehaviourContext.registerStatsCommand() {
                     is HabitStat.Quantity.Plain -> {
                         appendLine("    ${Strings.statsQuantityPlain(lang, s)}")
                     }
+                    is HabitStat.QuantityGroup -> {
+                        Strings.statsQuantityGroup(lang, s).forEach { appendLine("    $it") }
+                    }
                 }
             }
         }

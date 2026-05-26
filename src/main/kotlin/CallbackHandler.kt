@@ -182,12 +182,26 @@ private suspend fun BehaviourContext.handleLogQuantity(query: MessageDataCallbac
     }
 
     answerCallbackQuery(query)
+
+    if (habit.isGroupRoot) {
+        logQuantityGroup(query, userId, lang, habit, date)
+    } else {
+        logQuantitySingle(query, userId, lang, habit, date)
+    }
+}
+
+private suspend fun BehaviourContext.logQuantitySingle(
+    query: MessageDataCallbackQuery,
+    userId: Long,
+    lang: Lang,
+    habit: dto.Habit,
+    date: LocalDate
+) {
     val chatId = query.message.chat.id
     val chatLong = chatId.chatId.long
     sendMessage(chatId, Strings.sendAmount(lang, habit))
 
-    val reply = waitTextMessage()
-        .first { it.chat.id.chatId.long == chatLong }
+    val reply = waitTextMessage().first { it.chat.id.chatId.long == chatLong }
     val raw = reply.content.text.trim()
     if (raw.startsWith("/")) {
         sendMessage(chatId, Strings.cancelled(lang))
@@ -202,22 +216,71 @@ private suspend fun BehaviourContext.handleLogQuantity(query: MessageDataCallbac
         return
     }
 
-    if (!CheckInService.recordQuantity(habitId, userId, date, value, comment)) {
+    if (!CheckInService.recordQuantity(habit.id, userId, date, value, comment)) {
         sendMessage(chatId, Strings.cbNotFound(lang))
         return
     }
 
-    val total = CheckInRepository.todayQuantitySum(habitId, date)
+    val total = CheckInRepository.todayQuantitySum(habit.id, date)
     val msg = query.message
     runCatching {
         editMessageText(
             chatId = msg.chat.id,
             messageId = msg.messageId,
             text = Strings.quantityLine(lang, habit, total, date),
-            replyMarkup = Keyboards.logQuantity(habitId, date, lang)
+            replyMarkup = Keyboards.logQuantity(habit.id, date, lang)
         )
     }
     sendMessage(chatId, Strings.cbLogged(lang))
+}
+
+private suspend fun BehaviourContext.logQuantityGroup(
+    query: MessageDataCallbackQuery,
+    userId: Long,
+    lang: Lang,
+    root: dto.Habit,
+    date: LocalDate
+) {
+    val chatId = query.message.chat.id
+    val chatLong = chatId.chatId.long
+    var recordedAny = false
+
+    for (field in root.fields) {
+        sendMessage(chatId, Strings.sendGroupFieldAmount(lang, root, field))
+        val reply = waitTextMessage().first { it.chat.id.chatId.long == chatLong }
+        val raw = reply.content.text.trim()
+        if (raw.startsWith("/")) {
+            sendMessage(chatId, Strings.cancelled(lang))
+            return
+        }
+        if (raw == "-" || raw.isEmpty()) continue
+        val firstSpace = raw.indexOf(' ')
+        val amountStr = if (firstSpace < 0) raw else raw.substring(0, firstSpace)
+        val comment = if (firstSpace < 0) null else raw.substring(firstSpace + 1).trim().ifEmpty { null }
+        val value = amountStr.replace(',', '.').toDoubleOrNull()
+        if (value == null || value <= 0.0 || value.isNaN() || value.isInfinite()) {
+            sendMessage(chatId, Strings.invalidAmount(lang))
+            return
+        }
+        if (!CheckInService.recordQuantity(field.id, userId, date, value, comment)) {
+            sendMessage(chatId, Strings.cbNotFound(lang))
+            return
+        }
+        recordedAny = true
+    }
+
+    val perField = root.fields.associateWith { f -> CheckInRepository.todayQuantitySum(f.id, date) }
+    val msg = query.message
+    runCatching {
+        editMessageText(
+            chatId = msg.chat.id,
+            messageId = msg.messageId,
+            text = Strings.quantityGroupLine(lang, root, perField, date),
+            replyMarkup = Keyboards.logQuantity(root.id, date, lang)
+        )
+    }
+    if (recordedAny) sendMessage(chatId, Strings.cbLogged(lang))
+    else sendMessage(chatId, Strings.cancelled(lang))
 }
 
 private suspend fun BehaviourContext.handleHabitAction(

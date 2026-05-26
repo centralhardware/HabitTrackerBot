@@ -40,12 +40,69 @@ object CheckInService {
     fun userStats(userId: Long, today: LocalDate): List<HabitStat> {
         val habits = HabitService.listActive(userId)
         return habits.map { h ->
-            when (h.type) {
-                HabitType.SCHEDULED -> scheduledStat(h)
-                HabitType.COUNTER -> counterStat(h, today)
-                HabitType.QUANTITY -> quantityStat(h, today)
+            when {
+                h.isGroupRoot -> quantityGroupStat(h, today)
+                h.type == HabitType.SCHEDULED -> scheduledStat(h)
+                h.type == HabitType.COUNTER -> counterStat(h, today)
+                h.type == HabitType.QUANTITY -> quantityStat(h, today)
+                else -> error("Unhandled habit ${h.id}")
             }
         }
+    }
+
+    private fun quantityGroupStat(root: dto.Habit, today: LocalDate): HabitStat.QuantityGroup {
+        val fieldStats = root.fields.map { quantityStat(it, today) }
+        val targetedFields = root.fields.filter { it.dailyTarget != null }
+        val (doneDays, skipDays, streak) = if (targetedFields.isEmpty()) {
+            Triple(0, 0, 0)
+        } else {
+            val startDate = CheckInRepository.habitStartDate(root.id) ?: today
+            val perFieldDay: Map<Long, Map<LocalDate, Double>> = targetedFields.associate { f ->
+                f.id to CheckInRepository.quantitySumsPerDay(f.id).associate { it.date to it.amount }
+            }
+            val dayDone: (LocalDate) -> Boolean = { d ->
+                targetedFields.all { f ->
+                    val v = perFieldDay[f.id]?.get(d) ?: 0.0
+                    val target = f.dailyTarget!!
+                    if (f.direction == Direction.LESS) v <= target else v >= target
+                }
+            }
+            val (done, skip) = countHitsByPredicate(startDate, today.minusDays(1), dayDone)
+            val s = streakFromAnchorByPredicate(startDate, today, dayDone)
+            Triple(done, skip, s)
+        }
+        return HabitStat.QuantityGroup(
+            habitId = root.id, name = root.name, fields = fieldStats,
+            doneDays = doneDays, skipDays = skipDays, streak = streak
+        )
+    }
+
+    private fun countHitsByPredicate(from: LocalDate, to: LocalDate, isDone: (LocalDate) -> Boolean): Pair<Int, Int> {
+        if (to < from) return 0 to 0
+        var done = 0
+        var skip = 0
+        var d = from
+        while (d <= to) {
+            if (isDone(d)) done++ else skip++
+            d = d.plusDays(1)
+        }
+        return done to skip
+    }
+
+    private fun streakFromAnchorByPredicate(startDate: LocalDate, today: LocalDate, isDone: (LocalDate) -> Boolean): Int {
+        val yesterday = today.minusDays(1)
+        val anchor = when {
+            isDone(today) -> today
+            isDone(yesterday) -> yesterday
+            else -> return 0
+        }
+        var streak = 0
+        var d = anchor
+        while (d >= startDate && isDone(d)) {
+            streak++
+            d = d.minusDays(1)
+        }
+        return streak
     }
 
     fun autoSkipOverdue() {

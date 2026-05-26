@@ -3,6 +3,7 @@ package db
 import DatabaseService
 import dto.Habit
 import dto.HabitReminder
+import dto.HabitStatus
 import dto.RawDue
 import dto.toHabit
 import dto.toRawDue
@@ -12,16 +13,35 @@ import kotliquery.using
 
 object HabitRepository {
 
-    fun find(habitId: Long, userId: Long): Habit? =
-        listActive(userId).firstOrNull { it.id == habitId }
+    fun find(habitId: Long, userId: Long): Habit? {
+        val raw = listRawActive(userId).firstOrNull { it.id == habitId } ?: return null
+        return if (raw.isGroupRoot) raw.copy(fields = listFieldsRaw(userId, raw.id)) else raw
+    }
+
+    fun findAnyRow(habitId: Long, userId: Long): Habit? =
+        listRawActive(userId).firstOrNull { it.id == habitId }
 
     fun listActive(userId: Long): List<Habit> {
+        val all = listRawActive(userId)
+        val fieldsByRoot = all.filter { it.isGroupField }.groupBy { it.groupId!! }
+        return all
+            .filter { !it.isGroupField }
+            .map { row ->
+                if (row.isGroupRoot) row.copy(fields = fieldsByRoot[row.id].orEmpty())
+                else row
+            }
+    }
+
+    private fun listFieldsRaw(userId: Long, rootId: Long): List<Habit> =
+        listRawActive(userId).filter { it.groupId == rootId && it.id != rootId }
+
+    private fun listRawActive(userId: Long): List<Habit> {
         return sessionOf(DatabaseService.dataSource).use { session ->
             session.run(
                 queryOf(
                     """
                     SELECT h.id, h.user_id, h.name, h.habit_type, h.daily_target,
-                           h.unit, h.direction, h.status,
+                           h.unit, h.direction, h.status, h.group_id,
                            COALESCE(
                                ARRAY_AGG(r.reminder_time ORDER BY r.reminder_time)
                                    FILTER (WHERE r.reminder_time IS NOT NULL),
@@ -70,6 +90,56 @@ object HabitRepository {
         }
     }
 
+    /**
+     * Создаёт группу: корневую строку (с reminders) и поля (со своими target/unit/direction).
+     * Корень получает group_id = id, поля — group_id = id корня.
+     */
+    fun insertGroup(root: Habit, fields: List<Habit>): Habit {
+        return using(sessionOf(DatabaseService.dataSource, returnGeneratedKey = true)) { session ->
+            session.transaction { tx ->
+                val rootId = tx.updateAndReturnGeneratedKey(
+                    queryOf(
+                        """
+                        INSERT INTO habits (user_id, name, habit_type, status)
+                        VALUES (?, ?, ?::habit_type, ?::habit_status)
+                        """.trimIndent(),
+                        root.userId, root.name, root.type.value, root.status.value
+                    )
+                ) ?: error("Failed to insert group root")
+
+                tx.execute(
+                    queryOf("UPDATE habits SET group_id = ? WHERE id = ?", rootId, rootId)
+                )
+
+                root.reminders.forEach { time ->
+                    tx.execute(
+                        queryOf(
+                            "INSERT INTO habit_reminders (habit_id, reminder_time) VALUES (?, ?)",
+                            rootId, time
+                        )
+                    )
+                }
+
+                val savedFields = fields.map { f ->
+                    val fid = tx.updateAndReturnGeneratedKey(
+                        queryOf(
+                            """
+                            INSERT INTO habits (user_id, name, habit_type, daily_target, unit, direction, status, group_id)
+                            VALUES (?, ?, ?::habit_type, ?, ?, ?::habit_direction, ?::habit_status, ?)
+                            """.trimIndent(),
+                            f.userId, f.name, f.type.value,
+                            f.dailyTarget, f.unit, f.direction?.value,
+                            f.status.value, rootId
+                        )
+                    ) ?: error("Failed to insert group field")
+                    f.copy(id = fid, groupId = rootId)
+                }
+
+                root.copy(id = rootId, groupId = rootId, fields = savedFields)
+            }
+        }
+    }
+
     private fun update(habit: Habit): Habit {
         sessionOf(DatabaseService.dataSource).use { session ->
             session.update(
@@ -94,6 +164,31 @@ object HabitRepository {
             )
         }
         return habit
+    }
+
+    /**
+     * Меняет статус: для одиночной — у одной строки, для корня группы — каскадно у корня и всех полей.
+     */
+    fun setStatusCascade(habit: Habit, status: HabitStatus): Int {
+        val isRoot = habit.isGroupRoot
+        return sessionOf(DatabaseService.dataSource).use { session ->
+            session.update(
+                queryOf(
+                    """
+                    UPDATE habits
+                    SET status     = ?::habit_status,
+                        paused_at  = CASE WHEN ?::habit_status = 'paused'  AND status <> 'paused'  THEN now() ELSE paused_at  END,
+                        deleted_at = CASE WHEN ?::habit_status = 'deleted' AND status <> 'deleted' THEN now() ELSE deleted_at END
+                    WHERE user_id = ?
+                      AND (id = ? OR (? AND group_id = ?))
+                    """.trimIndent(),
+                    status.value,
+                    status.value, status.value,
+                    habit.userId,
+                    habit.id, isRoot, habit.id
+                )
+            )
+        }
     }
 
     fun listReminders(habitId: Long, userId: Long): List<HabitReminder> {

@@ -111,6 +111,13 @@ object Strings {
         "Send the amount for \"${h.name}\"${h.unit?.let { " ($it)" } ?: ""} — optional comment after a space:",
         "Отправьте количество для «${h.name}»${h.unit?.let { " ($it)" } ?: ""} — после пробела можно добавить комментарий:")
 
+    fun sendGroupFieldAmount(l: Lang, root: Habit, field: Habit): String {
+        val unit = field.unit?.let { " ($it)" } ?: ""
+        return pick(l,
+            "[${root.name}] ${field.name}$unit — send amount, or \"-\" to skip:",
+            "[${root.name}] ${field.name}$unit — отправьте количество или «-», чтобы пропустить:")
+    }
+
     fun invalidAmount(l: Lang) = pick(l,
         "Amount must be a positive number.",
         "Количество должно быть положительным числом.")
@@ -136,6 +143,17 @@ object Strings {
     fun habitAddedDetailed(l: Lang, h: Habit): String {
         val type = habitTypeLabel(l, h)
         val times = h.reminders.joinToString(", ") { it.format(Keyboards.TIME_FMT) }
+        if (h.isGroupRoot) {
+            val header = pick(l, "Added: \"${h.name}\" [$type]", "Добавлено: «${h.name}» [$type]")
+            val fieldLines = h.fields.map { f ->
+                val unit = f.unit?.let { " $it" } ?: ""
+                val target = f.dailyTarget?.let { " — ${formatAmount(it)}$unit/day" } ?: ""
+                val dir = f.direction?.let { " (${directionLabel(l, it)})" } ?: ""
+                "  – ${f.name}$target$dir"
+            }
+            val timesLine = if (times.isNotEmpty()) listOf("  ⏰ $times") else emptyList()
+            return (listOf(header) + fieldLines + timesLine).joinToString("\n")
+        }
         val tail = buildString {
             when (h.type) {
                 HabitType.SCHEDULED -> append(" — $times")
@@ -196,6 +214,28 @@ object Strings {
             h.direction?.let { append(" ${directionShort(l, it)}") }
         }
         return "$mark $date — ${h.name}: $body"
+    }
+
+    fun quantityGroupLine(l: Lang, root: Habit, perField: Map<Habit, Double>, date: LocalDate): String {
+        val header = "$date — ${root.name}"
+        val fieldLines = root.fields.map { f ->
+            val current = perField[f] ?: 0.0
+            val target = f.dailyTarget
+            val unit = f.unit?.let { " $it" } ?: ""
+            val hitOk = when (f.direction) {
+                Direction.LESS -> target != null && current <= target
+                else -> target != null && current >= target
+            }
+            val mark = when {
+                target != null && hitOk -> "✅"
+                target != null -> "⏳"
+                else -> "•"
+            }
+            val body = if (target != null) "${formatAmount(current)}/${formatAmount(target)}$unit"
+                       else "${formatAmount(current)}$unit"
+            "  $mark ${f.name}: $body"
+        }
+        return (listOf(header) + fieldLines).joinToString("\n")
     }
 
     fun quantityLine(l: Lang, h: Habit, current: Double, date: LocalDate): String {
@@ -382,6 +422,32 @@ object Strings {
             "сегодня: ${formatAmount(s.todayTotal)}$unit   всего: ${formatAmount(s.grandTotal)}$unit   дней: ${s.daysLogged}")
     }
 
+    fun statsQuantityGroup(l: Lang, s: HabitStat.QuantityGroup): List<String> {
+        val lines = mutableListOf<String>()
+        val total = s.doneDays + s.skipDays
+        val rate = if (total > 0) "%.0f%%".format(java.util.Locale.ROOT, s.doneDays * 100.0 / total) else "—"
+        lines += pick(l,
+            "✅ ${s.doneDays}   ❌ ${s.skipDays}   ${statsCompletion(l)}: $rate   ${statsStreak(l, s.streak)}",
+            "✅ ${s.doneDays}   ❌ ${s.skipDays}   ${statsCompletion(l)}: $rate   ${statsStreak(l, s.streak)}")
+        s.fields.forEach { f ->
+            val unit = f.unit?.let { " $it" } ?: ""
+            val today = formatAmount(f.todayTotal)
+            val line = when (f) {
+                is HabitStat.Quantity.WithTarget -> {
+                    val target = formatAmount(f.dailyTarget)
+                    val ok = (f.direction == Direction.LESS && f.todayTotal <= f.dailyTarget) ||
+                             (f.direction != Direction.LESS && f.todayTotal >= f.dailyTarget)
+                    val mark = if (ok) "✅" else "⏳"
+                    "$mark ${f.name}: $today/$target$unit"
+                }
+                is HabitStat.Quantity.Trend -> "• ${f.name}: $today$unit"
+                is HabitStat.Quantity.Plain -> "• ${f.name}: $today$unit"
+            }
+            lines += line
+        }
+        return lines
+    }
+
     fun weeklySummary(
         l: Lang,
         from: LocalDate,
@@ -508,6 +574,20 @@ object Strings {
     fun btnDelete(l: Lang) = pick(l, "🗑 Delete", "🗑 Удалить")
     fun btnPlusOne(l: Lang) = pick(l, "➕1", "➕1")
     fun btnLog(l: Lang) = pick(l, "➕ log", "➕ ввести")
+    fun btnModeSingle(l: Lang) = pick(l, "📏 single value", "📏 одно значение")
+    fun btnModeGroup(l: Lang) = pick(l, "🧩 multiple fields", "🧩 несколько полей")
+
+    fun pickQuantityMode(l: Lang) = pick(l,
+        "Single value (one number per check-in) or multiple fields (e.g. distance + duration + calories)?",
+        "Одно значение (одно число на чек-ин) или несколько полей (напр. дистанция + время + ккал)?")
+
+    fun sendFirstFieldName(l: Lang) = pick(l,
+        "Name of the first field (e.g. \"km\"):",
+        "Название первого поля (например, «км»):")
+
+    fun sendNextFieldNameOrDone(l: Lang) = pick(l,
+        "Next field name, or \"done\" to finish:",
+        "Название следующего поля или «готово», чтобы закончить:")
 
     fun cbBadButton(l: Lang) = pick(l, "Bad button", "Неверная кнопка")
     fun cbError(l: Lang) = pick(l, "Error", "Ошибка")

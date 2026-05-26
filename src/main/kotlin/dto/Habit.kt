@@ -52,7 +52,12 @@ data class Habit(
     @EncodeDefault(EncodeDefault.Mode.NEVER) val direction: Direction? = null,
     val reminders: List<@Serializable(LocalTimeSerializer::class) LocalTime>,
     val status: HabitStatus,
-)
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val groupId: Long? = null,
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val fields: List<Habit> = emptyList(),
+) {
+    val isGroupRoot: Boolean get() = groupId != null && groupId == id
+    val isGroupField: Boolean get() = groupId != null && groupId != id
+}
 
 fun Row.toHabit(): Habit {
     @Suppress("UNCHECKED_CAST")
@@ -66,6 +71,7 @@ fun Row.toHabit(): Habit {
         unit = stringOrNull("unit"),
         direction = Direction.parse(stringOrNull("direction")),
         reminders = times.map { it.toLocalTime() },
-        status = HabitStatus.parse(stringOrNull("status"))
+        status = HabitStatus.parse(stringOrNull("status")),
+        groupId = longOrNull("group_id"),
     )
 }

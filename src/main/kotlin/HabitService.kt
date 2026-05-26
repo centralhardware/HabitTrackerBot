@@ -33,9 +33,53 @@ object HabitService {
         )
     )
 
+    /**
+     * Создаёт мульти-полевую quantity-привычку: корень с именем группы и напоминаниями
+     * + N полей со своими target/unit/direction. Чек-ины пишутся под id поля.
+     */
+    fun addHabitGroup(
+        userId: Long,
+        name: String,
+        fields: List<FieldSpec>,
+        reminders: List<LocalTime>
+    ): Habit {
+        require(fields.isNotEmpty()) { "Group must have at least one field" }
+        val root = Habit(
+            id = 0L,
+            userId = userId,
+            name = name,
+            type = HabitType.QUANTITY,
+            reminders = reminders.sorted(),
+            status = HabitStatus.ACTIVE
+        )
+        val fieldHabits = fields.map { f ->
+            Habit(
+                id = 0L,
+                userId = userId,
+                name = f.name,
+                type = HabitType.QUANTITY,
+                dailyTarget = f.dailyTarget,
+                unit = f.unit,
+                direction = f.direction,
+                reminders = emptyList(),
+                status = HabitStatus.ACTIVE
+            )
+        }
+        return HabitRepository.insertGroup(root, fieldHabits)
+    }
+
+    data class FieldSpec(
+        val name: String,
+        val dailyTarget: Double? = null,
+        val unit: String? = null,
+        val direction: Direction? = null
+    )
+
     fun listActive(userId: Long): List<Habit> = HabitRepository.listActive(userId)
 
     fun findById(habitId: Long, userId: Long): Habit? = HabitRepository.find(habitId, userId)
+
+    fun findAnyRow(habitId: Long, userId: Long): Habit? = HabitRepository.findAnyRow(habitId, userId)
 
     fun listReminders(habitId: Long, userId: Long): List<HabitReminder> =
         HabitRepository.listReminders(habitId, userId)
@@ -56,7 +100,7 @@ object HabitService {
     ): Boolean {
         val habit = HabitRepository.find(habitId, userId) ?: return false
         if (!allow(habit)) return false
-        HabitRepository.upsert(habit.copy(status = to))
+        HabitRepository.setStatusCascade(habit, to)
         return true
     }
 

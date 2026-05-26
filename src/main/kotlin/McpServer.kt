@@ -89,7 +89,7 @@ object McpServer {
 
         server.addTool(
             name = "checkin_record",
-            description = "Record a check-in. counter: value is an integer count 1..100 (default 1). quantity: value is the amount (>0); optional comment attaches a free-form note to this record. scheduled: status is 'done' (default) or 'skip'; if the habit has more than one reminder, pass reminderTime (HH:MM). Date is optional (YYYY-MM-DD), defaults to today in the user's timezone. Future dates are rejected; for scheduled habits, the reminder slot must have already fired today. 'comment' is only allowed for quantity habits.",
+            description = "Record a check-in. counter: value is an integer count 1..100 (default 1). quantity: value is the amount (>0); optional comment attaches a free-form note. For multi-field quantity habits, call this once per field — pass the field's habitId (taken from fields[].id in habits_list), not the group root's id. scheduled: status is 'done' (default) or 'skip'; if the habit has more than one reminder, pass reminderTime (HH:MM). Date is optional (YYYY-MM-DD), defaults to today in the user's timezone. Future dates are rejected; for scheduled habits, the reminder slot must have already fired today. 'comment' is only allowed for quantity habits.",
             inputSchema = toolSchema(
                 mapOf(
                     "habitId" to McpProp(type = "integer"),
@@ -158,6 +158,10 @@ object McpServer {
                     ok("""{"recorded":true,"habitId":${args.habitId},"date":"$date","count":$count}""")
                 }
                 HabitType.QUANTITY -> {
+                    if (habit.isGroupRoot) {
+                        return@addTool failed(userId, "checkin_record", rawArgs,
+                            "Habit ${args.habitId} is a multi-field group root; call checkin_record per field (see fields[].id from habits_list)")
+                    }
                     val value = args.value ?: return@addTool failed(userId, "checkin_record", rawArgs, "'value' is required for quantity habits")
                     if (value <= 0.0 || value.isNaN() || value.isInfinite()) return@addTool failed(userId, "checkin_record", rawArgs, "'value' must be > 0")
                     CheckInService.recordQuantity(args.habitId, userId, date, value, comment)

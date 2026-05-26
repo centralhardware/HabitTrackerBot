@@ -117,4 +117,15 @@ sealed class HabitStat {
             val daysLogged: Int
         ) : Quantity()
     }
+
+    @Serializable
+    @SerialName("quantity.group")
+    data class QuantityGroup(
+        override val habitId: Long,
+        override val name: String,
+        val fields: List<Quantity>,
+        val doneDays: Int,
+        val skipDays: Int,
+        val streak: Int
+    ) : HabitStat()
 }

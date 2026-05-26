@@ -11,12 +11,17 @@ object WeeklySummaryService {
         val habits = HabitService.listActive(userId)
         if (habits.isEmpty()) return emptyList()
 
-        return habits.map { h ->
+        val flat: List<Pair<String, Habit>> = habits.flatMap { h ->
+            if (h.isGroupRoot) h.fields.map { f -> "${h.name} / ${f.name}" to f }
+            else listOf(h.name to h)
+        }
+
+        return flat.map { (displayName, h) ->
             val totals = WeeklySummaryRepository.weeklyTotals(h.id, from, to)
             val targetHitDays = computeTargetHits(h, from, to)
             HabitWeekStat(
                 habitId = h.id,
-                name = h.name,
+                name = displayName,
                 type = h.type,
                 direction = h.direction,
                 dailyTarget = h.dailyTarget,
