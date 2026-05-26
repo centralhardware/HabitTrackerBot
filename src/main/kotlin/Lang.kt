@@ -428,11 +428,11 @@ object Strings {
 
     fun statsQuantityGroup(l: Lang, s: HabitStat.QuantityGroup): List<String> {
         val lines = mutableListOf<String>()
-        val total = s.doneDays + s.skipDays
-        val rate = if (total > 0) "%.0f%%".format(java.util.Locale.ROOT, s.doneDays * 100.0 / total) else "—"
-        lines += pick(l,
-            "✅ ${s.doneDays}   ❌ ${s.skipDays}   ${statsCompletion(l)}: $rate   ${statsStreak(l, s.streak)}",
-            "✅ ${s.doneDays}   ❌ ${s.skipDays}   ${statsCompletion(l)}: $rate   ${statsStreak(l, s.streak)}")
+        if (s.fields.any { it is HabitStat.Quantity.WithTarget }) {
+            val total = s.doneDays + s.skipDays
+            val rate = if (total > 0) "%.0f%%".format(java.util.Locale.ROOT, s.doneDays * 100.0 / total) else "—"
+            lines += "✅ ${s.doneDays}   ❌ ${s.skipDays}   ${statsCompletion(l)}: $rate   ${statsStreak(l, s.streak)}"
+        }
         s.fields.forEach { f ->
             val unit = f.unit?.let { " $it" } ?: ""
             val today = formatAmount(f.todayTotal)
