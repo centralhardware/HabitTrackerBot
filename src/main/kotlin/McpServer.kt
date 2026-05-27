@@ -155,6 +155,9 @@ object McpServer {
                     val recorded = CheckInService.record(reminder.id, userId, date, status)
                     if (!recorded) return@addTool failed(userId, "checkin_record", rawArgs, "Failed to record check-in")
                     KSLog.info("mcp checkin_record user=$userId habit=${args.habitId} reminder=${reminder.id} date=$date status=${status.value}")
+                    notifyUser(userId) { lang ->
+                        Strings.mcpRecordedScheduled(lang, habit.name, reminder.time.format(TimeFmt), status == CheckinStatus.DONE, date)
+                    }
                     ok("""{"recorded":true,"habitId":${args.habitId},"reminderId":${reminder.id},"date":"$date","status":"${status.value}"}""")
                 }
                 HabitType.COUNTER -> {
@@ -162,6 +165,7 @@ object McpServer {
                     if (count < 1 || count > 100) return@addTool failed(userId, "checkin_record", rawArgs, "'value' must be 1..100 for counter habits")
                     repeat(count) { CheckInService.checkInCounter(args.habitId, userId, date) }
                     KSLog.info("mcp checkin_record user=$userId habit=${args.habitId} date=$date count=$count")
+                    notifyUser(userId) { lang -> Strings.mcpRecordedCounter(lang, habit.name, count, date) }
                     ok("""{"recorded":true,"habitId":${args.habitId},"date":"$date","count":$count}""")
                 }
                 HabitType.QUANTITY -> {
@@ -173,6 +177,9 @@ object McpServer {
                     if (value <= 0.0 || value.isNaN() || value.isInfinite()) return@addTool failed(userId, "checkin_record", rawArgs, "'value' must be > 0")
                     CheckInService.recordQuantity(args.habitId, userId, date, value, comment)
                     KSLog.info("mcp checkin_record user=$userId habit=${args.habitId} date=$date amount=$value comment=${comment != null}")
+                    notifyUser(userId) { lang ->
+                        Strings.mcpRecordedQuantity(lang, habit.name, value, habit.unit, date, comment)
+                    }
                     ok("""{"recorded":true,"habitId":${args.habitId},"date":"$date","amount":$value}""")
                 }
             }
@@ -221,6 +228,9 @@ object McpServer {
             val comment = args.comment?.trim()?.ifEmpty { null }
             val wrote = CheckInService.recordQuantityGroup(args.habitId, userId, date, map, comment)
             KSLog.info("mcp quantity_group_record user=$userId root=${args.habitId} date=$date fields=${map.size} wrote=$wrote comment=${comment != null}")
+            if (wrote > 0) {
+                notifyUser(userId) { lang -> Strings.mcpRecordedQuantityGroup(lang, root, map, date, comment) }
+            }
             ok("""{"recorded":true,"habitId":${args.habitId},"date":"$date","fields":${map.size},"wrote":$wrote}""")
         }
 
@@ -291,6 +301,11 @@ private fun logCall(userId: Long, tool: String, args: JsonObject?) {
 private fun failed(userId: Long, tool: String, args: JsonObject?, reason: String): CallToolResult {
     KSLog.warning("mcp fail user=$userId tool=$tool args=${args ?: "{}"} reason=$reason")
     return err(reason)
+}
+
+private inline fun notifyUser(userId: Long, text: (Lang) -> String) {
+    val lang = UserSettingsService.getLanguage(userId) ?: Lang.EN
+    BotNotifier.notify(userId, text(lang))
 }
 
 private fun emptyObjectSchema(): ToolSchema = ToolSchema(properties = JsonObject(emptyMap()))

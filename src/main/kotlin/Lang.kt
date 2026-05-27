@@ -573,6 +573,38 @@ object Strings {
         "Token #$id not found or already revoked.",
         "Токен #$id не найден или уже отозван.")
 
+    fun mcpRecordedScheduled(l: Lang, name: String, time: String, done: Boolean, date: LocalDate): String {
+        val verdict = if (done) cbDone(l) else cbSkipped(l)
+        return pick(l,
+            "🤖 via MCP — $name ($time): $verdict — $date",
+            "🤖 через MCP — $name ($time): $verdict — $date")
+    }
+
+    fun mcpRecordedCounter(l: Lang, name: String, count: Int, date: LocalDate) = pick(l,
+        "🤖 via MCP — $name +$count — $date",
+        "🤖 через MCP — $name +$count — $date")
+
+    fun mcpRecordedQuantity(l: Lang, name: String, amount: Double, unit: String?, date: LocalDate, comment: String?): String {
+        val u = unit?.let { " $it" } ?: ""
+        val c = comment?.let { "\n💬 $it" } ?: ""
+        return pick(l,
+            "🤖 via MCP — $name: ${formatAmount(amount)}$u — $date$c",
+            "🤖 через MCP — $name: ${formatAmount(amount)}$u — $date$c")
+    }
+
+    fun mcpRecordedQuantityGroup(l: Lang, root: Habit, perField: Map<Long, Double>, date: LocalDate, comment: String?): String {
+        val header = pick(l,
+            "🤖 via MCP — ${root.name} — $date",
+            "🤖 через MCP — ${root.name} — $date")
+        val fieldLines = root.fields.mapNotNull { f ->
+            val v = perField[f.id] ?: return@mapNotNull null
+            val u = f.unit?.let { " $it" } ?: ""
+            "  – ${f.name}: ${formatAmount(v)}$u"
+        }
+        val body = (listOf(header) + fieldLines).joinToString("\n")
+        return comment?.let { "$body\n💬 $it" } ?: body
+    }
+
     fun btnDone(l: Lang) = pick(l, "✅ Done", "✅ Готово")
     fun btnSkip(l: Lang) = pick(l, "❌ Skip", "❌ Пропуск")
     fun btnDelete(l: Lang) = pick(l, "🗑 Delete", "🗑 Удалить")
