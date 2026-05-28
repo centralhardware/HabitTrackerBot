@@ -88,8 +88,15 @@ object CheckInService {
     }
 
     private fun pastDaysSince(h: Habit, today: LocalDate): Int {
-        val start = CheckInRepository.habitStartDate(h.id) ?: today
+        val start = firstCheckinDate(h) ?: return 0
         return ChronoUnit.DAYS.between(start, today).toInt().coerceAtLeast(0)
+    }
+
+    private fun firstCheckinDate(h: Habit): LocalDate? {
+        if (h.isGroupRoot) {
+            return h.fields.mapNotNull { CheckInRepository.firstCheckinDate(it.id) }.minOrNull()
+        }
+        return CheckInRepository.firstCheckinDate(h.id)
     }
 
     private fun collectDates(h: Habit, query: (Long) -> List<LocalDate>): Set<LocalDate> {

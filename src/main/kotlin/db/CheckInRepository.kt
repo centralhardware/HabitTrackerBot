@@ -93,18 +93,13 @@ object CheckInRepository {
         }
     }
 
-    fun habitStartDate(habitId: Long): LocalDate? {
+    fun firstCheckinDate(habitId: Long): LocalDate? {
         return sessionOf(DatabaseService.dataSource).use { session ->
             session.run(
                 queryOf(
-                    """
-                    SELECT (h.created_at AT TIME ZONE us.timezone)::date AS start_d
-                    FROM habits h
-                    JOIN user_settings us ON us.user_id = h.user_id
-                    WHERE h.id = ?
-                    """.trimIndent(),
+                    "SELECT MIN(check_date) AS d FROM checkins WHERE habit_id = ?",
                     habitId
-                ).map { it.localDate("start_d") }.asSingle
+                ).map { it.localDateOrNull("d") }.asSingle
             )
         }
     }
