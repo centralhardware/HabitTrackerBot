@@ -110,13 +110,8 @@ object CheckInService {
 
     private fun streak(logged: Set<LocalDate>, skipped: Set<LocalDate>, today: LocalDate): Int {
         val good: (LocalDate) -> Boolean = { it in logged && it !in skipped }
-        val anchor = when {
-            good(today) -> today
-            good(today.minusDays(1)) -> today.minusDays(1)
-            else -> return 0
-        }
+        var d = today.minusDays(1)
         var streak = 0
-        var d = anchor
         while (good(d)) {
             streak++
             d = d.minusDays(1)
@@ -128,10 +123,10 @@ object CheckInService {
 
     private fun quantityTrend(h: Habit, today: LocalDate): QuantityTrend {
         val perDay = CheckInRepository.quantitySumsPerDay(h.id).associate { it.date to it.amount }
-        val recent = (0 until TREND_WINDOW_DAYS)
+        val recent = (1..TREND_WINDOW_DAYS)
             .mapNotNull { perDay[today.minusDays(it.toLong())] }
             .toDoubleArray()
-        val all = perDay.values.toDoubleArray()
+        val all = perDay.filterKeys { it < today }.values.toDoubleArray()
         return QuantityTrend(
             unit = h.unit,
             direction = h.direction,
