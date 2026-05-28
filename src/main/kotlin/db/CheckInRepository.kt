@@ -58,31 +58,31 @@ object CheckInRepository {
     /**
      * Insert a non-scheduled event (counter/quantity) with one or more values.
      * Each call creates a fresh event row — there is no per-day uniqueness.
+     * The event id is pulled into the values via lastval() within the same
+     * transaction, avoiding a RETURNING round-trip.
      */
     fun insertEventWithValues(event: CheckinEvent, values: List<CheckinValue>): Int {
         if (values.isEmpty()) return 0
-        return using(sessionOf(DatabaseService.dataSource, returnGeneratedKey = true)) { session ->
+        return using(sessionOf(DatabaseService.dataSource)) { session ->
             session.transaction { tx ->
-                val eventId = tx.run(
+                tx.update(
                     queryOf(
                         """
                         INSERT INTO checkins (user_id, check_date, reminder_id, comment, checked_at)
                         VALUES (?, ?, NULL, ?, now())
-                        RETURNING id
                         """.trimIndent(),
                         event.userId, event.checkDate, event.comment
-                    ).map { it.long("id") }.asSingle
-                ) ?: error("Failed to insert checkin event")
-
+                    )
+                )
                 var wrote = 0
                 values.forEach { v ->
                     wrote += tx.update(
                         queryOf(
                             """
                             INSERT INTO checkin_values (checkin_id, habit_id, status, quantity)
-                            VALUES (?, ?, ?::checkin_status, ?)
+                            VALUES (lastval(), ?, ?::checkin_status, ?)
                             """.trimIndent(),
-                            eventId, v.habitId, v.status?.value, v.quantity
+                            v.habitId, v.status?.value, v.quantity
                         )
                     )
                 }
