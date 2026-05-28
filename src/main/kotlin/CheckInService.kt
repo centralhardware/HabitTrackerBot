@@ -1,8 +1,9 @@
 import db.CheckInRepository
 import db.HabitRepository
-import dto.Checkin
+import dto.CheckinEvent
 import dto.CheckinRecord
 import dto.CheckinStatus
+import dto.CheckinValue
 import dto.Habit
 import dto.HabitStat
 import dto.HabitType
@@ -17,27 +18,33 @@ object CheckInService {
 
     fun record(reminderId: Long, userId: Long, date: LocalDate, status: CheckinStatus): Boolean {
         val habitId = HabitRepository.findHabitIdByReminder(reminderId, userId) ?: return false
-        return CheckInRepository.upsert(Checkin(habitId, reminderId, date, status, quantity = null))
+        return CheckInRepository.upsertScheduledValue(
+            CheckinEvent(userId, date, reminderId, comment = null),
+            CheckinValue(habitId, status, quantity = null),
+        )
     }
 
     fun checkInCounter(habitId: Long, userId: Long, date: LocalDate): Boolean {
         val habit = HabitService.findById(habitId, userId) ?: return false
         if (habit.type != HabitType.COUNTER) return false
-        return CheckInRepository.upsert(Checkin(habitId, reminderId = null, date, CheckinStatus.DONE, quantity = null))
+        return CheckInRepository.insertEventWithValues(
+            CheckinEvent(userId, date, reminderId = null, comment = null),
+            listOf(CheckinValue(habitId, CheckinStatus.DONE, quantity = null)),
+        ) > 0
     }
 
     fun recordQuantity(habitId: Long, userId: Long, date: LocalDate, value: Double, comment: String? = null): Boolean {
         val habit = HabitService.findById(habitId, userId) ?: return false
         if (habit.type != HabitType.QUANTITY || habit.isGroupRoot) return false
-        val commentId = comment?.let { CheckInRepository.createComment(it) }
-        return CheckInRepository.upsert(
-            Checkin(habitId, reminderId = null, date, CheckinStatus.DONE, quantity = value, commentId = commentId)
-        )
+        return CheckInRepository.insertEventWithValues(
+            CheckinEvent(userId, date, reminderId = null, comment = comment),
+            listOf(CheckinValue(habitId, CheckinStatus.DONE, quantity = value)),
+        ) > 0
     }
 
     /**
-     * Записывает чек-ин-событие группы: одну строку в comments (общий коммент)
-     * и N строк checkins (по полю). Возвращает количество записанных строк.
+     * Записывает событие чекина группы: одну строку в checkins (с общим комментом)
+     * и N строк в checkin_values (по полю). Возвращает количество записанных строк.
      */
     fun recordQuantityGroup(
         rootId: Long,
@@ -52,15 +59,13 @@ object CheckInService {
         val allowedFieldIds = root.fields.map { it.id }.toSet()
         val sanitized = values.filterKeys { it in allowedFieldIds }
         if (sanitized.isEmpty()) return 0
-        val commentId = comment?.let { CheckInRepository.createComment(it) }
-        var wrote = 0
-        sanitized.forEach { (fieldId, value) ->
-            val ok = CheckInRepository.upsert(
-                Checkin(fieldId, reminderId = null, date, CheckinStatus.DONE, quantity = value, commentId = commentId)
-            )
-            if (ok) wrote++
+        val valueRows = sanitized.map { (fieldId, value) ->
+            CheckinValue(fieldId, CheckinStatus.DONE, quantity = value)
         }
-        return wrote
+        return CheckInRepository.insertEventWithValues(
+            CheckinEvent(userId, date, reminderId = null, comment = comment),
+            valueRows,
+        )
     }
 
     fun listInRange(habitId: Long, userId: Long, from: LocalDate, to: LocalDate): List<CheckinRecord>? {
@@ -142,7 +147,10 @@ object CheckInService {
         CheckInRepository.markPendingAsSkip(threshold)
     }
 
-    fun markPending(habitId: Long, reminderId: Long, date: LocalDate) {
-        CheckInRepository.upsert(Checkin(habitId, reminderId, date, status = null, quantity = null))
+    fun markPending(habitId: Long, userId: Long, reminderId: Long, date: LocalDate) {
+        CheckInRepository.upsertScheduledValue(
+            CheckinEvent(userId, date, reminderId, comment = null),
+            CheckinValue(habitId, status = null, quantity = null),
+        )
     }
 }

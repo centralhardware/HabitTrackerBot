@@ -187,7 +187,7 @@ object McpServer {
 
         server.addTool(
             name = "quantity_group_record",
-            description = "Record a multi-field quantity check-in in one call: writes one value per field under a single shared comment (one row in the comments table referenced by every checkin row of this event). 'habitId' is the group root id (where habits_list returns isGroupRoot/fields). 'values' is an array of { fieldId, value }; fieldId must be one of root.fields[].id; value must be > 0. Date is optional (YYYY-MM-DD), defaults to today in the user's timezone; future dates are rejected. 'comment' is optional and applies to the whole event.",
+            description = "Record a multi-field quantity check-in in one call: writes one event row with a shared comment and one value row per field. 'habitId' is the group root id (where habits_list returns isGroupRoot/fields). 'values' is an array of { fieldId, value }; fieldId must be one of root.fields[].id; value must be > 0. Date is optional (YYYY-MM-DD), defaults to today in the user's timezone; future dates are rejected. 'comment' is optional and applies to the whole event.",
             inputSchema = quantityGroupRecordSchema(),
         ) { request ->
             val rawArgs = request.arguments ?: return@addTool failed(userId, "quantity_group_record", null, "arguments required")

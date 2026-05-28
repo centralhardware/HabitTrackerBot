@@ -14,13 +14,17 @@ enum class CheckinStatus(val value: String) {
     @SerialName("skip") SKIP("skip"),
 }
 
-data class Checkin(
-    val habitId: Long,
-    val reminderId: Long?,
+data class CheckinEvent(
+    val userId: Long,
     val checkDate: LocalDate,
+    val reminderId: Long?,
+    val comment: String?,
+)
+
+data class CheckinValue(
+    val habitId: Long,
     val status: CheckinStatus?,
     val quantity: Double?,
-    val commentId: Long? = null,
 )
 
 data class PendingCheckIn(

@@ -1,8 +1,9 @@
 package db
 
 import DatabaseService
-import dto.Checkin
+import dto.CheckinEvent
 import dto.CheckinRecord
+import dto.CheckinValue
 import dto.DayAmount
 import dto.PendingCheckIn
 import dto.toCheckinRecord
@@ -16,33 +17,77 @@ import java.time.LocalDate
 
 object CheckInRepository {
 
-    fun upsert(checkin: Checkin): Boolean {
-        return sessionOf(DatabaseService.dataSource).use { session ->
-            session.update(
-                queryOf(
-                    """
-                    INSERT INTO checkins (habit_id, reminder_id, check_date, status, quantity, comment_id)
-                    VALUES (?, ?, ?, ?::checkin_status, ?, ?)
-                    ON CONFLICT (reminder_id, check_date) WHERE reminder_id IS NOT NULL DO UPDATE
-                        SET status = EXCLUDED.status,
-                            checked_at = now()
-                    """.trimIndent(),
-                    checkin.habitId,
-                    checkin.reminderId,
-                    checkin.checkDate,
-                    checkin.status?.value,
-                    checkin.quantity,
-                    checkin.commentId,
+    /**
+     * Upsert a scheduled-reminder check-in: keyed on (reminder_id, check_date).
+     * Used for pending-row creation and for the done/skip click.
+     */
+    fun upsertScheduledValue(event: CheckinEvent, value: CheckinValue): Boolean {
+        require(event.reminderId != null) { "scheduled upsert requires reminderId" }
+        return using(sessionOf(DatabaseService.dataSource, returnGeneratedKey = true)) { session ->
+            session.transaction { tx ->
+                val eventId = tx.run(
+                    queryOf(
+                        """
+                        INSERT INTO checkins (user_id, check_date, reminder_id, comment, checked_at)
+                        VALUES (?, ?, ?, NULL, now())
+                        ON CONFLICT (reminder_id, check_date) WHERE reminder_id IS NOT NULL
+                        DO UPDATE SET checked_at = now()
+                        RETURNING id
+                        """.trimIndent(),
+                        event.userId, event.checkDate, event.reminderId
+                    ).map { it.long("id") }.asSingle
+                ) ?: return@transaction false
+
+                tx.update(
+                    queryOf(
+                        """
+                        INSERT INTO checkin_values (checkin_id, habit_id, status, quantity)
+                        VALUES (?, ?, ?::checkin_status, ?)
+                        ON CONFLICT (checkin_id, habit_id)
+                        DO UPDATE SET status = EXCLUDED.status,
+                                      quantity = EXCLUDED.quantity
+                        """.trimIndent(),
+                        eventId, value.habitId, value.status?.value, value.quantity
+                    )
                 )
-            ) > 0
+                true
+            }
         }
     }
 
-    fun createComment(body: String?): Long {
+    /**
+     * Insert a non-scheduled event (counter/quantity) with one or more values.
+     * Each call creates a fresh event row — there is no per-day uniqueness.
+     */
+    fun insertEventWithValues(event: CheckinEvent, values: List<CheckinValue>): Int {
+        if (values.isEmpty()) return 0
         return using(sessionOf(DatabaseService.dataSource, returnGeneratedKey = true)) { session ->
-            session.updateAndReturnGeneratedKey(
-                queryOf("INSERT INTO comments (body) VALUES (?)", body)
-            ) ?: error("Failed to create comment")
+            session.transaction { tx ->
+                val eventId = tx.run(
+                    queryOf(
+                        """
+                        INSERT INTO checkins (user_id, check_date, reminder_id, comment, checked_at)
+                        VALUES (?, ?, NULL, ?, now())
+                        RETURNING id
+                        """.trimIndent(),
+                        event.userId, event.checkDate, event.comment
+                    ).map { it.long("id") }.asSingle
+                ) ?: error("Failed to insert checkin event")
+
+                var wrote = 0
+                values.forEach { v ->
+                    wrote += tx.update(
+                        queryOf(
+                            """
+                            INSERT INTO checkin_values (checkin_id, habit_id, status, quantity)
+                            VALUES (?, ?, ?::checkin_status, ?)
+                            """.trimIndent(),
+                            eventId, v.habitId, v.status?.value, v.quantity
+                        )
+                    )
+                }
+                wrote
+            }
         }
     }
 
@@ -51,11 +96,13 @@ object CheckInRepository {
             session.update(
                 queryOf(
                     """
-                    UPDATE checkins
-                    SET status = 'skip', checked_at = now()
-                    WHERE status IS NULL
-                      AND reminder_id IS NOT NULL
-                      AND checked_at < ?
+                    UPDATE checkin_values v
+                    SET status = 'skip'
+                    FROM checkins e
+                    WHERE v.checkin_id = e.id
+                      AND v.status IS NULL
+                      AND e.reminder_id IS NOT NULL
+                      AND e.checked_at < ?
                     """.trimIndent(),
                     threshold
                 )
@@ -69,8 +116,9 @@ object CheckInRepository {
                 queryOf(
                     """
                     SELECT COUNT(*) AS cnt
-                    FROM checkins
-                    WHERE habit_id = ? AND reminder_id IS NULL AND check_date = ?
+                    FROM checkins e
+                    JOIN checkin_values v ON v.checkin_id = e.id
+                    WHERE v.habit_id = ? AND e.reminder_id IS NULL AND e.check_date = ?
                     """.trimIndent(),
                     habitId, date
                 ).map { it.int("cnt") }.asSingle
@@ -83,9 +131,10 @@ object CheckInRepository {
             session.run(
                 queryOf(
                     """
-                    SELECT COALESCE(SUM(quantity), 0) AS total
-                    FROM checkins
-                    WHERE habit_id = ? AND reminder_id IS NULL AND check_date = ?
+                    SELECT COALESCE(SUM(v.quantity), 0) AS total
+                    FROM checkins e
+                    JOIN checkin_values v ON v.checkin_id = e.id
+                    WHERE v.habit_id = ? AND e.reminder_id IS NULL AND e.check_date = ?
                     """.trimIndent(),
                     habitId, date
                 ).map { it.double("total") }.asSingle
@@ -97,7 +146,12 @@ object CheckInRepository {
         return sessionOf(DatabaseService.dataSource).use { session ->
             session.run(
                 queryOf(
-                    "SELECT MIN(check_date) AS d FROM checkins WHERE habit_id = ?",
+                    """
+                    SELECT MIN(e.check_date) AS d
+                    FROM checkins e
+                    JOIN checkin_values v ON v.checkin_id = e.id
+                    WHERE v.habit_id = ?
+                    """.trimIndent(),
                     habitId
                 ).map { it.localDateOrNull("d") }.asSingle
             )
@@ -109,11 +163,12 @@ object CheckInRepository {
             session.run(
                 queryOf(
                     """
-                    SELECT check_date, SUM(quantity)::float AS amt
-                    FROM checkins
-                    WHERE habit_id = ? AND reminder_id IS NULL AND quantity IS NOT NULL
-                    GROUP BY check_date
-                    ORDER BY check_date
+                    SELECT e.check_date, SUM(v.quantity)::float AS amt
+                    FROM checkins e
+                    JOIN checkin_values v ON v.checkin_id = e.id
+                    WHERE v.habit_id = ? AND e.reminder_id IS NULL AND v.quantity IS NOT NULL
+                    GROUP BY e.check_date
+                    ORDER BY e.check_date
                     """.trimIndent(),
                     habitId
                 ).map { it.toDayAmount() }.asList
@@ -126,11 +181,12 @@ object CheckInRepository {
             session.run(
                 queryOf(
                     """
-                    SELECT DISTINCT c.check_date
-                    FROM checkins c
-                    WHERE c.habit_id = ?
-                      AND (c.reminder_id IS NULL OR c.status = 'done')
-                    ORDER BY c.check_date
+                    SELECT DISTINCT e.check_date
+                    FROM checkins e
+                    JOIN checkin_values v ON v.checkin_id = e.id
+                    WHERE v.habit_id = ?
+                      AND (e.reminder_id IS NULL OR v.status = 'done')
+                    ORDER BY e.check_date
                     """.trimIndent(),
                     habitId
                 ).map { it.localDate("check_date") }.asList
@@ -143,10 +199,11 @@ object CheckInRepository {
             session.run(
                 queryOf(
                     """
-                    SELECT DISTINCT c.check_date
-                    FROM checkins c
-                    WHERE c.habit_id = ? AND c.status = 'skip'
-                    ORDER BY c.check_date
+                    SELECT DISTINCT e.check_date
+                    FROM checkins e
+                    JOIN checkin_values v ON v.checkin_id = e.id
+                    WHERE v.habit_id = ? AND v.status = 'skip'
+                    ORDER BY e.check_date
                     """.trimIndent(),
                     habitId
                 ).map { it.localDate("check_date") }.asList
@@ -159,13 +216,13 @@ object CheckInRepository {
             session.run(
                 queryOf(
                     """
-                    SELECT c.check_date, c.status, c.quantity, cm.body AS comment, r.reminder_time
-                    FROM checkins c
-                    LEFT JOIN habit_reminders r ON r.id = c.reminder_id
-                    LEFT JOIN comments cm ON cm.id = c.comment_id
-                    WHERE c.habit_id = ?
-                      AND c.check_date BETWEEN ?::date AND ?::date
-                    ORDER BY c.check_date, r.reminder_time NULLS FIRST, c.id
+                    SELECT e.check_date, v.status, v.quantity, e.comment, r.reminder_time
+                    FROM checkins e
+                    JOIN checkin_values v ON v.checkin_id = e.id
+                    LEFT JOIN habit_reminders r ON r.id = e.reminder_id
+                    WHERE v.habit_id = ?
+                      AND e.check_date BETWEEN ?::date AND ?::date
+                    ORDER BY e.check_date, r.reminder_time NULLS FIRST, e.id
                     """.trimIndent(),
                     habitId, from, to
                 ).map { it.toCheckinRecord() }.asList
@@ -178,14 +235,15 @@ object CheckInRepository {
             session.run(
                 queryOf(
                     """
-                    SELECT c.reminder_id, h.name, r.reminder_time, c.check_date
-                    FROM checkins c
-                    JOIN habit_reminders r ON r.id = c.reminder_id
-                    JOIN habits h ON h.id = c.habit_id
+                    SELECT e.reminder_id, h.name, r.reminder_time, e.check_date
+                    FROM checkins e
+                    JOIN checkin_values v ON v.checkin_id = e.id
+                    JOIN habit_reminders r ON r.id = e.reminder_id
+                    JOIN habits h ON h.id = v.habit_id
                     WHERE h.user_id = ?
-                      AND c.status IS NULL
-                      AND c.check_date BETWEEN ?::date AND ?::date
-                    ORDER BY c.check_date, r.reminder_time
+                      AND v.status IS NULL
+                      AND e.check_date BETWEEN ?::date AND ?::date
+                    ORDER BY e.check_date, r.reminder_time
                     """.trimIndent(),
                     userId, fromDate, toDate
                 ).map { it.toPendingCheckIn() }.asList

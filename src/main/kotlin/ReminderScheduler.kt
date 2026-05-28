@@ -15,7 +15,7 @@ object ReminderScheduler {
         due.forEach { reminder ->
             runCatching {
                 if (reminder.habitType == HabitType.SCHEDULED) {
-                    CheckInService.markPending(reminder.habitId, reminder.reminderId, reminder.userDate)
+                    CheckInService.markPending(reminder.habitId, reminder.userId, reminder.reminderId, reminder.userDate)
                 }
                 val lang = reminder.langCode?.let { runCatching { Lang.valueOf(it) }.getOrNull() } ?: Lang.EN
                 val text = "⏳ ${reminder.reminderTime.format(Keyboards.TIME_FMT)} — ${reminder.name}"

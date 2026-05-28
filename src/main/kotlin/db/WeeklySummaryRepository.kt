@@ -19,14 +19,15 @@ object WeeklySummaryRepository {
                 queryOf(
                     """
                     SELECT
-                        COUNT(*) FILTER (WHERE reminder_id IS NOT NULL AND status = 'done')             AS done,
-                        COUNT(*) FILTER (WHERE reminder_id IS NOT NULL AND status = 'skip')             AS skip,
-                        COUNT(*) FILTER (WHERE reminder_id IS NULL AND quantity IS NULL)                AS total,
-                        COUNT(DISTINCT check_date) FILTER (WHERE reminder_id IS NULL AND quantity IS NULL) AS days,
-                        COALESCE(SUM(quantity) FILTER (WHERE reminder_id IS NULL AND quantity IS NOT NULL), 0)::float AS qtotal,
-                        COUNT(DISTINCT check_date) FILTER (WHERE reminder_id IS NULL AND quantity IS NOT NULL)        AS qdays
-                    FROM checkins
-                    WHERE habit_id = ? AND check_date BETWEEN ?::date AND ?::date
+                        COUNT(*) FILTER (WHERE e.reminder_id IS NOT NULL AND v.status = 'done')             AS done,
+                        COUNT(*) FILTER (WHERE e.reminder_id IS NOT NULL AND v.status = 'skip')             AS skip,
+                        COUNT(*) FILTER (WHERE e.reminder_id IS NULL AND v.quantity IS NULL)                AS total,
+                        COUNT(DISTINCT e.check_date) FILTER (WHERE e.reminder_id IS NULL AND v.quantity IS NULL) AS days,
+                        COALESCE(SUM(v.quantity) FILTER (WHERE e.reminder_id IS NULL AND v.quantity IS NOT NULL), 0)::float AS qtotal,
+                        COUNT(DISTINCT e.check_date) FILTER (WHERE e.reminder_id IS NULL AND v.quantity IS NOT NULL)        AS qdays
+                    FROM checkins e
+                    JOIN checkin_values v ON v.checkin_id = e.id
+                    WHERE v.habit_id = ? AND e.check_date BETWEEN ?::date AND ?::date
                     """.trimIndent(),
                     habitId, from, to
                 ).map { it.toWeekTotals() }.asSingle
@@ -39,11 +40,12 @@ object WeeklySummaryRepository {
             session.run(
                 queryOf(
                     """
-                    SELECT check_date, COUNT(*) AS cnt
-                    FROM checkins
-                    WHERE habit_id = ? AND reminder_id IS NULL
-                      AND check_date BETWEEN ?::date AND ?::date
-                    GROUP BY check_date
+                    SELECT e.check_date, COUNT(*) AS cnt
+                    FROM checkins e
+                    JOIN checkin_values v ON v.checkin_id = e.id
+                    WHERE v.habit_id = ? AND e.reminder_id IS NULL
+                      AND e.check_date BETWEEN ?::date AND ?::date
+                    GROUP BY e.check_date
                     """.trimIndent(),
                     habitId, from, to
                 ).map { it.toDayCount() }.asList
@@ -56,11 +58,12 @@ object WeeklySummaryRepository {
             session.run(
                 queryOf(
                     """
-                    SELECT check_date, SUM(quantity)::float AS amt
-                    FROM checkins
-                    WHERE habit_id = ? AND reminder_id IS NULL AND quantity IS NOT NULL
-                      AND check_date BETWEEN ?::date AND ?::date
-                    GROUP BY check_date
+                    SELECT e.check_date, SUM(v.quantity)::float AS amt
+                    FROM checkins e
+                    JOIN checkin_values v ON v.checkin_id = e.id
+                    WHERE v.habit_id = ? AND e.reminder_id IS NULL AND v.quantity IS NOT NULL
+                      AND e.check_date BETWEEN ?::date AND ?::date
+                    GROUP BY e.check_date
                     """.trimIndent(),
                     habitId, from, to
                 ).map { it.toDayAmount() }.asList
