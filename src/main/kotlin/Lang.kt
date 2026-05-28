@@ -311,22 +311,23 @@ object Strings {
     private fun trendLine(l: Lang, t: dto.QuantityTrend): String {
         val unit = t.unit?.let { " $it" } ?: ""
         val today = formatAmount(t.today)
-        val avg = formatAmount(t.avg7)
-        val slope = "%+.1f".format(java.util.Locale.ROOT, t.slope14)
+        val recent = formatAmount(t.recentAvg)
+        val overall = formatAmount(t.overallAvg)
+        val delta = t.recentAvg - t.overallAvg
         val arrow = when {
-            t.slope14 > 0.0 -> "↑"
-            t.slope14 < 0.0 -> "↓"
+            delta > 0.0 -> "↑"
+            delta < 0.0 -> "↓"
             else -> "→"
         }
         val verdict = when {
-            t.direction == null || t.slope14 == 0.0 -> ""
-            (t.direction == Direction.MORE && t.slope14 > 0.0) ||
-            (t.direction == Direction.LESS && t.slope14 < 0.0) -> " ✅"
+            t.direction == null || delta == 0.0 -> ""
+            (t.direction == Direction.MORE && delta > 0.0) ||
+            (t.direction == Direction.LESS && delta < 0.0) -> " ✅"
             else -> " ⚠️"
         }
         return pick(l,
-            "📈 $today$unit · 7d $avg · $slope/d $arrow$verdict",
-            "📈 $today$unit · 7д $avg · $slope/д $arrow$verdict")
+            "📈 $today$unit · ${t.windowDays}d $recent · all $overall · $arrow$verdict",
+            "📈 $today$unit · ${t.windowDays}д $recent · всё $overall · $arrow$verdict")
     }
 
     fun weeklySummary(

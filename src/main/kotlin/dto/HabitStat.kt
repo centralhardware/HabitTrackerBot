@@ -19,6 +19,7 @@ data class QuantityTrend(
     @EncodeDefault(EncodeDefault.Mode.NEVER) val unit: String? = null,
     @EncodeDefault(EncodeDefault.Mode.NEVER) val direction: Direction? = null,
     val today: Double,
-    val avg7: Double,
-    val slope14: Double,
+    val recentAvg: Double,
+    val overallAvg: Double,
+    val windowDays: Int,
 )

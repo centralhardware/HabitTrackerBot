@@ -8,7 +8,6 @@ import dto.HabitStat
 import dto.HabitType
 import dto.QuantityTrend
 import org.apache.commons.math3.stat.descriptive.moment.Mean
-import org.apache.commons.math3.stat.regression.SimpleRegression
 import java.time.Duration
 import java.time.Instant
 import java.time.LocalDate
@@ -118,31 +117,22 @@ object CheckInService {
         return streak
     }
 
+    private const val TREND_WINDOW_DAYS = 7
+
     private fun quantityTrend(h: Habit, today: LocalDate): QuantityTrend {
         val perDay = CheckInRepository.quantitySumsPerDay(h.id).associate { it.date to it.amount }
-        val todayVal = perDay[today] ?: 0.0
-        val week = window(perDay, today, 0..6)
-        val avg7 = if (week.isEmpty()) 0.0 else Mean().evaluate(week)
-        val slope14 = linearSlope(perDay, today, 13)
+        val recent = (0 until TREND_WINDOW_DAYS)
+            .mapNotNull { perDay[today.minusDays(it.toLong())] }
+            .toDoubleArray()
+        val all = perDay.values.toDoubleArray()
         return QuantityTrend(
             unit = h.unit,
             direction = h.direction,
-            today = todayVal,
-            avg7 = avg7,
-            slope14 = slope14,
+            today = perDay[today] ?: 0.0,
+            recentAvg = if (recent.isEmpty()) 0.0 else Mean().evaluate(recent),
+            overallAvg = if (all.isEmpty()) 0.0 else Mean().evaluate(all),
+            windowDays = TREND_WINDOW_DAYS,
         )
-    }
-
-    private fun window(perDay: Map<LocalDate, Double>, today: LocalDate, offsets: IntRange): DoubleArray =
-        offsets.map { perDay[today.minusDays(it.toLong())] ?: 0.0 }.toDoubleArray()
-
-    private fun linearSlope(perDay: Map<LocalDate, Double>, today: LocalDate, daysBack: Int): Double {
-        val reg = SimpleRegression()
-        for (i in 0..daysBack) {
-            val v = perDay[today.minusDays(i.toLong())] ?: 0.0
-            reg.addData((daysBack - i).toDouble(), v)
-        }
-        return if (reg.n >= 2 && !reg.slope.isNaN()) reg.slope else 0.0
     }
 
     fun autoSkipOverdue() {
