@@ -312,7 +312,7 @@ object Strings {
         val unit = t.unit?.let { " $it" } ?: ""
         val today = formatAmount(t.today)
         val avg = formatAmount(t.avg7)
-        val slope = "%+.2f".format(java.util.Locale.ROOT, t.slope14)
+        val slope = "%+.1f".format(java.util.Locale.ROOT, t.slope14)
         val arrow = when {
             t.slope14 > 0.0 -> "↑"
             t.slope14 < 0.0 -> "↓"
@@ -325,8 +325,8 @@ object Strings {
             else -> " ⚠️"
         }
         return pick(l,
-            "📈 today: $today$unit  •  7d avg: $avg$unit  •  trend: $slope$unit/day $arrow$verdict",
-            "📈 сегодня: $today$unit  •  ср.7д: $avg$unit  •  тренд: $slope$unit/день $arrow$verdict")
+            "📈 $today$unit · 7d $avg · $slope/d $arrow$verdict",
+            "📈 $today$unit · 7д $avg · $slope/д $arrow$verdict")
     }
 
     fun weeklySummary(

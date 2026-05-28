@@ -143,6 +143,22 @@ object CheckInRepository {
         }
     }
 
+    fun skipDates(habitId: Long): List<LocalDate> {
+        return sessionOf(DatabaseService.dataSource).use { session ->
+            session.run(
+                queryOf(
+                    """
+                    SELECT DISTINCT c.check_date
+                    FROM checkins c
+                    WHERE c.habit_id = ? AND c.status = 'skip'
+                    ORDER BY c.check_date
+                    """.trimIndent(),
+                    habitId
+                ).map { it.localDate("check_date") }.asList
+            )
+        }
+    }
+
     fun findInRange(habitId: Long, from: LocalDate, to: LocalDate): List<CheckinRecord> {
         return sessionOf(DatabaseService.dataSource).use { session ->
             session.run(

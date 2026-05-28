@@ -74,12 +74,13 @@ object CheckInService {
     }
 
     private fun habitStat(h: Habit, today: LocalDate): HabitStat {
-        val loggedDates = collectLoggedDates(h)
+        val loggedDates = collectDates(h, CheckInRepository::loggedDates)
+        val skipDates = collectDates(h, CheckInRepository::skipDates)
         val totalDays = totalDaysSince(h, today)
         return HabitStat(
             habitId = h.id,
             name = h.name,
-            streak = loggedStreak(loggedDates, today),
+            streak = streak(loggedDates, skipDates, today),
             loggedDays = loggedDates.size,
             totalDays = totalDays,
             trend = if (h.type == HabitType.QUANTITY && !h.isGroupRoot) quantityTrend(h, today) else null,
@@ -92,24 +93,25 @@ object CheckInService {
         return (ChronoUnit.DAYS.between(start, today) + 1).toInt().coerceAtLeast(0)
     }
 
-    private fun collectLoggedDates(h: Habit): Set<LocalDate> {
+    private fun collectDates(h: Habit, query: (Long) -> List<LocalDate>): Set<LocalDate> {
         if (h.isGroupRoot) {
             val all = mutableSetOf<LocalDate>()
-            h.fields.forEach { all += CheckInRepository.loggedDates(it.id) }
+            h.fields.forEach { all += query(it.id) }
             return all
         }
-        return CheckInRepository.loggedDates(h.id).toSet()
+        return query(h.id).toSet()
     }
 
-    private fun loggedStreak(dates: Set<LocalDate>, today: LocalDate): Int {
+    private fun streak(logged: Set<LocalDate>, skipped: Set<LocalDate>, today: LocalDate): Int {
+        val good: (LocalDate) -> Boolean = { it in logged && it !in skipped }
         val anchor = when {
-            today in dates -> today
-            today.minusDays(1) in dates -> today.minusDays(1)
+            good(today) -> today
+            good(today.minusDays(1)) -> today.minusDays(1)
             else -> return 0
         }
         var streak = 0
         var d = anchor
-        while (d in dates) {
+        while (good(d)) {
             streak++
             d = d.minusDays(1)
         }
