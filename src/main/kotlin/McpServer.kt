@@ -1,4 +1,5 @@
 import dev.inmo.kslog.common.KSLog
+import dev.inmo.kslog.common.error
 import dev.inmo.kslog.common.info
 import dev.inmo.kslog.common.warning
 import dto.CheckinRecordArgs
@@ -89,9 +90,13 @@ object McpServer {
             inputSchema = emptyObjectSchema(),
         ) { _ ->
             logCall(userId, "habits_list", null)
-            val habits = HabitService.listActive(userId)
-            KSLog.info("mcp habits_list user=$userId returned=${habits.size}")
-            ok(McpJson.encodeToString(habits))
+            try {
+                val habits = HabitService.listActive(userId)
+                KSLog.info("mcp habits_list user=$userId returned=${habits.size}")
+                ok(McpJson.encodeToString(habits))
+            } catch (e: Throwable) {
+                crashed(userId, "habits_list", null, e)
+            }
         }
 
         server.addTool(
@@ -111,6 +116,7 @@ object McpServer {
         ) { request ->
             val rawArgs = request.arguments ?: return@addTool failed(userId, "checkin_record", null, "arguments required")
             logCall(userId, "checkin_record", rawArgs)
+            try {
             val args = runCatching { McpJson.decodeFromJsonElement<CheckinRecordArgs>(rawArgs) }
                 .getOrElse { return@addTool failed(userId, "checkin_record", rawArgs, "Invalid arguments: ${it.message}") }
             val habit = HabitService.findById(args.habitId, userId) ?: return@addTool failed(userId, "checkin_record", rawArgs, "Habit ${args.habitId} not found")
@@ -183,6 +189,9 @@ object McpServer {
                     ok("""{"recorded":true,"habitId":${args.habitId},"date":"$date","amount":$value}""")
                 }
             }
+            } catch (e: Throwable) {
+                crashed(userId, "checkin_record", rawArgs, e)
+            }
         }
 
         server.addTool(
@@ -192,6 +201,7 @@ object McpServer {
         ) { request ->
             val rawArgs = request.arguments ?: return@addTool failed(userId, "quantity_group_record", null, "arguments required")
             logCall(userId, "quantity_group_record", rawArgs)
+            try {
             val args = runCatching { McpJson.decodeFromJsonElement<QuantityGroupRecordArgs>(rawArgs) }
                 .getOrElse { return@addTool failed(userId, "quantity_group_record", rawArgs, "Invalid arguments: ${it.message}") }
             val root = HabitService.findById(args.habitId, userId)
@@ -232,6 +242,9 @@ object McpServer {
                 notifyUser(userId) { lang -> Strings.mcpRecordedQuantityGroup(lang, root, map, date, comment) }
             }
             ok("""{"recorded":true,"habitId":${args.habitId},"date":"$date","fields":${map.size},"wrote":$wrote}""")
+            } catch (e: Throwable) {
+                crashed(userId, "quantity_group_record", rawArgs, e)
+            }
         }
 
         server.addTool(
@@ -248,6 +261,7 @@ object McpServer {
         ) { request ->
             val rawArgs = request.arguments ?: return@addTool failed(userId, "checkins_list", null, "arguments required")
             logCall(userId, "checkins_list", rawArgs)
+            try {
             val args = runCatching { McpJson.decodeFromJsonElement<CheckinsListArgs>(rawArgs) }
                 .getOrElse { return@addTool failed(userId, "checkins_list", rawArgs, "Invalid arguments: ${it.message}") }
             val tz = UserSettingsService.getTimezone(userId) ?: ZoneOffset.UTC
@@ -270,6 +284,9 @@ object McpServer {
                 ?: return@addTool failed(userId, "checkins_list", rawArgs, "Habit ${args.habitId} not found")
             KSLog.info("mcp checkins_list user=$userId habit=${args.habitId} range=$from..$to returned=${rows.size}")
             ok(McpJson.encodeToString(rows))
+            } catch (e: Throwable) {
+                crashed(userId, "checkins_list", rawArgs, e)
+            }
         }
 
         server.addTool(
@@ -278,10 +295,14 @@ object McpServer {
             inputSchema = emptyObjectSchema(),
         ) { _ ->
             logCall(userId, "stats_user", null)
-            val today = LocalDate.now(UserSettingsService.getTimezone(userId) ?: ZoneOffset.UTC)
-            val stats = CheckInService.userStats(userId, today)
-            KSLog.info("mcp stats_user user=$userId returned=${stats.size}")
-            ok(McpJson.encodeToString(stats))
+            try {
+                val today = LocalDate.now(UserSettingsService.getTimezone(userId) ?: ZoneOffset.UTC)
+                val stats = CheckInService.userStats(userId, today)
+                KSLog.info("mcp stats_user user=$userId returned=${stats.size}")
+                ok(McpJson.encodeToString(stats))
+            } catch (e: Throwable) {
+                crashed(userId, "stats_user", null, e)
+            }
         }
 
         return server
@@ -301,6 +322,11 @@ private fun logCall(userId: Long, tool: String, args: JsonObject?) {
 private fun failed(userId: Long, tool: String, args: JsonObject?, reason: String): CallToolResult {
     KSLog.warning("mcp fail user=$userId tool=$tool args=${args ?: "{}"} reason=$reason")
     return err(reason)
+}
+
+private fun crashed(userId: Long, tool: String, args: JsonObject?, e: Throwable): CallToolResult {
+    KSLog.error("mcp crash user=$userId tool=$tool args=${args ?: "{}"}", e)
+    return err("Internal error: ${e.message ?: e::class.simpleName}")
 }
 
 private inline fun notifyUser(userId: Long, text: (Lang) -> String) {
