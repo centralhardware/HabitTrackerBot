@@ -1,0 +1,107 @@
+package mcp
+
+import CheckInService
+import HabitService
+import Strings
+import UserSettingsService
+import dev.inmo.kslog.common.KSLog
+import dev.inmo.kslog.common.info
+import dto.McpJson
+import dto.QuantityGroupRecordArgs
+import io.modelcontextprotocol.kotlin.sdk.types.CallToolRequest
+import io.modelcontextprotocol.kotlin.sdk.types.CallToolResult
+import io.modelcontextprotocol.kotlin.sdk.types.ToolSchema
+import kotlinx.serialization.json.add
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.decodeFromJsonElement
+import kotlinx.serialization.json.put
+import kotlinx.serialization.json.putJsonArray
+import kotlinx.serialization.json.putJsonObject
+import java.time.LocalDate
+import java.time.ZoneOffset
+import java.time.format.DateTimeParseException
+
+object QuantityGroupRecordTool : McpTool {
+    override val name = "quantity_group_record"
+    override val description =
+        "Record a multi-field quantity check-in in one call: writes one event row with a shared comment and one value row per field. 'habitId' is the group root id (where habits_list returns isGroupRoot/fields). 'values' is an array of { fieldId, value }; fieldId must be one of root.fields[].id; value must be > 0. Date is optional (YYYY-MM-DD), defaults to today in the user's timezone; future dates are rejected. 'comment' is optional and applies to the whole event."
+    override val inputSchema: ToolSchema = buildSchema()
+
+    override fun handle(userId: Long, request: CallToolRequest): CallToolResult {
+        val rawArgs = request.arguments ?: return failed(userId, name, null, "arguments required")
+        logCall(userId, name, rawArgs)
+        return try {
+            val args = runCatching { McpJson.decodeFromJsonElement<QuantityGroupRecordArgs>(rawArgs) }
+                .getOrElse { return failed(userId, name, rawArgs, "Invalid arguments: ${it.message}") }
+            val root = HabitService.findById(args.habitId, userId)
+                ?: return failed(userId, name, rawArgs, "Habit ${args.habitId} not found")
+            if (!root.isGroupRoot) {
+                return failed(userId, name, rawArgs,
+                    "Habit ${args.habitId} is not a multi-field group root; use checkin_record for single quantity habits")
+            }
+            if (args.values.isEmpty()) {
+                return failed(userId, name, rawArgs, "'values' must be non-empty")
+            }
+            val tz = UserSettingsService.getTimezone(userId) ?: ZoneOffset.UTC
+            val today = LocalDate.now(tz)
+            val date = args.date?.let {
+                try { LocalDate.parse(it) } catch (_: DateTimeParseException) {
+                    return failed(userId, name, rawArgs, "Invalid date — use YYYY-MM-DD")
+                }
+            } ?: today
+            if (date.isAfter(today)) {
+                return failed(userId, name, rawArgs, "Cannot check in for a future date ($date > $today in $tz)")
+            }
+
+            val allowedIds = root.fields.map { it.id }.toSet()
+            val unknown = args.values.map { it.fieldId }.filter { it !in allowedIds }
+            if (unknown.isNotEmpty()) {
+                return failed(userId, name, rawArgs,
+                    "Unknown fieldId(s) ${unknown.joinToString()}; allowed: ${allowedIds.joinToString()}")
+            }
+            args.values.firstOrNull { it.value <= 0.0 || it.value.isNaN() || it.value.isInfinite() }?.let {
+                return failed(userId, name, rawArgs, "All 'value' entries must be > 0 (fieldId ${it.fieldId})")
+            }
+
+            val map = args.values.associate { it.fieldId to it.value }
+            val comment = args.comment?.trim()?.ifEmpty { null }
+            val wrote = CheckInService.recordQuantityGroup(args.habitId, userId, date, map, comment)
+            KSLog.info("mcp $name user=$userId root=${args.habitId} date=$date fields=${map.size} wrote=$wrote comment=${comment != null}")
+            if (wrote > 0) {
+                notifyUser(userId) { lang -> Strings.mcpRecordedQuantityGroup(lang, root, map, date, comment) }
+            }
+            ok("""{"recorded":true,"habitId":${args.habitId},"date":"$date","fields":${map.size},"wrote":$wrote}""")
+        } catch (e: Throwable) {
+            crashed(userId, name, rawArgs, e)
+        }
+    }
+
+    private fun buildSchema(): ToolSchema {
+        val props = buildJsonObject {
+            putJsonObject("habitId") { put("type", "integer") }
+            putJsonObject("values") {
+                put("type", "array")
+                put("minItems", 1)
+                putJsonObject("items") {
+                    put("type", "object")
+                    putJsonObject("properties") {
+                        putJsonObject("fieldId") { put("type", "integer") }
+                        putJsonObject("value") {
+                            put("type", "number")
+                            put("exclusiveMinimum", 0)
+                        }
+                    }
+                    putJsonArray("required") {
+                        add("fieldId"); add("value")
+                    }
+                }
+            }
+            putJsonObject("date") {
+                put("type", "string")
+                put("pattern", "^\\d{4}-\\d{2}-\\d{2}$")
+            }
+            putJsonObject("comment") { put("type", "string") }
+        }
+        return ToolSchema(properties = props, required = listOf("habitId", "values"))
+    }
+}
