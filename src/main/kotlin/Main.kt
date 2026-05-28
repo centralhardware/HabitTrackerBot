@@ -42,9 +42,9 @@ suspend fun main() {
                 scope = Default,
                 languageCode = code
             )
-            setMyName(BotProfileI18n.name(lang), code)
-            setMyDescription(BotProfileI18n.description(lang), code)
-            setMyShortDescription(BotProfileI18n.shortDescription(lang), code)
+//            setMyName(BotProfileI18n.name(lang), code)
+//            setMyDescription(BotProfileI18n.description(lang), code)
+//            setMyShortDescription(BotProfileI18n.shortDescription(lang), code)
         }
         setDefaultChatMenuButton(MenuButton.Commands)
 
