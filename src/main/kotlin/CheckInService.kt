@@ -75,21 +75,21 @@ object CheckInService {
     private fun habitStat(h: Habit, today: LocalDate): HabitStat {
         val loggedDates = collectDates(h, CheckInRepository::loggedDates)
         val skipDates = collectDates(h, CheckInRepository::skipDates)
-        val totalDays = totalDaysSince(h, today)
+        val pastLogged = loggedDates.count { it < today }
         return HabitStat(
             habitId = h.id,
             name = h.name,
             streak = streak(loggedDates, skipDates, today),
-            loggedDays = loggedDates.size,
-            totalDays = totalDays,
+            loggedDays = pastLogged,
+            totalDays = pastDaysSince(h, today),
             trend = if (h.type == HabitType.QUANTITY && !h.isGroupRoot) quantityTrend(h, today) else null,
             groupFields = if (h.isGroupRoot) h.fields.map { habitStat(it, today) } else emptyList(),
         )
     }
 
-    private fun totalDaysSince(h: Habit, today: LocalDate): Int {
+    private fun pastDaysSince(h: Habit, today: LocalDate): Int {
         val start = CheckInRepository.habitStartDate(h.id) ?: today
-        return (ChronoUnit.DAYS.between(start, today) + 1).toInt().coerceAtLeast(0)
+        return ChronoUnit.DAYS.between(start, today).toInt().coerceAtLeast(0)
     }
 
     private fun collectDates(h: Habit, query: (Long) -> List<LocalDate>): Set<LocalDate> {
