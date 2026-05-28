@@ -1,6 +1,7 @@
 package mcp
 
 import CheckInService
+import Lang
 import UserSettingsService
 import dev.inmo.kslog.common.KSLog
 import dev.inmo.kslog.common.info
@@ -16,7 +17,7 @@ object StatsUserTool : McpTool {
     override val description = "Return statistics for every active habit (today in the user's timezone)."
     override val inputSchema: ToolSchema = emptyObjectSchema()
 
-    override fun handle(userId: Long, request: CallToolRequest): CallToolResult {
+    override fun handle(userId: Long, lang: Lang, request: CallToolRequest): CallToolResult {
         logCall(userId, name, null)
         return try {
             val today = LocalDate.now(UserSettingsService.getTimezone(userId) ?: ZoneOffset.UTC)

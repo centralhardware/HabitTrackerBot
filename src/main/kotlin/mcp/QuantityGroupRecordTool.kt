@@ -1,7 +1,9 @@
 package mcp
 
+import BotNotifier
 import CheckInService
 import HabitService
+import Lang
 import Strings
 import UserSettingsService
 import dev.inmo.kslog.common.KSLog
@@ -27,7 +29,7 @@ object QuantityGroupRecordTool : McpTool {
         "Record a multi-field quantity check-in in one call: writes one event row with a shared comment and one value row per field. 'habitId' is the group root id (where habits_list returns isGroupRoot/fields). 'values' is an array of { fieldId, value }; fieldId must be one of root.fields[].id; value must be > 0. Date is optional (YYYY-MM-DD), defaults to today in the user's timezone; future dates are rejected. 'comment' is optional and applies to the whole event."
     override val inputSchema: ToolSchema = buildSchema()
 
-    override fun handle(userId: Long, request: CallToolRequest): CallToolResult {
+    override fun handle(userId: Long, lang: Lang, request: CallToolRequest): CallToolResult {
         val rawArgs = request.arguments ?: return failed(userId, name, null, "arguments required")
         logCall(userId, name, rawArgs)
         return try {
@@ -68,7 +70,7 @@ object QuantityGroupRecordTool : McpTool {
             val wrote = CheckInService.recordQuantityGroup(args.habitId, userId, date, map, comment)
             KSLog.info("mcp $name user=$userId root=${args.habitId} date=$date fields=${map.size} wrote=$wrote comment=${comment != null}")
             if (wrote > 0) {
-                notifyUser(userId) { lang -> Strings.mcpRecordedQuantityGroup(lang, root, map, date, comment) }
+                BotNotifier.notify(userId, Strings.mcpRecordedQuantityGroup(lang, root, map, date, comment))
             }
             ok("""{"recorded":true,"habitId":${args.habitId},"date":"$date","fields":${map.size},"wrote":$wrote}""")
         } catch (e: Throwable) {

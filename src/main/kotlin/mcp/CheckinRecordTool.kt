@@ -1,7 +1,9 @@
 package mcp
 
+import BotNotifier
 import CheckInService
 import HabitService
+import Lang
 import Strings
 import UserSettingsService
 import dev.inmo.kslog.common.KSLog
@@ -40,7 +42,7 @@ object CheckinRecordTool : McpTool {
         required = listOf("habitId"),
     )
 
-    override fun handle(userId: Long, request: CallToolRequest): CallToolResult {
+    override fun handle(userId: Long, lang: Lang, request: CallToolRequest): CallToolResult {
         val rawArgs = request.arguments ?: return failed(userId, name, null, "arguments required")
         logCall(userId, name, rawArgs)
         return try {
@@ -89,9 +91,7 @@ object CheckinRecordTool : McpTool {
                     val recorded = CheckInService.record(reminder.id, userId, date, status)
                     if (!recorded) return failed(userId, name, rawArgs, "Failed to record check-in")
                     KSLog.info("mcp $name user=$userId habit=${args.habitId} reminder=${reminder.id} date=$date status=${status.value}")
-                    notifyUser(userId) { lang ->
-                        Strings.mcpRecordedScheduled(lang, habit.name, reminder.time.format(TimeFmt), status == CheckinStatus.DONE, date)
-                    }
+                    BotNotifier.notify(userId, Strings.mcpRecordedScheduled(lang, habit.name, reminder.time.format(TimeFmt), status == CheckinStatus.DONE, date))
                     ok("""{"recorded":true,"habitId":${args.habitId},"reminderId":${reminder.id},"date":"$date","status":"${status.value}"}""")
                 }
                 HabitType.COUNTER -> {
@@ -99,7 +99,7 @@ object CheckinRecordTool : McpTool {
                     if (count < 1 || count > 100) return failed(userId, name, rawArgs, "'value' must be 1..100 for counter habits")
                     repeat(count) { CheckInService.checkInCounter(args.habitId, userId, date) }
                     KSLog.info("mcp $name user=$userId habit=${args.habitId} date=$date count=$count")
-                    notifyUser(userId) { lang -> Strings.mcpRecordedCounter(lang, habit.name, count, date) }
+                    BotNotifier.notify(userId, Strings.mcpRecordedCounter(lang, habit.name, count, date))
                     ok("""{"recorded":true,"habitId":${args.habitId},"date":"$date","count":$count}""")
                 }
                 HabitType.QUANTITY -> {
@@ -111,9 +111,7 @@ object CheckinRecordTool : McpTool {
                     if (value <= 0.0 || value.isNaN() || value.isInfinite()) return failed(userId, name, rawArgs, "'value' must be > 0")
                     CheckInService.recordQuantity(args.habitId, userId, date, value, comment)
                     KSLog.info("mcp $name user=$userId habit=${args.habitId} date=$date amount=$value comment=${comment != null}")
-                    notifyUser(userId) { lang ->
-                        Strings.mcpRecordedQuantity(lang, habit.name, value, habit.unit, date, comment)
-                    }
+                    BotNotifier.notify(userId, Strings.mcpRecordedQuantity(lang, habit.name, value, habit.unit, date, comment))
                     ok("""{"recorded":true,"habitId":${args.habitId},"date":"$date","amount":$value}""")
                 }
             }

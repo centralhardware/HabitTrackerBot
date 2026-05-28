@@ -1,6 +1,7 @@
 package mcp
 
 import HabitService
+import Lang
 import dev.inmo.kslog.common.KSLog
 import dev.inmo.kslog.common.info
 import dto.McpJson
@@ -13,7 +14,7 @@ object HabitsListTool : McpTool {
     override val description = "List the authenticated user's active habits."
     override val inputSchema: ToolSchema = emptyObjectSchema()
 
-    override fun handle(userId: Long, request: CallToolRequest): CallToolResult {
+    override fun handle(userId: Long, lang: Lang, request: CallToolRequest): CallToolResult {
         logCall(userId, name, null)
         return try {
             val habits = HabitService.listActive(userId)

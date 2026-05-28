@@ -22,6 +22,7 @@ import mcp.QuantityGroupRecordTool
 import mcp.StatsUserTool
 
 private val UserIdKey = AttributeKey<Long>("mcpUserId")
+private val LangKey = AttributeKey<Lang>("mcpLang")
 
 private val tools: List<McpTool> = listOf(
     HabitsListTool,
@@ -45,19 +46,21 @@ object McpServer {
                     return@intercept
                 }
                 context.attributes.put(UserIdKey, userId)
+                context.attributes.put(LangKey, UserSettingsService.getLanguage(userId) ?: Lang.EN)
             }
             mcpStatelessStreamableHttp(
                 path = "/mcp",
                 enableDnsRebindingProtection = false,
             ) {
                 val userId = call.attributes[UserIdKey]
-                buildServer(userId)
+                val lang = call.attributes[LangKey]
+                buildServer(userId, lang)
             }
         }
         return app.start(wait = false)
     }
 
-    private fun buildServer(userId: Long): Server {
+    private fun buildServer(userId: Long, lang: Lang): Server {
         val server = Server(
             serverInfo = Implementation(name = "habit-tracker", version = "1.0.0"),
             options = ServerOptions(
@@ -71,7 +74,7 @@ object McpServer {
                 name = tool.name,
                 description = tool.description,
                 inputSchema = tool.inputSchema,
-            ) { request -> tool.handle(userId, request) }
+            ) { request -> tool.handle(userId, lang, request) }
         }
         return server
     }

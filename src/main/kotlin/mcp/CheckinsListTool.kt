@@ -1,6 +1,7 @@
 package mcp
 
 import CheckInService
+import Lang
 import UserSettingsService
 import dev.inmo.kslog.common.KSLog
 import dev.inmo.kslog.common.info
@@ -29,7 +30,7 @@ object CheckinsListTool : McpTool {
         required = listOf("habitId"),
     )
 
-    override fun handle(userId: Long, request: CallToolRequest): CallToolResult {
+    override fun handle(userId: Long, lang: Lang, request: CallToolRequest): CallToolResult {
         val rawArgs = request.arguments ?: return failed(userId, name, null, "arguments required")
         logCall(userId, name, rawArgs)
         return try {

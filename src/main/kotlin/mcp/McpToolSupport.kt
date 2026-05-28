@@ -1,8 +1,5 @@
 package mcp
 
-import BotNotifier
-import Lang
-import UserSettingsService
 import dev.inmo.kslog.common.KSLog
 import dev.inmo.kslog.common.error
 import dev.inmo.kslog.common.info
@@ -34,11 +31,6 @@ internal fun failed(userId: Long, tool: String, args: JsonObject?, reason: Strin
 internal fun crashed(userId: Long, tool: String, args: JsonObject?, e: Throwable): CallToolResult {
     KSLog.error("mcp crash user=$userId tool=$tool args=${args ?: "{}"}", e)
     return err("Internal error")
-}
-
-internal inline fun notifyUser(userId: Long, text: (Lang) -> String) {
-    val lang = UserSettingsService.getLanguage(userId) ?: Lang.EN
-    BotNotifier.notify(userId, text(lang))
 }
 
 internal fun emptyObjectSchema(): ToolSchema = ToolSchema(properties = JsonObject(emptyMap()))
