@@ -6,8 +6,6 @@ import HabitService
 import Lang
 import Strings
 import UserSettingsService
-import dev.inmo.kslog.common.KSLog
-import dev.inmo.kslog.common.info
 import dto.McpJson
 import dto.QuantityGroupRecordArgs
 import io.modelcontextprotocol.kotlin.sdk.types.CallToolRequest
@@ -30,52 +28,44 @@ object QuantityGroupRecordTool : McpTool {
     override val inputSchema: ToolSchema = buildSchema()
 
     override fun handle(userId: Long, lang: Lang, request: CallToolRequest): CallToolResult {
-        val rawArgs = request.arguments ?: return failed(userId, name, null, "arguments required")
-        logCall(userId, name, rawArgs)
-        return try {
-            val args = runCatching { McpJson.decodeFromJsonElement<QuantityGroupRecordArgs>(rawArgs) }
-                .getOrElse { return failed(userId, name, rawArgs, "Invalid arguments: ${it.message}") }
-            val root = HabitService.findById(args.habitId, userId)
-                ?: return failed(userId, name, rawArgs, "Habit ${args.habitId} not found")
-            if (!root.isGroupRoot) {
-                return failed(userId, name, rawArgs,
-                    "Habit ${args.habitId} is not a multi-field group root; use checkin_record for single quantity habits")
-            }
-            if (args.values.isEmpty()) {
-                return failed(userId, name, rawArgs, "'values' must be non-empty")
-            }
-            val tz = UserSettingsService.getTimezone(userId) ?: ZoneOffset.UTC
-            val today = LocalDate.now(tz)
-            val date = args.date?.let {
-                try { LocalDate.parse(it) } catch (_: DateTimeParseException) {
-                    return failed(userId, name, rawArgs, "Invalid date — use YYYY-MM-DD")
-                }
-            } ?: today
-            if (date.isAfter(today)) {
-                return failed(userId, name, rawArgs, "Cannot check in for a future date ($date > $today in $tz)")
-            }
-
-            val allowedIds = root.fields.map { it.id }.toSet()
-            val unknown = args.values.map { it.fieldId }.filter { it !in allowedIds }
-            if (unknown.isNotEmpty()) {
-                return failed(userId, name, rawArgs,
-                    "Unknown fieldId(s) ${unknown.joinToString()}; allowed: ${allowedIds.joinToString()}")
-            }
-            args.values.firstOrNull { it.value <= 0.0 || it.value.isNaN() || it.value.isInfinite() }?.let {
-                return failed(userId, name, rawArgs, "All 'value' entries must be > 0 (fieldId ${it.fieldId})")
-            }
-
-            val map = args.values.associate { it.fieldId to it.value }
-            val comment = args.comment?.trim()?.ifEmpty { null }
-            val wrote = CheckInService.recordQuantityGroup(args.habitId, userId, date, map, comment)
-            KSLog.info("mcp $name user=$userId root=${args.habitId} date=$date fields=${map.size} wrote=$wrote comment=${comment != null}")
-            if (wrote > 0) {
-                BotNotifier.notify(userId, Strings.mcpRecordedQuantityGroup(lang, root, map, date, comment))
-            }
-            ok("""{"recorded":true,"habitId":${args.habitId},"date":"$date","fields":${map.size},"wrote":$wrote}""")
-        } catch (e: Throwable) {
-            crashed(userId, name, rawArgs, e)
+        val rawArgs = request.arguments ?: return err("arguments required")
+        val args = runCatching { McpJson.decodeFromJsonElement<QuantityGroupRecordArgs>(rawArgs) }
+            .getOrElse { return err("Invalid arguments: ${it.message}") }
+        val root = HabitService.findById(args.habitId, userId)
+            ?: return err("Habit ${args.habitId} not found")
+        if (!root.isGroupRoot) {
+            return err("Habit ${args.habitId} is not a multi-field group root; use checkin_record for single quantity habits")
         }
+        if (args.values.isEmpty()) {
+            return err("'values' must be non-empty")
+        }
+        val tz = UserSettingsService.getTimezone(userId) ?: ZoneOffset.UTC
+        val today = LocalDate.now(tz)
+        val date = args.date?.let {
+            try { LocalDate.parse(it) } catch (_: DateTimeParseException) {
+                return err("Invalid date — use YYYY-MM-DD")
+            }
+        } ?: today
+        if (date.isAfter(today)) {
+            return err("Cannot check in for a future date ($date > $today in $tz)")
+        }
+
+        val allowedIds = root.fields.map { it.id }.toSet()
+        val unknown = args.values.map { it.fieldId }.filter { it !in allowedIds }
+        if (unknown.isNotEmpty()) {
+            return err("Unknown fieldId(s) ${unknown.joinToString()}; allowed: ${allowedIds.joinToString()}")
+        }
+        args.values.firstOrNull { it.value <= 0.0 || it.value.isNaN() || it.value.isInfinite() }?.let {
+            return err("All 'value' entries must be > 0 (fieldId ${it.fieldId})")
+        }
+
+        val map = args.values.associate { it.fieldId to it.value }
+        val comment = args.comment?.trim()?.ifEmpty { null }
+        val wrote = CheckInService.recordQuantityGroup(args.habitId, userId, date, map, comment)
+        if (wrote > 0) {
+            BotNotifier.notify(userId, Strings.mcpRecordedQuantityGroup(lang, root, map, date, comment))
+        }
+        return ok("""{"recorded":true,"habitId":${args.habitId},"date":"$date","fields":${map.size},"wrote":$wrote}""")
     }
 
     private fun buildSchema(): ToolSchema {

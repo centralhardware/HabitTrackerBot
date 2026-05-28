@@ -1,3 +1,7 @@
+import dev.inmo.kslog.common.KSLog
+import dev.inmo.kslog.common.error
+import dev.inmo.kslog.common.info
+import dev.inmo.kslog.common.warning
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.ApplicationCallPipeline
@@ -12,8 +16,11 @@ import io.ktor.util.AttributeKey
 import io.modelcontextprotocol.kotlin.sdk.server.Server
 import io.modelcontextprotocol.kotlin.sdk.server.ServerOptions
 import io.modelcontextprotocol.kotlin.sdk.server.mcpStatelessStreamableHttp
+import io.modelcontextprotocol.kotlin.sdk.types.CallToolRequest
+import io.modelcontextprotocol.kotlin.sdk.types.CallToolResult
 import io.modelcontextprotocol.kotlin.sdk.types.Implementation
 import io.modelcontextprotocol.kotlin.sdk.types.ServerCapabilities
+import io.modelcontextprotocol.kotlin.sdk.types.TextContent
 import mcp.CheckinRecordTool
 import mcp.CheckinsListTool
 import mcp.HabitsListTool
@@ -74,8 +81,24 @@ object McpServer {
                 name = tool.name,
                 description = tool.description,
                 inputSchema = tool.inputSchema,
-            ) { request -> tool.handle(userId, lang, request) }
+            ) { request -> invokeWithLogging(tool, userId, lang, request) }
         }
         return server
+    }
+}
+
+private fun invokeWithLogging(tool: McpTool, userId: Long, lang: Lang, request: CallToolRequest): CallToolResult {
+    val args = request.arguments ?: "{}"
+    KSLog.info("mcp call user=$userId tool=${tool.name} args=$args")
+    return try {
+        val result = tool.handle(userId, lang, request)
+        if (result.isError == true) {
+            val reason = (result.content.firstOrNull() as? TextContent)?.text ?: ""
+            KSLog.warning("mcp fail user=$userId tool=${tool.name} args=$args reason=$reason")
+        }
+        result
+    } catch (e: Throwable) {
+        KSLog.error("mcp crash user=$userId tool=${tool.name} args=$args", e)
+        CallToolResult(content = listOf(TextContent("Internal error")), isError = true)
     }
 }

@@ -1,9 +1,5 @@
 package mcp
 
-import dev.inmo.kslog.common.KSLog
-import dev.inmo.kslog.common.error
-import dev.inmo.kslog.common.info
-import dev.inmo.kslog.common.warning
 import dto.McpJson
 import dto.McpProp
 import io.modelcontextprotocol.kotlin.sdk.types.CallToolResult
@@ -18,20 +14,6 @@ internal fun ok(text: String): CallToolResult =
 
 internal fun err(text: String): CallToolResult =
     CallToolResult(content = listOf(TextContent(text)), isError = true)
-
-internal fun logCall(userId: Long, tool: String, args: JsonObject?) {
-    KSLog.info("mcp call user=$userId tool=$tool args=${args ?: "{}"}")
-}
-
-internal fun failed(userId: Long, tool: String, args: JsonObject?, reason: String): CallToolResult {
-    KSLog.warning("mcp fail user=$userId tool=$tool args=${args ?: "{}"} reason=$reason")
-    return err(reason)
-}
-
-internal fun crashed(userId: Long, tool: String, args: JsonObject?, e: Throwable): CallToolResult {
-    KSLog.error("mcp crash user=$userId tool=$tool args=${args ?: "{}"}", e)
-    return err("Internal error")
-}
 
 internal fun emptyObjectSchema(): ToolSchema = ToolSchema(properties = JsonObject(emptyMap()))
 

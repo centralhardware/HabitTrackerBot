@@ -2,8 +2,6 @@ package mcp
 
 import HabitService
 import Lang
-import dev.inmo.kslog.common.KSLog
-import dev.inmo.kslog.common.info
 import dto.McpJson
 import io.modelcontextprotocol.kotlin.sdk.types.CallToolRequest
 import io.modelcontextprotocol.kotlin.sdk.types.CallToolResult
@@ -15,13 +13,7 @@ object HabitsListTool : McpTool {
     override val inputSchema: ToolSchema = emptyObjectSchema()
 
     override fun handle(userId: Long, lang: Lang, request: CallToolRequest): CallToolResult {
-        logCall(userId, name, null)
-        return try {
-            val habits = HabitService.listActive(userId)
-            KSLog.info("mcp $name user=$userId returned=${habits.size}")
-            ok(McpJson.encodeToString(habits))
-        } catch (e: Throwable) {
-            crashed(userId, name, null, e)
-        }
+        val habits = HabitService.listActive(userId)
+        return ok(McpJson.encodeToString(habits))
     }
 }

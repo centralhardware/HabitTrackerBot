@@ -3,8 +3,6 @@ package mcp
 import CheckInService
 import Lang
 import UserSettingsService
-import dev.inmo.kslog.common.KSLog
-import dev.inmo.kslog.common.info
 import dto.CheckinsListArgs
 import dto.McpJson
 import dto.McpProp
@@ -31,33 +29,27 @@ object CheckinsListTool : McpTool {
     )
 
     override fun handle(userId: Long, lang: Lang, request: CallToolRequest): CallToolResult {
-        val rawArgs = request.arguments ?: return failed(userId, name, null, "arguments required")
-        logCall(userId, name, rawArgs)
-        return try {
-            val args = runCatching { McpJson.decodeFromJsonElement<CheckinsListArgs>(rawArgs) }
-                .getOrElse { return failed(userId, name, rawArgs, "Invalid arguments: ${it.message}") }
-            val tz = UserSettingsService.getTimezone(userId) ?: ZoneOffset.UTC
-            val today = LocalDate.now(tz)
-            val to = args.to?.let {
-                try { LocalDate.parse(it) } catch (_: DateTimeParseException) {
-                    return failed(userId, name, rawArgs, "Invalid 'to' — use YYYY-MM-DD")
-                }
-            } ?: today
-            val from = args.from?.let {
-                try { LocalDate.parse(it) } catch (_: DateTimeParseException) {
-                    return failed(userId, name, rawArgs, "Invalid 'from' — use YYYY-MM-DD")
-                }
-            } ?: to.minusDays(30)
-            if (from.isAfter(to)) return failed(userId, name, rawArgs, "'from' must be on or before 'to'")
-            if (ChronoUnit.DAYS.between(from, to) > 366) {
-                return failed(userId, name, rawArgs, "Range too large; max 366 days")
+        val rawArgs = request.arguments ?: return err("arguments required")
+        val args = runCatching { McpJson.decodeFromJsonElement<CheckinsListArgs>(rawArgs) }
+            .getOrElse { return err("Invalid arguments: ${it.message}") }
+        val tz = UserSettingsService.getTimezone(userId) ?: ZoneOffset.UTC
+        val today = LocalDate.now(tz)
+        val to = args.to?.let {
+            try { LocalDate.parse(it) } catch (_: DateTimeParseException) {
+                return err("Invalid 'to' — use YYYY-MM-DD")
             }
-            val rows = CheckInService.listInRange(args.habitId, userId, from, to)
-                ?: return failed(userId, name, rawArgs, "Habit ${args.habitId} not found")
-            KSLog.info("mcp $name user=$userId habit=${args.habitId} range=$from..$to returned=${rows.size}")
-            ok(McpJson.encodeToString(rows))
-        } catch (e: Throwable) {
-            crashed(userId, name, rawArgs, e)
+        } ?: today
+        val from = args.from?.let {
+            try { LocalDate.parse(it) } catch (_: DateTimeParseException) {
+                return err("Invalid 'from' — use YYYY-MM-DD")
+            }
+        } ?: to.minusDays(30)
+        if (from.isAfter(to)) return err("'from' must be on or before 'to'")
+        if (ChronoUnit.DAYS.between(from, to) > 366) {
+            return err("Range too large; max 366 days")
         }
+        val rows = CheckInService.listInRange(args.habitId, userId, from, to)
+            ?: return err("Habit ${args.habitId} not found")
+        return ok(McpJson.encodeToString(rows))
     }
 }
