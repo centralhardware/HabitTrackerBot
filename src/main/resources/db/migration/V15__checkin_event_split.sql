@@ -64,15 +64,15 @@ ALTER TABLE checkin_events
     DROP COLUMN legacy_comment_id,
     DROP COLUMN legacy_checkin_id;
 
--- 5) Indexes and constraints.
-CREATE UNIQUE INDEX checkins_scheduled_uniq
-    ON checkin_events (reminder_id, check_date)
-    WHERE reminder_id IS NOT NULL;
-
-CREATE INDEX idx_checkins_user_date  ON checkin_events (user_id, check_date);
-CREATE INDEX idx_checkin_values_habit ON checkin_values (habit_id);
-
--- 6) Drop the old tables and rename.
+-- 5) Drop the old tables (also drops their indexes), then rename.
 DROP TABLE checkins;
 ALTER TABLE checkin_events RENAME TO checkins;
 DROP TABLE comments;
+
+-- 6) Indexes and constraints on the renamed table.
+CREATE UNIQUE INDEX checkins_scheduled_uniq
+    ON checkins (reminder_id, check_date)
+    WHERE reminder_id IS NOT NULL;
+
+CREATE INDEX idx_checkins_user_date   ON checkins (user_id, check_date);
+CREATE INDEX idx_checkin_values_habit ON checkin_values (habit_id);
