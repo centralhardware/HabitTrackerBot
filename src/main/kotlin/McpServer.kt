@@ -326,7 +326,7 @@ private fun failed(userId: Long, tool: String, args: JsonObject?, reason: String
 
 private fun crashed(userId: Long, tool: String, args: JsonObject?, e: Throwable): CallToolResult {
     KSLog.error("mcp crash user=$userId tool=$tool args=${args ?: "{}"}", e)
-    return err("Internal error: ${e.message ?: e::class.simpleName}")
+    return err("Internal error")
 }
 
 private inline fun notifyUser(userId: Long, text: (Lang) -> String) {
