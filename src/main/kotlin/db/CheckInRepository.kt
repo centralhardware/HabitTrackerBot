@@ -4,16 +4,10 @@ import DatabaseService
 import dto.Checkin
 import dto.CheckinRecord
 import dto.DayAmount
-import dto.DayCount
-import dto.DayStatus
 import dto.PendingCheckIn
-import dto.ScheduledTotals
 import dto.toCheckinRecord
 import dto.toDayAmount
-import dto.toDayCount
-import dto.toDayStatus
 import dto.toPendingCheckIn
-import dto.toScheduledTotals
 import kotliquery.queryOf
 import kotliquery.sessionOf
 import kotliquery.using
@@ -99,19 +93,18 @@ object CheckInRepository {
         }
     }
 
-    fun counterCountsPerDay(habitId: Long): List<DayCount> {
+    fun habitStartDate(habitId: Long): LocalDate? {
         return sessionOf(DatabaseService.dataSource).use { session ->
             session.run(
                 queryOf(
                     """
-                    SELECT check_date, COUNT(*) AS cnt
-                    FROM checkins
-                    WHERE habit_id = ? AND reminder_id IS NULL
-                    GROUP BY check_date
-                    ORDER BY check_date
+                    SELECT (h.created_at AT TIME ZONE us.timezone)::date AS start_d
+                    FROM habits h
+                    JOIN user_settings us ON us.user_id = h.user_id
+                    WHERE h.id = ?
                     """.trimIndent(),
                     habitId
-                ).map { it.toDayCount() }.asList
+                ).map { it.localDate("start_d") }.asSingle
             )
         }
     }
@@ -133,53 +126,19 @@ object CheckInRepository {
         }
     }
 
-    fun habitStartDate(habitId: Long): LocalDate? {
+    fun loggedDates(habitId: Long): List<LocalDate> {
         return sessionOf(DatabaseService.dataSource).use { session ->
             session.run(
                 queryOf(
                     """
-                    SELECT (h.created_at AT TIME ZONE us.timezone)::date AS start_d
-                    FROM habits h
-                    JOIN user_settings us ON us.user_id = h.user_id
-                    WHERE h.id = ?
-                    """.trimIndent(),
-                    habitId
-                ).map { it.localDate("start_d") }.asSingle
-            )
-        }
-    }
-
-    fun scheduledTotals(habitId: Long): ScheduledTotals {
-        return sessionOf(DatabaseService.dataSource).use { session ->
-            session.run(
-                queryOf(
-                    """
-                    SELECT COUNT(DISTINCT c.check_date)                       AS total_days,
-                           COUNT(*) FILTER (WHERE c.status = 'done')          AS done_count,
-                           COUNT(*) FILTER (WHERE c.status = 'skip')          AS skip_count
+                    SELECT DISTINCT c.check_date
                     FROM checkins c
-                    WHERE c.habit_id = ? AND c.reminder_id IS NOT NULL
+                    WHERE c.habit_id = ?
+                      AND (c.reminder_id IS NULL OR c.status = 'done')
+                    ORDER BY c.check_date
                     """.trimIndent(),
                     habitId
-                ).map { it.toScheduledTotals() }.asSingle
-            ) ?: ScheduledTotals(0, 0, 0)
-        }
-    }
-
-    fun findDailyDoneStatus(habitId: Long): List<DayStatus> {
-        return sessionOf(DatabaseService.dataSource).use { session ->
-            session.run(
-                queryOf(
-                    """
-                    SELECT c.check_date,
-                           COUNT(*) = COUNT(*) FILTER (WHERE c.status = 'done') AS day_done
-                    FROM checkins c
-                    WHERE c.habit_id = ? AND c.reminder_id IS NOT NULL
-                    GROUP BY c.check_date
-                    ORDER BY c.check_date DESC
-                    """.trimIndent(),
-                    habitId
-                ).map { it.toDayStatus() }.asList
+                ).map { it.localDate("check_date") }.asList
             )
         }
     }

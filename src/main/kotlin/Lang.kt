@@ -295,161 +295,38 @@ object Strings {
         "🔥 streak: $days day(s)",
         "🔥 серия: $days дн.")
 
-    fun statsCounterTarget(l: Lang, s: HabitStat.Counter.WithTarget): List<String> {
-        val total = s.doneDays + s.skipDays
-        val rate = if (total > 0) "%.0f%%".format(s.doneDays * 100.0 / total) else "—"
-        val todayMark = run {
-            val ok = s.direction == Direction.LESS && s.todayCount <= s.dailyTarget ||
-                     s.direction != Direction.LESS && s.todayCount >= s.dailyTarget
-            if (ok) "✅" else "⏳"
+    fun statsLines(l: Lang, s: HabitStat): List<String> {
+        val pct = if (s.totalDays > 0) "%.0f%%".format(java.util.Locale.ROOT, s.loggedDays * 100.0 / s.totalDays) else "—"
+        val days = pick(l,
+            "📅 ${s.loggedDays}/${s.totalDays} days ($pct)",
+            "📅 ${s.loggedDays}/${s.totalDays} дн. ($pct)")
+        val lines = mutableListOf("${statsStreak(l, s.streak)}   $days")
+        s.trend?.let { lines += trendLine(l, it) }
+        s.groupFields.forEach { f ->
+            f.trend?.let { lines += "${f.name}: ${trendLine(l, it)}" }
         }
-        val dirSuffix = s.direction?.let { "   (${directionShort(l, it)})" } ?: ""
-        val first = pick(l,
-            "✅ ${s.doneDays}   ❌ ${s.skipDays}   ${statsCompletion(l)}: $rate$dirSuffix",
-            "✅ ${s.doneDays}   ❌ ${s.skipDays}   ${statsCompletion(l)}: $rate$dirSuffix")
-        val second = pick(l,
-            "$todayMark today: ${s.todayCount}/${s.dailyTarget}   ${statsStreak(l, s.streak)}",
-            "$todayMark сегодня: ${s.todayCount}/${s.dailyTarget}   ${statsStreak(l, s.streak)}")
-        return listOf(first, second)
-    }
-
-    fun statsCounterTrend(l: Lang, s: HabitStat.Counter.Trend): List<String> {
-        val dir = directionShort(l, s.direction)
-        val avgFmt = "%.1f".format(s.overallAvg)
-        val header = pick(l,
-            "today: ${s.todayCount}   yest: ${s.yesterdayCount}   total: ${s.grandTotal}   days: ${s.daysLogged}   avg/day: $avgFmt   ($dir)",
-            "сегодня: ${s.todayCount}   вчера: ${s.yesterdayCount}   всего: ${s.grandTotal}   дней: ${s.daysLogged}   среднее: $avgFmt   ($dir)")
-
-        val lines = mutableListOf(header)
-        trendComparisonLine(l, s.direction,
-            labelEn = "today vs yest",
-            labelRu = "сегодня vs вчера",
-            recent = s.todayCount.toDouble(),
-            previous = s.yesterdayCount.toDouble(),
-            asInt = true
-        )?.let { lines += it }
-
-        trendComparisonLine(l, s.direction,
-            labelEn = "3d",
-            labelRu = "3д",
-            recent = s.recent3Avg,
-            previous = s.previous3Avg,
-            asInt = false
-        )?.let { lines += it }
-
-        trendComparisonLine(l, s.direction,
-            labelEn = "7d",
-            labelRu = "7д",
-            recent = s.recent7Avg,
-            previous = s.previous7Avg,
-            asInt = false
-        )?.let { lines += it }
-
         return lines
     }
 
-    private fun trendComparisonLine(
-        l: Lang,
-        direction: Direction,
-        labelEn: String,
-        labelRu: String,
-        recent: Double,
-        previous: Double,
-        asInt: Boolean
-    ): String? {
-        if (recent == 0.0 && previous == 0.0) return null
-        val delta = recent - previous
-        val pct = if (previous > 0.0) "%+.0f%%".format(delta / previous * 100.0) else "—"
+    private fun trendLine(l: Lang, t: dto.QuantityTrend): String {
+        val unit = t.unit?.let { " $it" } ?: ""
+        val today = formatAmount(t.today)
+        val avg = formatAmount(t.avg7)
+        val slope = "%+.2f".format(java.util.Locale.ROOT, t.slope14)
         val arrow = when {
-            delta > 0.0 -> "↑"
-            delta < 0.0 -> "↓"
+            t.slope14 > 0.0 -> "↑"
+            t.slope14 < 0.0 -> "↓"
             else -> "→"
         }
         val verdict = when {
-            delta == 0.0 -> "→"
-            (direction == Direction.MORE && delta > 0.0) ||
-            (direction == Direction.LESS && delta < 0.0) -> "✅"
-            else -> "⚠️"
+            t.direction == null || t.slope14 == 0.0 -> ""
+            (t.direction == Direction.MORE && t.slope14 > 0.0) ||
+            (t.direction == Direction.LESS && t.slope14 < 0.0) -> " ✅"
+            else -> " ⚠️"
         }
-        val r = if (asInt) recent.toInt().toString() else "%.1f".format(recent)
-        val p = if (asInt) previous.toInt().toString() else "%.1f".format(previous)
         return pick(l,
-            "$arrow $labelEn: $r vs $p   $pct $verdict",
-            "$arrow $labelRu: $r против $p   $pct $verdict")
-    }
-
-    fun statsCounterPlain(l: Lang, s: HabitStat.Counter.Plain): String =
-        pick(l,
-            "today: ${s.todayCount}   total: ${s.grandTotal}   days: ${s.daysLogged}",
-            "сегодня: ${s.todayCount}   всего: ${s.grandTotal}   дней: ${s.daysLogged}")
-
-    fun statsQuantityTarget(l: Lang, s: HabitStat.Quantity.WithTarget): List<String> {
-        val total = s.doneDays + s.skipDays
-        val rate = if (total > 0) "%.0f%%".format(java.util.Locale.ROOT, s.doneDays * 100.0 / total) else "—"
-        val todayMark = run {
-            val ok = s.direction == Direction.LESS && s.todayTotal <= s.dailyTarget ||
-                     s.direction != Direction.LESS && s.todayTotal >= s.dailyTarget
-            if (ok) "✅" else "⏳"
-        }
-        val dirSuffix = s.direction?.let { "   (${directionShort(l, it)})" } ?: ""
-        val unit = s.unit?.let { " $it" } ?: ""
-        val today = formatAmount(s.todayTotal)
-        val target = formatAmount(s.dailyTarget)
-        val first = pick(l,
-            "✅ ${s.doneDays}   ❌ ${s.skipDays}   ${statsCompletion(l)}: $rate$dirSuffix",
-            "✅ ${s.doneDays}   ❌ ${s.skipDays}   ${statsCompletion(l)}: $rate$dirSuffix")
-        val second = pick(l,
-            "$todayMark today: $today/$target$unit   ${statsStreak(l, s.streak)}",
-            "$todayMark сегодня: $today/$target$unit   ${statsStreak(l, s.streak)}")
-        return listOf(first, second)
-    }
-
-    fun statsQuantityTrend(l: Lang, s: HabitStat.Quantity.Trend): List<String> {
-        val dir = directionShort(l, s.direction)
-        val unit = s.unit?.let { " $it" } ?: ""
-        val avgFmt = formatAmount(s.overallAvg)
-        val header = pick(l,
-            "today: ${formatAmount(s.todayTotal)}$unit   yest: ${formatAmount(s.yesterdayTotal)}$unit   total: ${formatAmount(s.grandTotal)}$unit   days: ${s.daysLogged}   avg/day: $avgFmt$unit   ($dir)",
-            "сегодня: ${formatAmount(s.todayTotal)}$unit   вчера: ${formatAmount(s.yesterdayTotal)}$unit   всего: ${formatAmount(s.grandTotal)}$unit   дней: ${s.daysLogged}   среднее: $avgFmt$unit   ($dir)")
-
-        val lines = mutableListOf(header)
-        trendComparisonLine(l, s.direction, "today vs yest", "сегодня vs вчера", s.todayTotal, s.yesterdayTotal, asInt = false)?.let { lines += it }
-        trendComparisonLine(l, s.direction, "3d", "3д", s.recent3Avg, s.previous3Avg, asInt = false)?.let { lines += it }
-        trendComparisonLine(l, s.direction, "7d", "7д", s.recent7Avg, s.previous7Avg, asInt = false)?.let { lines += it }
-        return lines
-    }
-
-    fun statsQuantityPlain(l: Lang, s: HabitStat.Quantity.Plain): String {
-        val unit = s.unit?.let { " $it" } ?: ""
-        return pick(l,
-            "today: ${formatAmount(s.todayTotal)}$unit   total: ${formatAmount(s.grandTotal)}$unit   days: ${s.daysLogged}",
-            "сегодня: ${formatAmount(s.todayTotal)}$unit   всего: ${formatAmount(s.grandTotal)}$unit   дней: ${s.daysLogged}")
-    }
-
-    fun statsQuantityGroup(l: Lang, s: HabitStat.QuantityGroup): List<String> {
-        val lines = mutableListOf<String>()
-        if (s.fields.any { it is HabitStat.Quantity.WithTarget }) {
-            val total = s.doneDays + s.skipDays
-            val rate = if (total > 0) "%.0f%%".format(java.util.Locale.ROOT, s.doneDays * 100.0 / total) else "—"
-            lines += "✅ ${s.doneDays}   ❌ ${s.skipDays}   ${statsCompletion(l)}: $rate   ${statsStreak(l, s.streak)}"
-        }
-        s.fields.forEach { f ->
-            val unit = f.unit?.let { " $it" } ?: ""
-            val today = formatAmount(f.todayTotal)
-            val line = when (f) {
-                is HabitStat.Quantity.WithTarget -> {
-                    val target = formatAmount(f.dailyTarget)
-                    val ok = (f.direction == Direction.LESS && f.todayTotal <= f.dailyTarget) ||
-                             (f.direction != Direction.LESS && f.todayTotal >= f.dailyTarget)
-                    val mark = if (ok) "✅" else "⏳"
-                    "$mark ${f.name}: $today/$target$unit"
-                }
-                is HabitStat.Quantity.Trend -> "• ${f.name}: $today$unit"
-                is HabitStat.Quantity.Plain -> "• ${f.name}: $today$unit"
-            }
-            lines += line
-        }
-        return lines
+            "📈 today: $today$unit  •  7d avg: $avg$unit  •  trend: $slope$unit/day $arrow$verdict",
+            "📈 сегодня: $today$unit  •  ср.7д: $avg$unit  •  тренд: $slope$unit/день $arrow$verdict")
     }
 
     fun weeklySummary(

@@ -23,11 +23,6 @@ data class Checkin(
     val commentId: Long? = null,
 )
 
-data class DayStatus(
-    val date: LocalDate,
-    val allDone: Boolean
-)
-
 data class PendingCheckIn(
     val reminderId: Long,
     val name: String,
@@ -47,13 +42,6 @@ data class CheckinRecord(
 data class DayCount(val date: LocalDate, val count: Int)
 data class DayAmount(val date: LocalDate, val amount: Double)
 
-data class ScheduledTotals(val totalDays: Int, val doneCount: Int, val skipCount: Int)
-
-fun Row.toDayStatus(): DayStatus = DayStatus(
-    date = localDate("check_date"),
-    allDone = boolean("day_done")
-)
-
 fun Row.toPendingCheckIn(): PendingCheckIn = PendingCheckIn(
     reminderId = long("reminder_id"),
     name = string("name"),
@@ -69,12 +57,6 @@ fun Row.toDayCount(): DayCount = DayCount(
 fun Row.toDayAmount(): DayAmount = DayAmount(
     date = localDate("check_date"),
     amount = double("amt")
-)
-
-fun Row.toScheduledTotals(): ScheduledTotals = ScheduledTotals(
-    totalDays = int("total_days"),
-    doneCount = int("done_count"),
-    skipCount = int("skip_count")
 )
 
 fun Row.toCheckinRecord(): CheckinRecord = CheckinRecord(

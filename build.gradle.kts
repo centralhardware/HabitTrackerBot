@@ -34,6 +34,8 @@ dependencies {
     implementation("io.modelcontextprotocol:kotlin-sdk-server:$mcpSdkVersion")
     implementation("io.ktor:ktor-server-cio:$ktorVersion")
 
+    implementation("org.apache.commons:commons-math3:3.6.1")
+
     testImplementation(kotlin("test"))
     testImplementation("org.junit.jupiter:junit-jupiter-api:6.1.0")
     testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine:6.1.0")
