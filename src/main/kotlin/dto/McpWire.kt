@@ -42,6 +42,36 @@ data class FieldValueArg(
     val value: Double,
 )
 
+@Serializable
+data class HabitCreateArgs(
+    val name: String,
+    val type: String,
+    val reminders: List<String> = emptyList(),
+    val dailyTarget: Double? = null,
+    val unit: String? = null,
+    val direction: String? = null,
+)
+
+@Serializable
+data class HabitGroupCreateArgs(
+    val name: String,
+    val fields: List<GroupFieldArg>,
+    val reminders: List<String> = emptyList(),
+)
+
+@Serializable
+data class GroupFieldArg(
+    val name: String,
+    val dailyTarget: Double? = null,
+    val unit: String? = null,
+    val direction: String? = null,
+)
+
+@Serializable
+data class HabitIdArgs(
+    val habitId: Long,
+)
+
 @OptIn(ExperimentalSerializationApi::class)
 @Serializable
 data class McpProp(

@@ -483,6 +483,22 @@ object Strings {
         return comment?.let { "$body\n💬 $it" } ?: body
     }
 
+    fun mcpCreatedHabit(l: Lang, name: String) = pick(l,
+        "🤖 via MCP — created habit “$name”",
+        "🤖 через MCP — создана привычка «$name»")
+
+    fun mcpPausedHabit(l: Lang, name: String) = pick(l,
+        "🤖 via MCP — paused “$name”",
+        "🤖 через MCP — приостановлена «$name»")
+
+    fun mcpResumedHabit(l: Lang, name: String) = pick(l,
+        "🤖 via MCP — resumed “$name”",
+        "🤖 через MCP — возобновлена «$name»")
+
+    fun mcpDeletedHabit(l: Lang, name: String) = pick(l,
+        "🤖 via MCP — deleted “$name”",
+        "🤖 через MCP — удалена «$name»")
+
     fun btnDone(l: Lang) = pick(l, "✅ Done", "✅ Готово")
     fun btnSkip(l: Lang) = pick(l, "❌ Skip", "❌ Пропуск")
     fun btnDelete(l: Lang) = pick(l, "🗑 Delete", "🗑 Удалить")

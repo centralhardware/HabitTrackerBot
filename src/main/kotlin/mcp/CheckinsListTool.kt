@@ -2,7 +2,6 @@ package mcp
 
 import CheckInService
 import Lang
-import UserSettingsService
 import dto.CheckinsListArgs
 import dto.McpJson
 import dto.McpProp
@@ -11,7 +10,7 @@ import io.modelcontextprotocol.kotlin.sdk.types.CallToolResult
 import io.modelcontextprotocol.kotlin.sdk.types.ToolSchema
 import kotlinx.serialization.json.decodeFromJsonElement
 import java.time.LocalDate
-import java.time.ZoneOffset
+import java.time.ZoneId
 import java.time.format.DateTimeParseException
 import java.time.temporal.ChronoUnit
 
@@ -28,11 +27,10 @@ object CheckinsListTool : McpTool {
         required = listOf("habitId"),
     )
 
-    override fun handle(userId: Long, lang: Lang, request: CallToolRequest): CallToolResult {
+    override fun handle(userId: Long, lang: Lang, tz: ZoneId, request: CallToolRequest): CallToolResult {
         val rawArgs = request.arguments ?: return err("arguments required")
         val args = runCatching { McpJson.decodeFromJsonElement<CheckinsListArgs>(rawArgs) }
             .getOrElse { return err("Invalid arguments: ${it.message}") }
-        val tz = UserSettingsService.getTimezone(userId) ?: ZoneOffset.UTC
         val today = LocalDate.now(tz)
         val to = args.to?.let {
             try { LocalDate.parse(it) } catch (_: DateTimeParseException) {

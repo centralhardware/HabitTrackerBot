@@ -23,16 +23,29 @@ import io.modelcontextprotocol.kotlin.sdk.types.ServerCapabilities
 import io.modelcontextprotocol.kotlin.sdk.types.TextContent
 import mcp.CheckinRecordTool
 import mcp.CheckinsListTool
+import mcp.HabitCreateGroupTool
+import mcp.HabitCreateTool
+import mcp.HabitDeleteTool
+import mcp.HabitPauseTool
+import mcp.HabitResumeTool
 import mcp.HabitsListTool
 import mcp.McpTool
 import mcp.QuantityGroupRecordTool
 import mcp.StatsUserTool
+import java.time.ZoneId
+import java.time.ZoneOffset
 
 private val UserIdKey = AttributeKey<Long>("mcpUserId")
 private val LangKey = AttributeKey<Lang>("mcpLang")
+private val TzKey = AttributeKey<ZoneId>("mcpTz")
 
 private val tools: List<McpTool> = listOf(
     HabitsListTool,
+    HabitCreateTool,
+    HabitCreateGroupTool,
+    HabitPauseTool,
+    HabitResumeTool,
+    HabitDeleteTool,
     CheckinRecordTool,
     QuantityGroupRecordTool,
     CheckinsListTool,
@@ -54,6 +67,7 @@ object McpServer {
                 }
                 context.attributes.put(UserIdKey, userId)
                 context.attributes.put(LangKey, UserSettingsService.getLanguage(userId) ?: Lang.EN)
+                context.attributes.put(TzKey, UserSettingsService.getTimezone(userId) ?: ZoneOffset.UTC)
             }
             mcpStatelessStreamableHttp(
                 path = "/mcp",
@@ -61,13 +75,14 @@ object McpServer {
             ) {
                 val userId = call.attributes[UserIdKey]
                 val lang = call.attributes[LangKey]
-                buildServer(userId, lang)
+                val tz = call.attributes[TzKey]
+                buildServer(userId, lang, tz)
             }
         }
         return app.start(wait = false)
     }
 
-    private fun buildServer(userId: Long, lang: Lang): Server {
+    private fun buildServer(userId: Long, lang: Lang, tz: ZoneId): Server {
         val server = Server(
             serverInfo = Implementation(name = "habit-tracker", version = "1.0.0"),
             options = ServerOptions(
@@ -81,17 +96,17 @@ object McpServer {
                 name = tool.name,
                 description = tool.description,
                 inputSchema = tool.inputSchema,
-            ) { request -> invokeWithLogging(tool, userId, lang, request) }
+            ) { request -> invokeWithLogging(tool, userId, lang, tz, request) }
         }
         return server
     }
 }
 
-private fun invokeWithLogging(tool: McpTool, userId: Long, lang: Lang, request: CallToolRequest): CallToolResult {
+private fun invokeWithLogging(tool: McpTool, userId: Long, lang: Lang, tz: ZoneId, request: CallToolRequest): CallToolResult {
     val args = request.arguments ?: "{}"
     KSLog.info("mcp call user=$userId tool=${tool.name} args=$args")
     return try {
-        val result = tool.handle(userId, lang, request)
+        val result = tool.handle(userId, lang, tz, request)
         if (result.isError == true) {
             val reason = (result.content.firstOrNull() as? TextContent)?.text ?: ""
             KSLog.warning("mcp fail user=$userId tool=${tool.name} args=$args reason=$reason")

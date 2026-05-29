@@ -5,7 +5,6 @@ import CheckInService
 import HabitService
 import Lang
 import Strings
-import UserSettingsService
 import dto.McpJson
 import dto.QuantityGroupRecordArgs
 import io.modelcontextprotocol.kotlin.sdk.types.CallToolRequest
@@ -18,7 +17,7 @@ import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
 import kotlinx.serialization.json.putJsonObject
 import java.time.LocalDate
-import java.time.ZoneOffset
+import java.time.ZoneId
 import java.time.format.DateTimeParseException
 
 object QuantityGroupRecordTool : McpTool {
@@ -27,7 +26,7 @@ object QuantityGroupRecordTool : McpTool {
         "Record a multi-field quantity check-in in one call: writes one event row with a shared comment and one value row per field. 'habitId' is the group root id (where habits_list returns isGroupRoot/fields). 'values' is an array of { fieldId, value }; fieldId must be one of root.fields[].id; value must be > 0. Date is optional (YYYY-MM-DD), defaults to today in the user's timezone; future dates are rejected. 'comment' is optional and applies to the whole event."
     override val inputSchema: ToolSchema = buildSchema()
 
-    override fun handle(userId: Long, lang: Lang, request: CallToolRequest): CallToolResult {
+    override fun handle(userId: Long, lang: Lang, tz: ZoneId, request: CallToolRequest): CallToolResult {
         val rawArgs = request.arguments ?: return err("arguments required")
         val args = runCatching { McpJson.decodeFromJsonElement<QuantityGroupRecordArgs>(rawArgs) }
             .getOrElse { return err("Invalid arguments: ${it.message}") }
@@ -39,7 +38,6 @@ object QuantityGroupRecordTool : McpTool {
         if (args.values.isEmpty()) {
             return err("'values' must be non-empty")
         }
-        val tz = UserSettingsService.getTimezone(userId) ?: ZoneOffset.UTC
         val today = LocalDate.now(tz)
         val date = args.date?.let {
             try { LocalDate.parse(it) } catch (_: DateTimeParseException) {

@@ -5,7 +5,6 @@ import CheckInService
 import HabitService
 import Lang
 import Strings
-import UserSettingsService
 import dto.CheckinRecordArgs
 import dto.CheckinStatus
 import dto.HabitType
@@ -17,7 +16,7 @@ import io.modelcontextprotocol.kotlin.sdk.types.ToolSchema
 import kotlinx.serialization.json.decodeFromJsonElement
 import java.time.LocalDate
 import java.time.LocalTime
-import java.time.ZoneOffset
+import java.time.ZoneId
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 import java.time.format.DateTimeParseException
@@ -40,13 +39,12 @@ object CheckinRecordTool : McpTool {
         required = listOf("habitId"),
     )
 
-    override fun handle(userId: Long, lang: Lang, request: CallToolRequest): CallToolResult {
+    override fun handle(userId: Long, lang: Lang, tz: ZoneId, request: CallToolRequest): CallToolResult {
         val rawArgs = request.arguments ?: return err("arguments required")
         val args = runCatching { McpJson.decodeFromJsonElement<CheckinRecordArgs>(rawArgs) }
             .getOrElse { return err("Invalid arguments: ${it.message}") }
         val habit = HabitService.findById(args.habitId, userId)
             ?: return err("Habit ${args.habitId} not found")
-        val tz = UserSettingsService.getTimezone(userId) ?: ZoneOffset.UTC
         val nowLocal = ZonedDateTime.now(tz)
         val today = nowLocal.toLocalDate()
         val date = args.date?.let {
