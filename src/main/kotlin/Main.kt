@@ -12,6 +12,8 @@ import commands.registerStartCommand
 import commands.registerStatsCommand
 import commands.registerTzCommand
 import dev.inmo.krontab.doInfinity
+import dev.inmo.kslog.common.KSLog
+import dev.inmo.kslog.common.error
 import dev.inmo.micro_utils.common.Warning
 import dev.inmo.tgbotapi.AppConfig
 import dev.inmo.tgbotapi.extensions.api.bot.setMyCommands
@@ -63,8 +65,10 @@ suspend fun main() {
 
         launch {
             doInfinity("0 /1 * * *") {
-                sendDueReminders()
-                sendWeeklySummaries()
+                runCatching { sendDueReminders() }
+                    .onFailure { KSLog.error("sendDueReminders failed", it) }
+                runCatching { sendWeeklySummaries() }
+                    .onFailure { KSLog.error("sendWeeklySummaries failed", it) }
             }
         }
     }.second.join()
