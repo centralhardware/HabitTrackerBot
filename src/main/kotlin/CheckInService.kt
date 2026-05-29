@@ -6,6 +6,7 @@ import dto.CheckinStatus
 import dto.CheckinValue
 import dto.Habit
 import dto.HabitStat
+import dto.HabitStatus
 import dto.HabitType
 import dto.QuantityTrend
 import org.apache.commons.math3.stat.descriptive.moment.Mean
@@ -74,7 +75,9 @@ object CheckInService {
     }
 
     fun userStats(userId: Long, today: LocalDate): List<HabitStat> {
-        return HabitService.listActive(userId).map { habitStat(it, today) }
+        return HabitService.listActive(userId)
+            .filter { it.status == HabitStatus.ACTIVE }
+            .map { habitStat(it, today) }
     }
 
     private fun habitStat(h: Habit, today: LocalDate): HabitStat {
