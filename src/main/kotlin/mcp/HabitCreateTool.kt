@@ -25,7 +25,7 @@ private val TimeFmt: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm")
 object HabitCreateTool : TypedMcpTool<HabitCreateArgs>(HabitCreateArgs.serializer()) {
     override val name = "habit_create"
     override val description =
-        "Create a single habit. type: 'scheduled' (reminders required, each reminder is a daily check-in slot), 'counter' (tally events; optional dailyTarget and direction), or 'quantity' (log an amount; optional dailyTarget, unit, direction). reminders is an array of HH:MM strings; required for scheduled, optional otherwise. dailyTarget must be > 0. direction is 'more' or 'less'. For multi-field quantity habits use 'habit_create_group' instead."
+        "Create a single habit. type: 'scheduled' (reminders required, each reminder is a daily check-in slot), 'counter' (tally events; optional dailyTarget and direction), or 'quantity' (log an amount; optional dailyTarget, unit, direction). reminders is an array of HH:MM strings; required for scheduled, optional otherwise. days optionally restricts which weekdays reminders fire (ISO numbers 1=Mon … 7=Sun); empty/omitted means every day. dailyTarget must be > 0. direction is 'more' or 'less'. For multi-field quantity habits use 'habit_create_group' instead."
     override val inputSchema: ToolSchema = buildSchema()
 
     override fun handle(userId: Long, lang: Lang, tz: ZoneId, args: HabitCreateArgs): CallToolResult {
@@ -39,6 +39,8 @@ object HabitCreateTool : TypedMcpTool<HabitCreateArgs>(HabitCreateArgs.serialize
         if (type == HabitType.SCHEDULED && reminders.isEmpty()) {
             return err("Scheduled habits require at least one reminder (HH:MM)")
         }
+
+        val days = parseDays(args.days) ?: return err("'days' must be ISO weekday numbers 1..7 (1=Mon … 7=Sun)")
 
         val dailyTarget = args.dailyTarget
         if (dailyTarget != null && (dailyTarget <= 0.0 || dailyTarget.isNaN() || dailyTarget.isInfinite())) {
@@ -58,6 +60,7 @@ object HabitCreateTool : TypedMcpTool<HabitCreateArgs>(HabitCreateArgs.serialize
             dailyTarget = dailyTarget,
             unit = unit,
             direction = direction,
+            reminderDays = days,
         )
         BotNotifier.notify(userId, Strings.mcpCreatedHabit(lang, habit.name))
         return ok(McpJson.encodeToString(habit))
@@ -75,6 +78,14 @@ object HabitCreateTool : TypedMcpTool<HabitCreateArgs>(HabitCreateArgs.serialize
                 putJsonObject("items") {
                     put("type", "string")
                     put("pattern", "^[0-2][0-9]:[0-5][0-9]$")
+                }
+            }
+            putJsonObject("days") {
+                put("type", "array")
+                putJsonObject("items") {
+                    put("type", "integer")
+                    put("minimum", 1)
+                    put("maximum", 7)
                 }
             }
             putJsonObject("dailyTarget") {
@@ -95,4 +106,10 @@ internal fun parseTimes(raw: List<String>): List<LocalTime>? = try {
     raw.map { LocalTime.parse(it.trim(), TimeFmt) }.distinct().sorted()
 } catch (_: DateTimeParseException) {
     null
+}
+
+/** Validates ISO weekday numbers (1=Mon..7=Sun). Returns null if any value is out of range. */
+internal fun parseDays(raw: List<Int>): List<Int>? {
+    if (raw.any { it !in 1..7 }) return null
+    return raw.distinct().sorted()
 }

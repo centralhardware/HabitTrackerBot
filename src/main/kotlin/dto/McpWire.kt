@@ -47,6 +47,7 @@ data class HabitCreateArgs(
     val name: String,
     val type: String,
     val reminders: List<String> = emptyList(),
+    val days: List<Int> = emptyList(),
     val dailyTarget: Double? = null,
     val unit: String? = null,
     val direction: String? = null,
@@ -57,6 +58,7 @@ data class HabitGroupCreateArgs(
     val name: String,
     val fields: List<GroupFieldArg>,
     val reminders: List<String> = emptyList(),
+    val days: List<Int> = emptyList(),
 )
 
 @Serializable

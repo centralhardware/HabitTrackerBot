@@ -27,6 +27,7 @@ fun BehaviourContext.registerHabitsCommand() {
                 val flag = if (habit.status == HabitStatus.PAUSED) " ⏸" else ""
                 val typeLabel = Strings.habitTypeLabel(lang, habit)
                 val times = habit.reminders.joinToString(", ") { it.format(Keyboards.TIME_FMT) }
+                    .let { t -> if (t.isNotEmpty() && habit.reminderDays.isNotEmpty()) "$t (${Strings.formatDays(lang, habit.reminderDays)})" else t }
                 val tail = when {
                     times.isNotEmpty() -> " — $times"
                     habit.type == HabitType.SCHEDULED -> ""

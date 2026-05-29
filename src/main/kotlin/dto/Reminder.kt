@@ -28,7 +28,8 @@ data class RawDue(
     val name: String,
     val reminderTime: LocalTime,
     val tzId: String,
-    val langCode: String?
+    val langCode: String?,
+    val reminderDays: List<Int>
 )
 
 data class RawMissed(
@@ -55,7 +56,8 @@ fun Row.toRawDue(): RawDue = RawDue(
     name = string("name"),
     reminderTime = localTime("reminder_time"),
     tzId = string("tz"),
-    langCode = stringOrNull("lang")
+    langCode = stringOrNull("lang"),
+    reminderDays = intArray("reminder_days")
 )
 
 fun Row.toRawMissed(): RawMissed = RawMissed(

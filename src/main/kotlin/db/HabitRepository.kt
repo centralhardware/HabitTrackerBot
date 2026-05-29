@@ -43,7 +43,7 @@ object HabitRepository {
                 queryOf(
                     """
                     SELECT h.id, h.user_id, h.name, h.habit_type, h.daily_target,
-                           h.unit, h.direction, h.status, h.group_id,
+                           h.unit, h.direction, h.status, h.group_id, h.reminder_days,
                            COALESCE(
                                ARRAY_AGG(r.reminder_time ORDER BY r.reminder_time)
                                    FILTER (WHERE r.reminder_time IS NOT NULL),
@@ -70,12 +70,12 @@ object HabitRepository {
                 val id = tx.updateAndReturnGeneratedKey(
                     queryOf(
                         """
-                        INSERT INTO habits (user_id, name, habit_type, daily_target, unit, direction, status)
-                        VALUES (?, ?, ?::habit_type, ?, ?, ?::habit_direction, ?::habit_status)
+                        INSERT INTO habits (user_id, name, habit_type, daily_target, unit, direction, status, reminder_days)
+                        VALUES (?, ?, ?::habit_type, ?, ?, ?::habit_direction, ?::habit_status, ?::int[])
                         """.trimIndent(),
                         habit.userId, habit.name, habit.type.value,
                         habit.dailyTarget, habit.unit, habit.direction?.value,
-                        habit.status.value
+                        habit.status.value, habit.reminderDays.toPgArray()
                     )
                 ) ?: error("Failed to insert habit")
 
@@ -102,10 +102,11 @@ object HabitRepository {
                 val rootId = tx.updateAndReturnGeneratedKey(
                     queryOf(
                         """
-                        INSERT INTO habits (user_id, name, habit_type, status)
-                        VALUES (?, ?, ?::habit_type, ?::habit_status)
+                        INSERT INTO habits (user_id, name, habit_type, status, reminder_days)
+                        VALUES (?, ?, ?::habit_type, ?::habit_status, ?::int[])
                         """.trimIndent(),
-                        root.userId, root.name, root.type.value, root.status.value
+                        root.userId, root.name, root.type.value, root.status.value,
+                        root.reminderDays.toPgArray()
                     )
                 ) ?: error("Failed to insert group root")
 
@@ -232,7 +233,7 @@ object HabitRepository {
                 queryOf(
                     """
                     SELECT r.id AS reminder_id, h.id AS habit_id, h.habit_type,
-                           h.user_id, h.name, r.reminder_time,
+                           h.user_id, h.name, r.reminder_time, h.reminder_days,
                            us.timezone AS tz, us.language AS lang
                     FROM habit_reminders r
                     JOIN habits h ON h.id = r.habit_id
@@ -288,6 +289,8 @@ object HabitRepository {
                           AND h.habit_type = 'scheduled'
                           AND us.timezone IS NOT NULL
                           AND c.id IS NULL
+                          AND (h.reminder_days IS NULL
+                               OR EXTRACT(ISODOW FROM d::date)::int = ANY(h.reminder_days))
                           AND ((d::date + r.reminder_time)
                                   AT TIME ZONE us.timezone)
                               < now() - INTERVAL '1 minute'
@@ -326,4 +329,8 @@ object HabitRepository {
             )
         }
     }
+
+    /** Renders weekday list as a Postgres int[] literal, or null (= every day) when empty. */
+    private fun List<Int>.toPgArray(): String? =
+        takeIf { it.isNotEmpty() }?.joinToString(",", "{", "}")
 }

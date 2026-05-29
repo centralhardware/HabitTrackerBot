@@ -144,9 +144,26 @@ object Strings {
 
     fun noTimes(l: Lang) = pick(l, "No times provided.", "Время не указано.")
 
+    fun sendReminderDays(l: Lang) = pick(l,
+        "Which weekdays should reminders fire? Send numbers 1-7 (1=Mon … 7=Sun), space-separated. Example: 1 2 3 4 5. Send \"-\" for every day.",
+        "В какие дни недели слать напоминания? Отправьте числа 1-7 (1=Пн … 7=Вс) через пробел. Пример: 1 2 3 4 5. Отправьте «-» — каждый день.")
+
+    fun invalidDays(l: Lang) = pick(l,
+        "Invalid days. Use numbers 1-7 (1=Mon … 7=Sun), e.g. 1 3 5.",
+        "Неверные дни. Используйте числа 1-7 (1=Пн … 7=Вс), например 1 3 5.")
+
+    /** Formats ISO weekday numbers (1=Mon..7=Sun) as short localized names. Empty = every day. */
+    fun formatDays(l: Lang, days: List<Int>): String {
+        if (days.isEmpty()) return ""
+        val names = if (l == Lang.RU) listOf("Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс")
+                    else listOf("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
+        return days.filter { it in 1..7 }.sorted().joinToString(",") { names[it - 1] }
+    }
+
     fun habitAddedDetailed(l: Lang, h: Habit): String {
         val type = habitTypeLabel(l, h)
         val times = h.reminders.joinToString(", ") { it.format(Keyboards.TIME_FMT) }
+            .let { t -> if (t.isNotEmpty() && h.reminderDays.isNotEmpty()) "$t (${formatDays(l, h.reminderDays)})" else t }
         if (h.isGroupRoot) {
             val header = pick(l, "Added: \"${h.name}\" [$type]", "Добавлено: «${h.name}» [$type]")
             val fieldLines = h.fields.map { f ->

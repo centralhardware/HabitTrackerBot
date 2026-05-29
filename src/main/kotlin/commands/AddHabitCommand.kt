@@ -262,12 +262,34 @@ fun BehaviourContext.registerAddHabitCommand() {
             }
         }
 
+        val reminderDays: List<Int> = if (times.isNotEmpty()) {
+            sendMessage(message.chat.id, Strings.sendReminderDays(lang))
+            val daysText = nextText()
+            if (daysText.startsWith("/")) {
+                sendMessage(message.chat.id, Strings.cancelled(lang))
+                return@onCommand
+            }
+            if (isSkipped(daysText)) {
+                emptyList()
+            } else {
+                val parsed = parseDays(daysText)
+                if (parsed == null) {
+                    sendMessage(message.chat.id, Strings.invalidDays(lang))
+                    return@onCommand
+                }
+                parsed
+            }
+        } else {
+            emptyList()
+        }
+
         val habit = if (groupFields != null) {
             HabitService.addHabitGroup(
                 userId = userId,
                 name = nameText,
                 fields = groupFields,
-                reminders = times
+                reminders = times,
+                reminderDays = reminderDays
             )
         } else {
             HabitService.addHabit(
@@ -277,7 +299,8 @@ fun BehaviourContext.registerAddHabitCommand() {
                 reminders = times,
                 dailyTarget = dailyTarget,
                 unit = unit,
-                direction = direction
+                direction = direction,
+                reminderDays = reminderDays
             )
         }
         sendMessage(message.chat.id, Strings.habitAddedDetailed(lang, habit))
@@ -338,4 +361,13 @@ private fun parseTimes(text: String): List<LocalTime>? {
     } catch (_: DateTimeParseException) {
         null
     }
+}
+
+/** Parses weekday numbers (ISO 1=Mon..7=Sun), space- or comma-separated. */
+private fun parseDays(text: String): List<Int>? {
+    val tokens = text.split(Regex("[\\s,]+")).filter { it.isNotBlank() }
+    if (tokens.isEmpty()) return null
+    val nums = tokens.map { it.toIntOrNull() ?: return null }
+    if (nums.any { it !in 1..7 }) return null
+    return nums.distinct().sorted()
 }

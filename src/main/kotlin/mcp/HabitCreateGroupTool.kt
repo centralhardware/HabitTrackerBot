@@ -19,7 +19,7 @@ import java.time.ZoneId
 object HabitCreateGroupTool : TypedMcpTool<HabitGroupCreateArgs>(HabitGroupCreateArgs.serializer()) {
     override val name = "habit_create_group"
     override val description =
-        "Create a multi-field quantity habit: a group root with one field per metric. 'fields' is a non-empty array of { name, dailyTarget?, unit?, direction? }; each field's dailyTarget must be > 0 and direction is 'more' or 'less'. 'reminders' is an optional array of HH:MM strings shared by the group. Use 'habit_create' for single-value habits."
+        "Create a multi-field quantity habit: a group root with one field per metric. 'fields' is a non-empty array of { name, dailyTarget?, unit?, direction? }; each field's dailyTarget must be > 0 and direction is 'more' or 'less'. 'reminders' is an optional array of HH:MM strings shared by the group. 'days' optionally restricts which weekdays reminders fire (ISO numbers 1=Mon … 7=Sun); empty/omitted means every day. Use 'habit_create' for single-value habits."
     override val inputSchema: ToolSchema = buildSchema()
 
     override fun handle(userId: Long, lang: Lang, tz: ZoneId, args: HabitGroupCreateArgs): CallToolResult {
@@ -28,6 +28,7 @@ object HabitCreateGroupTool : TypedMcpTool<HabitGroupCreateArgs>(HabitGroupCreat
         if (args.fields.isEmpty()) return err("'fields' must be non-empty")
 
         val reminders = parseTimes(args.reminders) ?: return err("Invalid reminders — use HH:MM")
+        val days = parseDays(args.days) ?: return err("'days' must be ISO weekday numbers 1..7 (1=Mon … 7=Sun)")
 
         val specs = args.fields.map { f ->
             val fname = f.name.trim()
@@ -51,6 +52,7 @@ object HabitCreateGroupTool : TypedMcpTool<HabitGroupCreateArgs>(HabitGroupCreat
             name = name.take(64),
             fields = specs,
             reminders = reminders,
+            reminderDays = days,
         )
         BotNotifier.notify(userId, Strings.mcpCreatedHabit(lang, root.name))
         return ok(McpJson.encodeToString(root))
@@ -84,6 +86,14 @@ object HabitCreateGroupTool : TypedMcpTool<HabitGroupCreateArgs>(HabitGroupCreat
                 putJsonObject("items") {
                     put("type", "string")
                     put("pattern", "^[0-2][0-9]:[0-5][0-9]$")
+                }
+            }
+            putJsonObject("days") {
+                put("type", "array")
+                putJsonObject("items") {
+                    put("type", "integer")
+                    put("minimum", 1)
+                    put("maximum", 7)
                 }
             }
         }

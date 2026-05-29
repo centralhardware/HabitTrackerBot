@@ -18,7 +18,8 @@ object HabitService {
         reminders: List<LocalTime>,
         dailyTarget: Double? = null,
         unit: String? = null,
-        direction: Direction? = null
+        direction: Direction? = null,
+        reminderDays: List<Int> = emptyList()
     ): Habit = HabitRepository.upsert(
         Habit(
             id = 0L,
@@ -29,6 +30,7 @@ object HabitService {
             unit = unit,
             direction = direction,
             reminders = reminders.sorted(),
+            reminderDays = reminderDays,
             status = HabitStatus.ACTIVE
         )
     )
@@ -41,7 +43,8 @@ object HabitService {
         userId: Long,
         name: String,
         fields: List<FieldSpec>,
-        reminders: List<LocalTime>
+        reminders: List<LocalTime>,
+        reminderDays: List<Int> = emptyList()
     ): Habit {
         require(fields.isNotEmpty()) { "Group must have at least one field" }
         val root = Habit(
@@ -50,6 +53,7 @@ object HabitService {
             name = name,
             type = HabitType.QUANTITY,
             reminders = reminders.sorted(),
+            reminderDays = reminderDays,
             status = HabitStatus.ACTIVE
         )
         val fieldHabits = fields.map { f ->
@@ -111,6 +115,7 @@ object HabitService {
             val zdt = now.atZone(tz)
             val localMinute = zdt.toLocalTime().withSecond(0).withNano(0)
             if (localMinute != r.reminderTime) return@mapNotNull null
+            if (r.reminderDays.isNotEmpty() && zdt.dayOfWeek.value !in r.reminderDays) return@mapNotNull null
             DueReminder(
                 reminderId = r.reminderId,
                 habitId = r.habitId,

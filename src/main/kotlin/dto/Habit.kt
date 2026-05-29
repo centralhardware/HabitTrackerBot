@@ -51,6 +51,7 @@ data class Habit(
     @EncodeDefault(EncodeDefault.Mode.NEVER) val unit: String? = null,
     @EncodeDefault(EncodeDefault.Mode.NEVER) val direction: Direction? = null,
     val reminders: List<@Serializable(LocalTimeSerializer::class) LocalTime>,
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val reminderDays: List<Int> = emptyList(),
     val status: HabitStatus,
     @EncodeDefault(EncodeDefault.Mode.NEVER) val groupId: Long? = null,
     @EncodeDefault(EncodeDefault.Mode.NEVER) val fields: List<Habit> = emptyList(),
@@ -71,7 +72,14 @@ fun Row.toHabit(): Habit {
         unit = stringOrNull("unit"),
         direction = Direction.parse(stringOrNull("direction")),
         reminders = times.map { it.toLocalTime() },
+        reminderDays = intArray("reminder_days"),
         status = HabitStatus.parse(stringOrNull("status")),
         groupId = longOrNull("group_id"),
     )
+}
+
+/** Reads a nullable Postgres int[] column; NULL becomes an empty list. */
+fun Row.intArray(column: String): List<Int> {
+    val arr = underlying.getArray(column) ?: return emptyList()
+    return (arr.array as Array<*>).map { (it as Number).toInt() }.sorted()
 }
