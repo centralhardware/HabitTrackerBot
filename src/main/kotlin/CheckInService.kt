@@ -34,34 +34,27 @@ object CheckInService {
         ) > 0
     }
 
-    fun recordQuantity(habitId: Long, userId: Long, date: LocalDate, value: Double, comment: String? = null): Boolean {
-        val habit = HabitService.findById(habitId, userId) ?: return false
-        if (habit.type != HabitType.QUANTITY || habit.isGroupRoot) return false
-        return CheckInRepository.insertEventWithValues(
-            CheckinEvent(userId, date, reminderId = null, comment = comment),
-            listOf(CheckinValue(habitId, CheckinStatus.DONE, quantity = value)),
-        ) > 0
-    }
-
     /**
-     * Записывает событие чекина группы: одну строку в checkins (с общим комментом)
-     * и N строк в checkin_values (по полю). Возвращает количество записанных строк.
+     * Записывает событие чекина quantity-привычки: одну строку в checkins (с общим комментом)
+     * и N строк в checkin_values. [values] ключуется по id цели: для группы — по id полей,
+     * для одиночной привычки — по её собственному id (одиночная = группа с одним значением).
+     * Возвращает количество записанных строк.
      */
-    fun recordQuantityGroup(
-        rootId: Long,
+    fun recordQuantity(
+        habitId: Long,
         userId: Long,
         date: LocalDate,
         values: Map<Long, Double>,
         comment: String? = null
     ): Int {
         if (values.isEmpty()) return 0
-        val root = HabitService.findById(rootId, userId) ?: return 0
-        if (!root.isGroupRoot) return 0
-        val allowedFieldIds = root.fields.map { it.id }.toSet()
-        val sanitized = values.filterKeys { it in allowedFieldIds }
+        val habit = HabitService.findById(habitId, userId) ?: return 0
+        if (habit.type != HabitType.QUANTITY) return 0
+        val allowedIds = if (habit.isGroupRoot) habit.fields.map { it.id }.toSet() else setOf(habit.id)
+        val sanitized = values.filterKeys { it in allowedIds }
         if (sanitized.isEmpty()) return 0
-        val valueRows = sanitized.map { (fieldId, value) ->
-            CheckinValue(fieldId, CheckinStatus.DONE, quantity = value)
+        val valueRows = sanitized.map { (id, value) ->
+            CheckinValue(id, CheckinStatus.DONE, quantity = value)
         }
         return CheckInRepository.insertEventWithValues(
             CheckinEvent(userId, date, reminderId = null, comment = comment),

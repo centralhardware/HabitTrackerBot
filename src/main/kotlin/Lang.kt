@@ -107,25 +107,6 @@ object Strings {
         "Unit (e.g. km, kg, ml)? Send \"-\" to skip.",
         "Единица измерения (например км, кг, мл)? Отправьте «-», чтобы пропустить.")
 
-    fun sendAmount(l: Lang, h: Habit) = pick(l,
-        "Send the amount for \"${h.name}\"${h.unit?.let { " ($it)" } ?: ""} — optional comment after a space:",
-        "Отправьте количество для «${h.name}»${h.unit?.let { " ($it)" } ?: ""} — после пробела можно добавить комментарий:")
-
-    fun sendGroupFieldAmount(l: Lang, root: Habit, field: Habit): String {
-        val unit = field.unit?.let { " ($it)" } ?: ""
-        return pick(l,
-            "[${root.name}] ${field.name}$unit — send amount, or \"-\" to skip:",
-            "[${root.name}] ${field.name}$unit — отправьте количество или «-», чтобы пропустить:")
-    }
-
-    fun sendGroupComment(l: Lang) = pick(l,
-        "Comment for the whole event (or \"-\" to skip):",
-        "Комментарий ко всему событию (или «-», чтобы пропустить):")
-
-    fun invalidAmount(l: Lang) = pick(l,
-        "Amount must be a positive number.",
-        "Количество должно быть положительным числом.")
-
     fun sendDirection(l: Lang) = pick(l,
         "Direction:",
         "Направление:")
@@ -242,47 +223,6 @@ object Strings {
         }
         val body = buildString {
             append(if (target != null) "$current/$target" else "$current")
-            h.direction?.let { append(" ${directionShort(l, it)}") }
-        }
-        return "$mark $date — ${h.name}: $body"
-    }
-
-    fun quantityGroupLine(l: Lang, root: Habit, perField: Map<Habit, Double>, date: LocalDate): String {
-        val header = "$date — ${root.name}"
-        val fieldLines = root.fields.map { f ->
-            val current = perField[f] ?: 0.0
-            val target = f.dailyTarget
-            val unit = f.unit?.let { " $it" } ?: ""
-            val hitOk = when (f.direction) {
-                Direction.LESS -> target != null && current <= target
-                else -> target != null && current >= target
-            }
-            val mark = when {
-                target != null && hitOk -> "✅"
-                target != null -> "⏳"
-                else -> "•"
-            }
-            val body = if (target != null) "${formatAmount(current)}/${formatAmount(target)}$unit"
-                       else "${formatAmount(current)}$unit"
-            "  $mark ${f.name}: $body"
-        }
-        return (listOf(header) + fieldLines).joinToString("\n")
-    }
-
-    fun quantityLine(l: Lang, h: Habit, current: Double, date: LocalDate): String {
-        val target = h.dailyTarget
-        val unit = h.unit?.let { " $it" } ?: ""
-        val hitOk = when (h.direction) {
-            Direction.LESS -> target != null && current <= target
-            else -> target != null && current >= target
-        }
-        val mark = when {
-            target != null && hitOk -> "✅"
-            target != null -> "⏳"
-            else -> "•"
-        }
-        val body = buildString {
-            append(if (target != null) "${formatAmount(current)}/${formatAmount(target)}$unit" else "${formatAmount(current)}$unit")
             h.direction?.let { append(" ${directionShort(l, it)}") }
         }
         return "$mark $date — ${h.name}: $body"
@@ -478,17 +418,6 @@ object Strings {
         "Token #$id not found or already revoked.",
         "Токен #$id не найден или уже отозван.")
 
-    fun mcpRecordedScheduled(l: Lang, name: String, time: String, done: Boolean, date: LocalDate): String {
-        val verdict = if (done) cbDone(l) else cbSkipped(l)
-        return pick(l,
-            "🤖 via MCP — $name ($time): $verdict — $date",
-            "🤖 через MCP — $name ($time): $verdict — $date")
-    }
-
-    fun mcpRecordedCounter(l: Lang, name: String, count: Int, date: LocalDate) = pick(l,
-        "🤖 via MCP — $name +$count — $date",
-        "🤖 через MCP — $name +$count — $date")
-
     fun mcpRecordedQuantity(l: Lang, name: String, amount: Double, unit: String?, date: LocalDate, comment: String?): String {
         val u = unit?.let { " $it" } ?: ""
         val c = comment?.let { "\n💬 $it" } ?: ""
@@ -510,27 +439,10 @@ object Strings {
         return comment?.let { "$body\n💬 $it" } ?: body
     }
 
-    fun mcpCreatedHabit(l: Lang, name: String) = pick(l,
-        "🤖 via MCP — created habit “$name”",
-        "🤖 через MCP — создана привычка «$name»")
-
-    fun mcpPausedHabit(l: Lang, name: String) = pick(l,
-        "🤖 via MCP — paused “$name”",
-        "🤖 через MCP — приостановлена «$name»")
-
-    fun mcpResumedHabit(l: Lang, name: String) = pick(l,
-        "🤖 via MCP — resumed “$name”",
-        "🤖 через MCP — возобновлена «$name»")
-
-    fun mcpDeletedHabit(l: Lang, name: String) = pick(l,
-        "🤖 via MCP — deleted “$name”",
-        "🤖 через MCP — удалена «$name»")
-
     fun btnDone(l: Lang) = pick(l, "✅ Done", "✅ Готово")
     fun btnSkip(l: Lang) = pick(l, "❌ Skip", "❌ Пропуск")
     fun btnDelete(l: Lang) = pick(l, "🗑 Delete", "🗑 Удалить")
     fun btnPlusOne(l: Lang) = pick(l, "➕1", "➕1")
-    fun btnLog(l: Lang) = pick(l, "➕ log", "➕ ввести")
     fun btnModeSingle(l: Lang) = pick(l, "📏 single value", "📏 одно значение")
     fun btnModeGroup(l: Lang) = pick(l, "🧩 multiple fields", "🧩 несколько полей")
 

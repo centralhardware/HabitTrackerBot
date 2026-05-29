@@ -1,7 +1,5 @@
 package dto
 
-import kotlinx.serialization.EncodeDefault
-import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 
@@ -12,26 +10,24 @@ val McpJson: Json = Json {
 }
 
 @Serializable
-data class CheckinRecordArgs(
-    val habitId: Long,
-    val value: Double? = null,
-    val date: String? = null,
-    val reminderTime: String? = null,
-    val status: String? = null,
-    val comment: String? = null,
-)
-
-@Serializable
 data class CheckinsListArgs(
-    val habitId: Long,
+    val habitIds: List<Long>,
     val from: String? = null,
     val to: String? = null,
 )
 
+/** One habit's check-ins in a batch [CheckinsListArgs] query. */
 @Serializable
-data class QuantityGroupRecordArgs(
+data class HabitCheckins(
     val habitId: Long,
-    val values: List<FieldValueArg>,
+    val found: Boolean,
+    val checkins: List<CheckinRecord>,
+)
+
+@Serializable
+data class QuantityRecordArgs(
+    val habitId: Long,
+    val values: List<FieldValueArg> = emptyList(),
     val date: String? = null,
     val comment: String? = null,
 )
@@ -40,49 +36,4 @@ data class QuantityGroupRecordArgs(
 data class FieldValueArg(
     val fieldId: Long,
     val value: Double,
-)
-
-@Serializable
-data class HabitCreateArgs(
-    val name: String,
-    val type: String,
-    val reminders: List<ReminderArg> = emptyList(),
-    val dailyTarget: Double? = null,
-    val unit: String? = null,
-    val direction: String? = null,
-)
-
-@Serializable
-data class HabitGroupCreateArgs(
-    val name: String,
-    val fields: List<GroupFieldArg>,
-    val reminders: List<ReminderArg> = emptyList(),
-)
-
-@Serializable
-data class ReminderArg(
-    val time: String,
-    val days: List<Int> = emptyList(),
-)
-
-@Serializable
-data class GroupFieldArg(
-    val name: String,
-    val dailyTarget: Double? = null,
-    val unit: String? = null,
-    val direction: String? = null,
-)
-
-@Serializable
-data class HabitIdArgs(
-    val habitId: Long,
-)
-
-@OptIn(ExperimentalSerializationApi::class)
-@Serializable
-data class McpProp(
-    val type: String,
-    @EncodeDefault(EncodeDefault.Mode.NEVER) val pattern: String? = null,
-    @EncodeDefault(EncodeDefault.Mode.NEVER) val exclusiveMinimum: Int? = null,
-    @EncodeDefault(EncodeDefault.Mode.NEVER) val enum: List<String>? = null,
 )

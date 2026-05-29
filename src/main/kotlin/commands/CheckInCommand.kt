@@ -29,10 +29,8 @@ fun BehaviourContext.registerCheckInCommand() {
         val scheduled = CheckInRepository.pendingCheckIns(userId, yesterday, today)
         val active = HabitService.listActive(userId).filter { it.status == HabitStatus.ACTIVE }
         val counters = active.filter { it.type == HabitType.COUNTER }
-        val quantitySingles = active.filter { it.type == HabitType.QUANTITY && it.groupId == null }
-        val quantityGroups = active.filter { it.isGroupRoot }
 
-        if (scheduled.isEmpty() && counters.isEmpty() && quantitySingles.isEmpty() && quantityGroups.isEmpty()) {
+        if (scheduled.isEmpty() && counters.isEmpty()) {
             sendMessage(message.chat.id, Strings.nothingToCheckIn(lang))
             return@onCommand
         }
@@ -54,26 +52,6 @@ fun BehaviourContext.registerCheckInCommand() {
                 chatId = message.chat.id,
                 text = Strings.counterLine(lang, habit, current, today),
                 replyMarkup = Keyboards.logPlus(habit.id, today, lang)
-            )
-        }
-
-        quantitySingles.forEach { habit ->
-            val current = CheckInService.quantitySumOn(habit.id, today)
-            sendMessage(
-                chatId = message.chat.id,
-                text = Strings.quantityLine(lang, habit, current, today),
-                replyMarkup = Keyboards.logQuantity(habit.id, today, lang)
-            )
-        }
-
-        quantityGroups.forEach { root ->
-            val perField = root.fields.associateWith { f ->
-                CheckInService.quantitySumOn(f.id, today)
-            }
-            sendMessage(
-                chatId = message.chat.id,
-                text = Strings.quantityGroupLine(lang, root, perField, today),
-                replyMarkup = Keyboards.logQuantity(root.id, today, lang)
             )
         }
     }

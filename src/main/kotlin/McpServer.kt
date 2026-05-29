@@ -21,16 +21,10 @@ import io.modelcontextprotocol.kotlin.sdk.types.CallToolResult
 import io.modelcontextprotocol.kotlin.sdk.types.Implementation
 import io.modelcontextprotocol.kotlin.sdk.types.ServerCapabilities
 import io.modelcontextprotocol.kotlin.sdk.types.TextContent
-import mcp.CheckinRecordTool
 import mcp.CheckinsListTool
-import mcp.HabitCreateGroupTool
-import mcp.HabitCreateTool
-import mcp.HabitDeleteTool
-import mcp.HabitPauseTool
-import mcp.HabitResumeTool
 import mcp.HabitsListTool
 import mcp.McpTool
-import mcp.QuantityGroupRecordTool
+import mcp.QuantityRecordTool
 import mcp.StatsUserTool
 import java.time.ZoneId
 import java.time.ZoneOffset
@@ -41,13 +35,7 @@ private val TzKey = AttributeKey<ZoneId>("mcpTz")
 
 private val tools: List<McpTool> = listOf(
     HabitsListTool,
-    HabitCreateTool,
-    HabitCreateGroupTool,
-    HabitPauseTool,
-    HabitResumeTool,
-    HabitDeleteTool,
-    CheckinRecordTool,
-    QuantityGroupRecordTool,
+    QuantityRecordTool,
     CheckinsListTool,
     StatsUserTool,
 )

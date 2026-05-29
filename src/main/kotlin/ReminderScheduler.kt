@@ -35,8 +35,8 @@ object ReminderScheduler {
                     Keyboards.checkIn(reminder.reminderId, reminder.userDate, lang)
                 HabitType.COUNTER ->
                     Keyboards.logPlus(reminder.habitId, reminder.userDate, lang)
-                HabitType.QUANTITY ->
-                    Keyboards.logQuantity(reminder.habitId, reminder.userDate, lang)
+                // Quantity habits are logged via MCP, not the bot — fire a plain reminder.
+                HabitType.QUANTITY -> null
             }
             sendMessage(
                 chatId = reminder.userId.toChatId(),
