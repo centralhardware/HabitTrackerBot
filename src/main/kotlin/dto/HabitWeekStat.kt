@@ -1,7 +1,5 @@
 package dto
 
-import kotliquery.Row
-
 data class HabitWeekStat(
     val habitId: Long,
     val name: String,
@@ -25,13 +23,4 @@ data class WeekTotals(
     val days: Int,
     val quantityTotal: Double,
     val quantityDays: Int
-)
-
-fun Row.toWeekTotals(): WeekTotals = WeekTotals(
-    done = int("done"),
-    skip = int("skip"),
-    total = int("total"),
-    days = int("days"),
-    quantityTotal = double("qtotal"),
-    quantityDays = int("qdays")
 )

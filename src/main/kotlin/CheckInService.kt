@@ -4,6 +4,7 @@ import dto.CheckinEvent
 import dto.CheckinRecord
 import dto.CheckinStatus
 import dto.CheckinValue
+import dto.CheckinValueRow
 import dto.Habit
 import dto.HabitStat
 import dto.HabitType
@@ -70,47 +71,45 @@ object CheckInService {
 
     fun listInRange(habitId: Long, userId: Long, from: LocalDate, to: LocalDate): List<CheckinRecord>? {
         HabitService.findById(habitId, userId) ?: return null
-        return CheckInRepository.findInRange(habitId, from, to)
+        return CheckinAnalytics.inRange(CheckInRepository.loadForHabit(habitId), from, to)
     }
+
+    /** Number of counter/manual events logged for [habitId] on [date]. */
+    fun counterCountOn(habitId: Long, date: LocalDate): Int =
+        CheckinAnalytics.countOn(CheckInRepository.loadForHabit(habitId), date)
+
+    /** Sum of manual quantities logged for [habitId] on [date]. */
+    fun quantitySumOn(habitId: Long, date: LocalDate): Double =
+        CheckinAnalytics.quantitySumOn(CheckInRepository.loadForHabit(habitId), date)
 
     fun userStats(userId: Long, today: LocalDate): List<HabitStat> {
         return HabitService.listActive(userId).map { habitStat(it, today) }
     }
 
     private fun habitStat(h: Habit, today: LocalDate): HabitStat {
-        val loggedDates = collectDates(h, CheckInRepository::loggedDates)
-        val skipDates = collectDates(h, CheckInRepository::skipDates)
+        val rows = loadRows(h)
+        val loggedDates = CheckinAnalytics.loggedDates(rows)
+        val skipDates = CheckinAnalytics.skipDates(rows)
         val pastLogged = loggedDates.count { it < today }
         return HabitStat(
             habitId = h.id,
             name = h.name,
             streak = streak(loggedDates, skipDates, today),
             loggedDays = pastLogged,
-            totalDays = pastDaysSince(h, today),
-            trend = if (h.type == HabitType.QUANTITY && !h.isGroupRoot) quantityTrend(h, today) else null,
+            totalDays = pastDaysSince(rows, today),
+            trend = if (h.type == HabitType.QUANTITY && !h.isGroupRoot) quantityTrend(h, rows, today) else null,
             groupFields = if (h.isGroupRoot) h.fields.map { habitStat(it, today) } else emptyList(),
         )
     }
 
-    private fun pastDaysSince(h: Habit, today: LocalDate): Int {
-        val start = firstCheckinDate(h) ?: return 0
+    /** Loads a habit's rows; for a group root, the union of its fields' rows. */
+    private fun loadRows(h: Habit): List<CheckinValueRow> =
+        if (h.isGroupRoot) h.fields.flatMap { CheckInRepository.loadForHabit(it.id) }
+        else CheckInRepository.loadForHabit(h.id)
+
+    private fun pastDaysSince(rows: List<CheckinValueRow>, today: LocalDate): Int {
+        val start = CheckinAnalytics.firstDate(rows) ?: return 0
         return ChronoUnit.DAYS.between(start, today).toInt().coerceAtLeast(0)
-    }
-
-    private fun firstCheckinDate(h: Habit): LocalDate? {
-        if (h.isGroupRoot) {
-            return h.fields.mapNotNull { CheckInRepository.firstCheckinDate(it.id) }.minOrNull()
-        }
-        return CheckInRepository.firstCheckinDate(h.id)
-    }
-
-    private fun collectDates(h: Habit, query: (Long) -> List<LocalDate>): Set<LocalDate> {
-        if (h.isGroupRoot) {
-            val all = mutableSetOf<LocalDate>()
-            h.fields.forEach { all += query(it.id) }
-            return all
-        }
-        return query(h.id).toSet()
     }
 
     private fun streak(logged: Set<LocalDate>, skipped: Set<LocalDate>, today: LocalDate): Int {
@@ -126,8 +125,8 @@ object CheckInService {
 
     private const val TREND_WINDOW_DAYS = 7
 
-    private fun quantityTrend(h: Habit, today: LocalDate): QuantityTrend {
-        val perDay = CheckInRepository.quantitySumsPerDay(h.id).associate { it.date to it.amount }
+    private fun quantityTrend(h: Habit, rows: List<CheckinValueRow>, today: LocalDate): QuantityTrend {
+        val perDay = CheckinAnalytics.quantitySumsPerDay(rows)
         val recent = (1..TREND_WINDOW_DAYS)
             .mapNotNull { perDay[today.minusDays(it.toLong())] }
             .toDoubleArray()

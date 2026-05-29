@@ -1,5 +1,6 @@
 package commands
 
+import CheckInService
 import HabitService
 import Keyboards
 import Strings
@@ -48,7 +49,7 @@ fun BehaviourContext.registerCheckInCommand() {
         }
 
         counters.forEach { habit ->
-            val current = CheckInRepository.todayCounterCount(habit.id, today)
+            val current = CheckInService.counterCountOn(habit.id, today)
             sendMessage(
                 chatId = message.chat.id,
                 text = Strings.counterLine(lang, habit, current, today),
@@ -57,7 +58,7 @@ fun BehaviourContext.registerCheckInCommand() {
         }
 
         quantitySingles.forEach { habit ->
-            val current = CheckInRepository.todayQuantitySum(habit.id, today)
+            val current = CheckInService.quantitySumOn(habit.id, today)
             sendMessage(
                 chatId = message.chat.id,
                 text = Strings.quantityLine(lang, habit, current, today),
@@ -67,7 +68,7 @@ fun BehaviourContext.registerCheckInCommand() {
 
         quantityGroups.forEach { root ->
             val perField = root.fields.associateWith { f ->
-                CheckInRepository.todayQuantitySum(f.id, today)
+                CheckInService.quantitySumOn(f.id, today)
             }
             sendMessage(
                 chatId = message.chat.id,

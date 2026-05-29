@@ -17,7 +17,7 @@ object McpTokenService {
     data class Issued(val token: McpToken, val plaintext: String)
 
     fun issue(userId: Long, label: String): Issued? {
-        if (McpTokenRepository.countActive(userId) >= MAX_ACTIVE_TOKENS_PER_USER) return null
+        if (McpTokenRepository.listActive(userId).size >= MAX_ACTIVE_TOKENS_PER_USER) return null
         val bytes = ByteArray(RAW_BYTES).also(random::nextBytes)
         val plaintext = TOKEN_PREFIX + encoder.encodeToString(bytes)
         val hash = sha256(plaintext.toByteArray(Charsets.UTF_8))
@@ -33,9 +33,9 @@ object McpTokenService {
         val token = parseBearer(authorizationHeader) ?: return null
         if (!token.startsWith(TOKEN_PREFIX)) return null
         val hash = sha256(token.toByteArray(Charsets.UTF_8))
-        val userId = McpTokenRepository.findActiveUserIdByHash(hash) ?: return null
+        val active = McpTokenRepository.findActiveByHash(hash) ?: return null
         McpTokenRepository.touchLastUsed(hash)
-        return userId
+        return active.userId
     }
 
     private fun parseBearer(header: String?): String? {

@@ -39,16 +39,6 @@ object McpTokenRepository {
             )
         }
 
-    fun countActive(userId: Long): Int =
-        sessionOf(DatabaseService.dataSource).use { session ->
-            session.run(
-                queryOf(
-                    "SELECT COUNT(*) AS c FROM mcp_tokens WHERE user_id = ? AND revoked_at IS NULL",
-                    userId
-                ).map { it.int("c") }.asSingle
-            ) ?: 0
-        }
-
     fun revoke(id: Long, userId: Long): Boolean =
         sessionOf(DatabaseService.dataSource).use { session ->
             session.update(
@@ -63,17 +53,17 @@ object McpTokenRepository {
             ) > 0
         }
 
-    fun findActiveUserIdByHash(tokenHash: ByteArray): Long? =
+    fun findActiveByHash(tokenHash: ByteArray): McpToken? =
         sessionOf(DatabaseService.dataSource).use { session ->
             session.run(
                 queryOf(
                     """
-                    SELECT user_id
+                    SELECT id, user_id, label, created_at, last_used_at
                     FROM mcp_tokens
                     WHERE token_hash = ? AND revoked_at IS NULL
                     """.trimIndent(),
                     tokenHash
-                ).map { it.long("user_id") }.asSingle
+                ).map { it.toMcpToken() }.asSingle
             )
         }
 

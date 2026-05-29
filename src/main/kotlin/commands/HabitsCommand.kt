@@ -26,8 +26,10 @@ fun BehaviourContext.registerHabitsCommand() {
             habits.forEach { habit ->
                 val flag = if (habit.status == HabitStatus.PAUSED) " ⏸" else ""
                 val typeLabel = Strings.habitTypeLabel(lang, habit)
-                val times = habit.reminders.joinToString(", ") { it.format(Keyboards.TIME_FMT) }
-                    .let { t -> if (t.isNotEmpty() && habit.reminderDays.isNotEmpty()) "$t (${Strings.formatDays(lang, habit.reminderDays)})" else t }
+                val times = habit.reminders.joinToString(", ") { rem ->
+                    val d = if (rem.days.isNotEmpty()) " (${Strings.formatDays(lang, rem.days)})" else ""
+                    "${rem.time.format(Keyboards.TIME_FMT)}$d"
+                }
                 val tail = when {
                     times.isNotEmpty() -> " — $times"
                     habit.type == HabitType.SCHEDULED -> ""

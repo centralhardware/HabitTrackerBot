@@ -43,24 +43,33 @@ data class CheckinRecord(
     @EncodeDefault(EncodeDefault.Mode.NEVER) val comment: String? = null,
 )
 
-data class DayCount(val date: LocalDate, val count: Int)
-data class DayAmount(val date: LocalDate, val amount: Double)
+/**
+ * One `checkin_values` row joined with its parent `checkins` event — the raw unit the
+ * analytics layer computes over. `isScheduled` mirrors `reminder_id IS NOT NULL`.
+ */
+data class CheckinValueRow(
+    val date: LocalDate,
+    val isScheduled: Boolean,
+    val status: CheckinStatus?,
+    val quantity: Double?,
+    val comment: String?,
+    val reminderTime: LocalTime?,
+)
+
+fun Row.toCheckinValueRow(): CheckinValueRow = CheckinValueRow(
+    date = localDate("check_date"),
+    isScheduled = longOrNull("reminder_id") != null,
+    status = stringOrNull("status")?.let { v -> CheckinStatus.entries.firstOrNull { it.value == v } },
+    quantity = doubleOrNull("quantity"),
+    comment = stringOrNull("comment"),
+    reminderTime = localTimeOrNull("reminder_time"),
+)
 
 fun Row.toPendingCheckIn(): PendingCheckIn = PendingCheckIn(
     reminderId = long("reminder_id"),
     name = string("name"),
     reminderTime = localTime("reminder_time"),
     date = localDate("check_date")
-)
-
-fun Row.toDayCount(): DayCount = DayCount(
-    date = localDate("check_date"),
-    count = int("cnt")
-)
-
-fun Row.toDayAmount(): DayAmount = DayAmount(
-    date = localDate("check_date"),
-    amount = double("amt")
 )
 
 fun Row.toCheckinRecord(): CheckinRecord = CheckinRecord(

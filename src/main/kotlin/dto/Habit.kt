@@ -6,8 +6,6 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.Transient
 import kotliquery.Row
-import java.sql.Time
-import java.time.LocalTime
 
 @Serializable
 enum class HabitType(val value: String) {
@@ -50,8 +48,7 @@ data class Habit(
     @EncodeDefault(EncodeDefault.Mode.NEVER) val dailyTarget: Double? = null,
     @EncodeDefault(EncodeDefault.Mode.NEVER) val unit: String? = null,
     @EncodeDefault(EncodeDefault.Mode.NEVER) val direction: Direction? = null,
-    val reminders: List<@Serializable(LocalTimeSerializer::class) LocalTime>,
-    @EncodeDefault(EncodeDefault.Mode.NEVER) val reminderDays: List<Int> = emptyList(),
+    val reminders: List<HabitReminder> = emptyList(),
     val status: HabitStatus,
     @EncodeDefault(EncodeDefault.Mode.NEVER) val groupId: Long? = null,
     @EncodeDefault(EncodeDefault.Mode.NEVER) val fields: List<Habit> = emptyList(),
@@ -60,23 +57,18 @@ data class Habit(
     val isGroupField: Boolean get() = groupId != null && groupId != id
 }
 
-fun Row.toHabit(): Habit {
-    @Suppress("UNCHECKED_CAST")
-    val times = underlying.getArray("times").array as Array<Time>
-    return Habit(
-        id = long("id"),
-        userId = long("user_id"),
-        name = string("name"),
-        type = HabitType.parse(stringOrNull("habit_type")),
-        dailyTarget = doubleOrNull("daily_target"),
-        unit = stringOrNull("unit"),
-        direction = Direction.parse(stringOrNull("direction")),
-        reminders = times.map { it.toLocalTime() },
-        reminderDays = intArray("reminder_days"),
-        status = HabitStatus.parse(stringOrNull("status")),
-        groupId = longOrNull("group_id"),
-    )
-}
+/** Maps a `habits` row. Reminders are loaded separately and filled in by the repository. */
+fun Row.toHabit(): Habit = Habit(
+    id = long("id"),
+    userId = long("user_id"),
+    name = string("name"),
+    type = HabitType.parse(stringOrNull("habit_type")),
+    dailyTarget = doubleOrNull("daily_target"),
+    unit = stringOrNull("unit"),
+    direction = Direction.parse(stringOrNull("direction")),
+    status = HabitStatus.parse(stringOrNull("status")),
+    groupId = longOrNull("group_id"),
+)
 
 /** Reads a nullable Postgres int[] column; NULL becomes an empty list. */
 fun Row.intArray(column: String): List<Int> {

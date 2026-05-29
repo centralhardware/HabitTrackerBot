@@ -3,10 +3,10 @@ package db
 import DatabaseService
 import dto.Habit
 import dto.HabitReminder
-import dto.HabitStatus
 import dto.RawDue
 import dto.RawMissed
 import dto.toHabit
+import dto.toHabitReminder
 import dto.toRawDue
 import dto.toRawMissed
 import kotliquery.queryOf
@@ -39,25 +39,34 @@ object HabitRepository {
 
     private fun listRawActive(userId: Long): List<Habit> {
         return sessionOf(DatabaseService.dataSource).use { session ->
-            session.run(
+            val habits = session.run(
                 queryOf(
                     """
                     SELECT h.id, h.user_id, h.name, h.habit_type, h.daily_target,
-                           h.unit, h.direction, h.status, h.group_id, h.reminder_days,
-                           COALESCE(
-                               ARRAY_AGG(r.reminder_time ORDER BY r.reminder_time)
-                                   FILTER (WHERE r.reminder_time IS NOT NULL),
-                               '{}'
-                           ) AS times
+                           h.unit, h.direction, h.status, h.group_id
                     FROM habits h
-                    LEFT JOIN habit_reminders r ON r.habit_id = h.id
                     WHERE h.user_id = ? AND h.status <> 'deleted'
-                    GROUP BY h.id
                     ORDER BY h.created_at
                     """.trimIndent(),
                     userId
                 ).map { it.toHabit() }.asList
             )
+            if (habits.isEmpty()) return@use habits
+
+            val remindersByHabit = session.run(
+                queryOf(
+                    """
+                    SELECT r.id, r.habit_id, r.reminder_time, r.reminder_days
+                    FROM habit_reminders r
+                    JOIN habits h ON h.id = r.habit_id
+                    WHERE h.user_id = ? AND h.status <> 'deleted'
+                    ORDER BY r.reminder_time
+                    """.trimIndent(),
+                    userId
+                ).map { it.long("habit_id") to it.toHabitReminder() }.asList
+            ).groupBy({ it.first }, { it.second })
+
+            habits.map { it.copy(reminders = remindersByHabit[it.id].orEmpty()) }
         }
     }
 
@@ -70,20 +79,20 @@ object HabitRepository {
                 val id = tx.updateAndReturnGeneratedKey(
                     queryOf(
                         """
-                        INSERT INTO habits (user_id, name, habit_type, daily_target, unit, direction, status, reminder_days)
-                        VALUES (?, ?, ?::habit_type, ?, ?, ?::habit_direction, ?::habit_status, ?::int[])
+                        INSERT INTO habits (user_id, name, habit_type, daily_target, unit, direction, status)
+                        VALUES (?, ?, ?::habit_type, ?, ?, ?::habit_direction, ?::habit_status)
                         """.trimIndent(),
                         habit.userId, habit.name, habit.type.value,
                         habit.dailyTarget, habit.unit, habit.direction?.value,
-                        habit.status.value, habit.reminderDays.toPgArray()
+                        habit.status.value
                     )
                 ) ?: error("Failed to insert habit")
 
-                habit.reminders.forEach { time ->
+                habit.reminders.forEach { rem ->
                     tx.execute(
                         queryOf(
-                            "INSERT INTO habit_reminders (habit_id, reminder_time) VALUES (?, ?)",
-                            id, time
+                            "INSERT INTO habit_reminders (habit_id, reminder_time, reminder_days) VALUES (?, ?, ?::int[])",
+                            id, rem.time, rem.days.toPgArray()
                         )
                     )
                 }
@@ -102,11 +111,10 @@ object HabitRepository {
                 val rootId = tx.updateAndReturnGeneratedKey(
                     queryOf(
                         """
-                        INSERT INTO habits (user_id, name, habit_type, status, reminder_days)
-                        VALUES (?, ?, ?::habit_type, ?::habit_status, ?::int[])
+                        INSERT INTO habits (user_id, name, habit_type, status)
+                        VALUES (?, ?, ?::habit_type, ?::habit_status)
                         """.trimIndent(),
-                        root.userId, root.name, root.type.value, root.status.value,
-                        root.reminderDays.toPgArray()
+                        root.userId, root.name, root.type.value, root.status.value
                     )
                 ) ?: error("Failed to insert group root")
 
@@ -114,11 +122,11 @@ object HabitRepository {
                     queryOf("UPDATE habits SET group_id = ? WHERE id = ?", rootId, rootId)
                 )
 
-                root.reminders.forEach { time ->
+                root.reminders.forEach { rem ->
                     tx.execute(
                         queryOf(
-                            "INSERT INTO habit_reminders (habit_id, reminder_time) VALUES (?, ?)",
-                            rootId, time
+                            "INSERT INTO habit_reminders (habit_id, reminder_time, reminder_days) VALUES (?, ?, ?::int[])",
+                            rootId, rem.time, rem.days.toPgArray()
                         )
                     )
                 }
@@ -169,31 +177,6 @@ object HabitRepository {
         return habit
     }
 
-    /**
-     * Меняет статус: для одиночной — у одной строки, для корня группы — каскадно у корня и всех полей.
-     */
-    fun setStatusCascade(habit: Habit, status: HabitStatus): Int {
-        val isRoot = habit.isGroupRoot
-        return sessionOf(DatabaseService.dataSource).use { session ->
-            session.update(
-                queryOf(
-                    """
-                    UPDATE habits
-                    SET status     = ?::habit_status,
-                        paused_at  = CASE WHEN ?::habit_status = 'paused'  AND status <> 'paused'  THEN now() ELSE paused_at  END,
-                        deleted_at = CASE WHEN ?::habit_status = 'deleted' AND status <> 'deleted' THEN now() ELSE deleted_at END
-                    WHERE user_id = ?
-                      AND (id = ? OR (? AND group_id = ?))
-                    """.trimIndent(),
-                    status.value,
-                    status.value, status.value,
-                    habit.userId,
-                    habit.id, isRoot, habit.id
-                )
-            )
-        }
-    }
-
     fun listReminders(habitId: Long, userId: Long): List<HabitReminder> {
         return sessionOf(DatabaseService.dataSource).use { session ->
             session.run(
@@ -233,7 +216,7 @@ object HabitRepository {
                 queryOf(
                     """
                     SELECT r.id AS reminder_id, h.id AS habit_id, h.habit_type,
-                           h.user_id, h.name, r.reminder_time, h.reminder_days,
+                           h.user_id, h.name, r.reminder_time, r.reminder_days,
                            us.timezone AS tz, us.language AS lang
                     FROM habit_reminders r
                     JOIN habits h ON h.id = r.habit_id
@@ -289,8 +272,8 @@ object HabitRepository {
                           AND h.habit_type = 'scheduled'
                           AND us.timezone IS NOT NULL
                           AND c.id IS NULL
-                          AND (h.reminder_days IS NULL
-                               OR EXTRACT(ISODOW FROM d::date)::int = ANY(h.reminder_days))
+                          AND (r.reminder_days IS NULL
+                               OR EXTRACT(ISODOW FROM d::date)::int = ANY(r.reminder_days))
                           AND ((d::date + r.reminder_time)
                                   AT TIME ZONE us.timezone)
                               < now() - INTERVAL '1 minute'

@@ -16,6 +16,7 @@ import dev.inmo.tgbotapi.types.MessageId
 import dev.inmo.tgbotapi.types.buttons.InlineKeyboardButtons.CallbackDataInlineKeyboardButton
 import dev.inmo.tgbotapi.types.buttons.InlineKeyboardMarkup
 import dto.Direction
+import dto.HabitReminder
 import dto.HabitType
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
@@ -262,14 +263,16 @@ fun BehaviourContext.registerAddHabitCommand() {
             }
         }
 
-        val reminderDays: List<Int> = if (times.isNotEmpty()) {
-            sendMessage(message.chat.id, Strings.sendReminderDays(lang))
+        // Ask weekdays per reminder time, so one habit can fire on different days at different times.
+        val reminders = mutableListOf<HabitReminder>()
+        for (time in times) {
+            sendMessage(message.chat.id, Strings.sendReminderDaysFor(lang, time.format(Keyboards.TIME_FMT)))
             val daysText = nextText()
             if (daysText.startsWith("/")) {
                 sendMessage(message.chat.id, Strings.cancelled(lang))
                 return@onCommand
             }
-            if (isSkipped(daysText)) {
+            val days = if (isSkipped(daysText)) {
                 emptyList()
             } else {
                 val parsed = parseDays(daysText)
@@ -279,8 +282,7 @@ fun BehaviourContext.registerAddHabitCommand() {
                 }
                 parsed
             }
-        } else {
-            emptyList()
+            reminders += HabitReminder(time = time, days = days)
         }
 
         val habit = if (groupFields != null) {
@@ -288,19 +290,17 @@ fun BehaviourContext.registerAddHabitCommand() {
                 userId = userId,
                 name = nameText,
                 fields = groupFields,
-                reminders = times,
-                reminderDays = reminderDays
+                reminders = reminders
             )
         } else {
             HabitService.addHabit(
                 userId = userId,
                 name = nameText,
                 type = type,
-                reminders = times,
+                reminders = reminders,
                 dailyTarget = dailyTarget,
                 unit = unit,
-                direction = direction,
-                reminderDays = reminderDays
+                direction = direction
             )
         }
         sendMessage(message.chat.id, Strings.habitAddedDetailed(lang, habit))

@@ -6,7 +6,6 @@ import dto.HabitReminder
 import dto.HabitStatus
 import dto.HabitType
 import java.time.Instant
-import java.time.LocalTime
 import java.time.ZoneId
 
 object HabitService {
@@ -15,11 +14,10 @@ object HabitService {
         userId: Long,
         name: String,
         type: HabitType,
-        reminders: List<LocalTime>,
+        reminders: List<HabitReminder>,
         dailyTarget: Double? = null,
         unit: String? = null,
         direction: Direction? = null,
-        reminderDays: List<Int> = emptyList()
     ): Habit = HabitRepository.upsert(
         Habit(
             id = 0L,
@@ -29,8 +27,7 @@ object HabitService {
             dailyTarget = dailyTarget,
             unit = unit,
             direction = direction,
-            reminders = reminders.sorted(),
-            reminderDays = reminderDays,
+            reminders = reminders.sortedBy { it.time },
             status = HabitStatus.ACTIVE
         )
     )
@@ -43,8 +40,7 @@ object HabitService {
         userId: Long,
         name: String,
         fields: List<FieldSpec>,
-        reminders: List<LocalTime>,
-        reminderDays: List<Int> = emptyList()
+        reminders: List<HabitReminder>,
     ): Habit {
         require(fields.isNotEmpty()) { "Group must have at least one field" }
         val root = Habit(
@@ -52,8 +48,7 @@ object HabitService {
             userId = userId,
             name = name,
             type = HabitType.QUANTITY,
-            reminders = reminders.sorted(),
-            reminderDays = reminderDays,
+            reminders = reminders.sortedBy { it.time },
             status = HabitStatus.ACTIVE
         )
         val fieldHabits = fields.map { f ->
@@ -104,7 +99,10 @@ object HabitService {
     ): Boolean {
         val habit = HabitRepository.find(habitId, userId) ?: return false
         if (!allow(habit)) return false
-        HabitRepository.setStatusCascade(habit, to)
+        // Load-modify-save: flip status on the entity (root + group fields) and persist via the
+        // generic row save. The cascade lives here in Kotlin, not in a specialized SQL statement.
+        val rows = if (habit.isGroupRoot) listOf(habit) + habit.fields else listOf(habit)
+        rows.forEach { HabitRepository.upsert(it.copy(status = to)) }
         return true
     }
 

@@ -1,12 +1,23 @@
 package dto
 
+import kotlinx.serialization.EncodeDefault
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.Transient
 import kotliquery.Row
 import java.time.LocalDate
 import java.time.LocalTime
 
+@Serializable
 data class HabitReminder(
-    val id: Long,
-    val time: LocalTime
+    @Transient val id: Long = 0,
+    @Serializable(LocalTimeSerializer::class) val time: LocalTime,
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val days: List<Int> = emptyList(),
+)
+
+fun Row.toHabitReminder(): HabitReminder = HabitReminder(
+    id = long("id"),
+    time = localTime("reminder_time"),
+    days = intArray("reminder_days"),
 )
 
 data class DueReminder(

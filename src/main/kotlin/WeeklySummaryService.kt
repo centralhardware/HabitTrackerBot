@@ -1,4 +1,5 @@
-import db.WeeklySummaryRepository
+import db.CheckInRepository
+import dto.CheckinValueRow
 import dto.Direction
 import dto.Habit
 import dto.HabitType
@@ -17,8 +18,9 @@ object WeeklySummaryService {
         }
 
         return flat.map { (displayName, h) ->
-            val totals = WeeklySummaryRepository.weeklyTotals(h.id, from, to)
-            val targetHitDays = computeTargetHits(h, from, to)
+            val rows = CheckInRepository.loadForHabit(h.id)
+            val totals = CheckinAnalytics.weekTotals(rows, from, to)
+            val targetHitDays = computeTargetHits(h, rows, from, to)
             HabitWeekStat(
                 habitId = h.id,
                 name = displayName,
@@ -37,19 +39,19 @@ object WeeklySummaryService {
         }
     }
 
-    private fun computeTargetHits(h: Habit, from: LocalDate, to: LocalDate): Int {
+    private fun computeTargetHits(h: Habit, rows: List<CheckinValueRow>, from: LocalDate, to: LocalDate): Int {
         val target = h.dailyTarget ?: return 0
         return when (h.type) {
             HabitType.COUNTER -> {
                 val targetInt = target.toInt()
-                WeeklySummaryRepository.counterCountsInRange(h.id, from, to).count { c ->
-                    if (h.direction == Direction.LESS) c.count <= targetInt
-                    else c.count >= targetInt
+                CheckinAnalytics.counterCountsPerDay(rows, from, to).values.count { count ->
+                    if (h.direction == Direction.LESS) count <= targetInt
+                    else count >= targetInt
                 }
             }
             HabitType.QUANTITY -> {
-                val sums = WeeklySummaryRepository.quantitySumsInRange(h.id, from, to)
-                sums.count { hits(it.amount, target, h.direction) }
+                CheckinAnalytics.quantitySumsPerDayInRange(rows, from, to).values
+                    .count { hits(it, target, h.direction) }
             }
             HabitType.SCHEDULED -> 0
         }

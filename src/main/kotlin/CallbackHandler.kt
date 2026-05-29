@@ -6,7 +6,6 @@ import dev.inmo.tgbotapi.extensions.behaviour_builder.BehaviourContext
 import dev.inmo.tgbotapi.extensions.behaviour_builder.expectations.waitTextMessage
 import dev.inmo.tgbotapi.extensions.behaviour_builder.triggers_handling.onMessageDataCallbackQuery
 import dev.inmo.tgbotapi.types.queries.callback.MessageDataCallbackQuery
-import db.CheckInRepository
 import dto.CheckinStatus
 import dto.HabitType
 import kotlinx.coroutines.flow.filter
@@ -126,7 +125,7 @@ private suspend fun BehaviourContext.handleLog(query: MessageDataCallbackQuery) 
     }
 
     val habit = HabitService.findById(habitId, userId)
-    val total = CheckInRepository.todayCounterCount(habitId, date)
+    val total = CheckInService.counterCountOn(habitId, date)
     val msg = query.message
     val originalText = (msg.content as? dev.inmo.tgbotapi.types.message.content.TextContent)?.text.orEmpty()
     val newText = if (habit != null && habit.type == HabitType.COUNTER) {
@@ -221,7 +220,7 @@ private suspend fun BehaviourContext.logQuantitySingle(
         return
     }
 
-    val total = CheckInRepository.todayQuantitySum(habit.id, date)
+    val total = CheckInService.quantitySumOn(habit.id, date)
     val msg = query.message
     runCatching {
         editMessageText(
@@ -282,7 +281,7 @@ private suspend fun BehaviourContext.logQuantityGroup(
         return
     }
 
-    val perField = root.fields.associateWith { f -> CheckInRepository.todayQuantitySum(f.id, date) }
+    val perField = root.fields.associateWith { f -> CheckInService.quantitySumOn(f.id, date) }
     val msg = query.message
     runCatching {
         editMessageText(

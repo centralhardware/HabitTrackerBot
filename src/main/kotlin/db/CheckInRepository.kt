@@ -2,12 +2,10 @@ package db
 
 import DatabaseService
 import dto.CheckinEvent
-import dto.CheckinRecord
 import dto.CheckinValue
-import dto.DayAmount
+import dto.CheckinValueRow
 import dto.PendingCheckIn
-import dto.toCheckinRecord
-import dto.toDayAmount
+import dto.toCheckinValueRow
 import dto.toPendingCheckIn
 import kotliquery.queryOf
 import kotliquery.sessionOf
@@ -109,122 +107,25 @@ object CheckInRepository {
         }
     }
 
-    fun todayCounterCount(habitId: Long, date: LocalDate): Int {
+    /**
+     * Loads the full check-in history of a single habit as raw rows. All per-habit
+     * stats (counts, sums, streaks, weekly totals) are computed over this list in
+     * Kotlin (see [CheckinAnalytics]) instead of via specialized aggregate queries.
+     */
+    fun loadForHabit(habitId: Long): List<CheckinValueRow> {
         return sessionOf(DatabaseService.dataSource).use { session ->
             session.run(
                 queryOf(
                     """
-                    SELECT COUNT(*) AS cnt
-                    FROM checkins e
-                    JOIN checkin_values v ON v.checkin_id = e.id
-                    WHERE v.habit_id = ? AND e.reminder_id IS NULL AND e.check_date = ?
-                    """.trimIndent(),
-                    habitId, date
-                ).map { it.int("cnt") }.asSingle
-            ) ?: 0
-        }
-    }
-
-    fun todayQuantitySum(habitId: Long, date: LocalDate): Double {
-        return sessionOf(DatabaseService.dataSource).use { session ->
-            session.run(
-                queryOf(
-                    """
-                    SELECT COALESCE(SUM(v.quantity), 0) AS total
-                    FROM checkins e
-                    JOIN checkin_values v ON v.checkin_id = e.id
-                    WHERE v.habit_id = ? AND e.reminder_id IS NULL AND e.check_date = ?
-                    """.trimIndent(),
-                    habitId, date
-                ).map { it.double("total") }.asSingle
-            ) ?: 0.0
-        }
-    }
-
-    fun firstCheckinDate(habitId: Long): LocalDate? {
-        return sessionOf(DatabaseService.dataSource).use { session ->
-            session.run(
-                queryOf(
-                    """
-                    SELECT MIN(e.check_date) AS d
-                    FROM checkins e
-                    JOIN checkin_values v ON v.checkin_id = e.id
-                    WHERE v.habit_id = ?
-                    """.trimIndent(),
-                    habitId
-                ).map { it.localDateOrNull("d") }.asSingle
-            )
-        }
-    }
-
-    fun quantitySumsPerDay(habitId: Long): List<DayAmount> {
-        return sessionOf(DatabaseService.dataSource).use { session ->
-            session.run(
-                queryOf(
-                    """
-                    SELECT e.check_date, SUM(v.quantity)::float AS amt
-                    FROM checkins e
-                    JOIN checkin_values v ON v.checkin_id = e.id
-                    WHERE v.habit_id = ? AND e.reminder_id IS NULL AND v.quantity IS NOT NULL
-                    GROUP BY e.check_date
-                    ORDER BY e.check_date
-                    """.trimIndent(),
-                    habitId
-                ).map { it.toDayAmount() }.asList
-            )
-        }
-    }
-
-    fun loggedDates(habitId: Long): List<LocalDate> {
-        return sessionOf(DatabaseService.dataSource).use { session ->
-            session.run(
-                queryOf(
-                    """
-                    SELECT DISTINCT e.check_date
-                    FROM checkins e
-                    JOIN checkin_values v ON v.checkin_id = e.id
-                    WHERE v.habit_id = ?
-                      AND (e.reminder_id IS NULL OR v.status = 'done')
-                    ORDER BY e.check_date
-                    """.trimIndent(),
-                    habitId
-                ).map { it.localDate("check_date") }.asList
-            )
-        }
-    }
-
-    fun skipDates(habitId: Long): List<LocalDate> {
-        return sessionOf(DatabaseService.dataSource).use { session ->
-            session.run(
-                queryOf(
-                    """
-                    SELECT DISTINCT e.check_date
-                    FROM checkins e
-                    JOIN checkin_values v ON v.checkin_id = e.id
-                    WHERE v.habit_id = ? AND v.status = 'skip'
-                    ORDER BY e.check_date
-                    """.trimIndent(),
-                    habitId
-                ).map { it.localDate("check_date") }.asList
-            )
-        }
-    }
-
-    fun findInRange(habitId: Long, from: LocalDate, to: LocalDate): List<CheckinRecord> {
-        return sessionOf(DatabaseService.dataSource).use { session ->
-            session.run(
-                queryOf(
-                    """
-                    SELECT e.check_date, v.status, v.quantity, e.comment, r.reminder_time
+                    SELECT e.check_date, e.reminder_id, v.status, v.quantity, e.comment, r.reminder_time
                     FROM checkins e
                     JOIN checkin_values v ON v.checkin_id = e.id
                     LEFT JOIN habit_reminders r ON r.id = e.reminder_id
                     WHERE v.habit_id = ?
-                      AND e.check_date BETWEEN ?::date AND ?::date
                     ORDER BY e.check_date, r.reminder_time NULLS FIRST, e.id
                     """.trimIndent(),
-                    habitId, from, to
-                ).map { it.toCheckinRecord() }.asList
+                    habitId
+                ).map { it.toCheckinValueRow() }.asList
             )
         }
     }
