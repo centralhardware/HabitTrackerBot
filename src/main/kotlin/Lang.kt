@@ -130,19 +130,25 @@ object Strings {
         "Direction:",
         "Направление:")
 
-    fun sendTimes(l: Lang) = pick(l,
-        "Send one or more reminder times (HH:MM), space-separated. Example: 09:00 21:00",
-        "Отправьте одно или несколько времён напоминаний (ЧЧ:ММ) через пробел. Пример: 09:00 21:00")
+    fun sendFirstReminderTime(l: Lang) = pick(l,
+        "Send a reminder time (HH:MM), e.g. 09:00:",
+        "Отправьте время напоминания (ЧЧ:ММ), например 09:00:")
 
-    fun sendOptionalTimes(l: Lang) = pick(l,
-        "Reminder times (HH:MM, space-separated) — or \"-\" for none.",
-        "Времена напоминаний (ЧЧ:ММ через пробел) или «-», если не нужны.")
+    fun sendFirstReminderTimeOptional(l: Lang) = pick(l,
+        "Send a reminder time (HH:MM), or \"-\" if you don't need reminders:",
+        "Отправьте время напоминания (ЧЧ:ММ) или «-», если напоминания не нужны:")
+
+    fun sendNextReminderTimeOrDone(l: Lang) = pick(l,
+        "Add another reminder time (HH:MM), or \"done\" to finish:",
+        "Добавьте ещё одно время напоминания (ЧЧ:ММ) или «готово», чтобы закончить:")
+
+    fun duplicateTime(l: Lang) = pick(l,
+        "That time is already added. Send a different one.",
+        "Это время уже добавлено. Отправьте другое.")
 
     fun invalidTime(l: Lang) = pick(l,
         "Invalid time format. Use HH:MM, e.g. 09:00.",
         "Неверный формат времени. Используйте ЧЧ:ММ, например 09:00.")
-
-    fun noTimes(l: Lang) = pick(l, "No times provided.", "Время не указано.")
 
     fun sendReminderDaysFor(l: Lang, time: String) = pick(l,
         "Which weekdays should the $time reminder fire? Send numbers 1-7 (1=Mon … 7=Sun), space-separated. Example: 1 2 3 4 5. Send \"-\" for every day.",

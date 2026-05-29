@@ -249,45 +249,39 @@ fun BehaviourContext.registerAddHabitCommand() {
             }
         }
 
-        val times: List<LocalTime> = if (type == HabitType.SCHEDULED) {
-            sendMessage(message.chat.id, Strings.sendTimes(lang))
-            val timesText = nextText()
-            if (timesText.startsWith("/")) {
+        // Collect reminders one at a time: each reminder gets its own time and its own
+        // arbitrary weekdays. Scheduled habits need at least one; for other types reminders
+        // are optional. Asking time then days per reminder lets the same habit fire on
+        // different days at different times.
+        val timesRequired = type == HabitType.SCHEDULED
+        val reminders = mutableListOf<HabitReminder>()
+        while (true) {
+            val firstOne = reminders.isEmpty()
+            val prompt = when {
+                !firstOne -> Strings.sendNextReminderTimeOrDone(lang)
+                timesRequired -> Strings.sendFirstReminderTime(lang)
+                else -> Strings.sendFirstReminderTimeOptional(lang)
+            }
+            sendMessage(message.chat.id, prompt)
+            val timeText = nextText()
+            if (timeText.startsWith("/")) {
                 sendMessage(message.chat.id, Strings.cancelled(lang))
                 return@onCommand
             }
-            val parsed = parseTimes(timesText)
-            if (parsed == null) {
+            // "done"/"готово"/"-" finishes the list; for an optional first reminder it means "none".
+            if (!firstOne && isDone(timeText)) break
+            if (firstOne && !timesRequired && isSkipped(timeText)) break
+
+            val time = parseTime(timeText)
+            if (time == null) {
                 sendMessage(message.chat.id, Strings.invalidTime(lang))
                 return@onCommand
             }
-            if (parsed.isEmpty()) {
-                sendMessage(message.chat.id, Strings.noTimes(lang))
-                return@onCommand
+            if (reminders.any { it.time == time }) {
+                sendMessage(message.chat.id, Strings.duplicateTime(lang))
+                continue
             }
-            parsed
-        } else {
-            sendMessage(message.chat.id, Strings.sendOptionalTimes(lang))
-            val timesText = nextText()
-            if (timesText.startsWith("/")) {
-                sendMessage(message.chat.id, Strings.cancelled(lang))
-                return@onCommand
-            }
-            if (isSkipped(timesText)) {
-                emptyList()
-            } else {
-                val parsed = parseTimes(timesText)
-                if (parsed == null) {
-                    sendMessage(message.chat.id, Strings.invalidTime(lang))
-                    return@onCommand
-                }
-                parsed
-            }
-        }
 
-        // Ask weekdays per reminder time, so one habit can fire on different days at different times.
-        val reminders = mutableListOf<HabitReminder>()
-        for (time in times) {
             sendMessage(message.chat.id, Strings.sendReminderDaysFor(lang, time.format(Keyboards.TIME_FMT)))
             val daysText = nextText()
             if (daysText.startsWith("/")) {
@@ -388,13 +382,13 @@ private fun directionKeyboard(lang: Lang): InlineKeyboardMarkup {
 private fun isSkipped(s: String): Boolean = s.isBlank() ||
         s == "-" || s.equals("no", ignoreCase = true) || s.equals("нет", ignoreCase = true)
 
-private fun parseTimes(text: String): List<LocalTime>? {
-    val tokens = text.split(Regex("\\s+")).filter { it.isNotBlank() }
-    return try {
-        tokens.map { LocalTime.parse(it, Keyboards.TIME_FMT) }.distinct().sorted()
-    } catch (_: DateTimeParseException) {
-        null
-    }
+private fun isDone(s: String): Boolean = s == "-" ||
+        s.equals("done", ignoreCase = true) || s.equals("готово", ignoreCase = true)
+
+private fun parseTime(text: String): LocalTime? = try {
+    LocalTime.parse(text.trim(), Keyboards.TIME_FMT)
+} catch (_: DateTimeParseException) {
+    null
 }
 
 /** Parses weekday numbers (ISO 1=Mon..7=Sun), space- or comma-separated. */
