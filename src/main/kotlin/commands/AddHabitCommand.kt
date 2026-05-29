@@ -76,11 +76,23 @@ fun BehaviourContext.registerAddHabitCommand() {
             return@onCommand
         }
 
+        // Log mode: a pure journal with no targets/streaks/trends, hidden from /stats.
+        // In this mode we skip every metric-related prompt (target, direction).
+        val logChoice = pickFromKeyboard(
+            Strings.pickLogMode(lang),
+            logModeKeyboard(lang),
+            LOG_PREFIX
+        ) ?: run {
+            sendMessage(message.chat.id, Strings.cancelled(lang))
+            return@onCommand
+        }
+        val logOnly = logChoice == LOG_ON
+
         var dailyTarget: Double? = null
         var unit: String? = null
         var direction: Direction? = null
 
-        if (type == HabitType.COUNTER) {
+        if (type == HabitType.COUNTER && !logOnly) {
             sendMessage(message.chat.id, Strings.sendDailyTarget(lang))
             val raw = nextText()
             if (raw.startsWith("/")) {
@@ -143,19 +155,22 @@ fun BehaviourContext.registerAddHabitCommand() {
                         return@onCommand
                     }
 
-                    sendMessage(message.chat.id, Strings.sendDailyTargetValue(lang))
-                    val tRaw = nextText()
-                    if (tRaw.startsWith("/")) {
-                        sendMessage(message.chat.id, Strings.cancelled(lang))
-                        return@onCommand
-                    }
-                    val fTarget = if (isSkipped(tRaw)) null else {
-                        val v = tRaw.replace(',', '.').toDoubleOrNull()
-                        if (v == null || v <= 0.0 || v.isNaN() || v.isInfinite()) {
-                            sendMessage(message.chat.id, Strings.invalidTargetValue(lang))
+                    var fTarget: Double? = null
+                    if (!logOnly) {
+                        sendMessage(message.chat.id, Strings.sendDailyTargetValue(lang))
+                        val tRaw = nextText()
+                        if (tRaw.startsWith("/")) {
+                            sendMessage(message.chat.id, Strings.cancelled(lang))
                             return@onCommand
                         }
-                        v
+                        fTarget = if (isSkipped(tRaw)) null else {
+                            val v = tRaw.replace(',', '.').toDoubleOrNull()
+                            if (v == null || v <= 0.0 || v.isNaN() || v.isInfinite()) {
+                                sendMessage(message.chat.id, Strings.invalidTargetValue(lang))
+                                return@onCommand
+                            }
+                            v
+                        }
                     }
 
                     sendMessage(message.chat.id, Strings.sendUnit(lang))
@@ -166,16 +181,19 @@ fun BehaviourContext.registerAddHabitCommand() {
                     }
                     val fUnit = if (isSkipped(uRaw)) null else uRaw.take(16)
 
-                    val dRaw = pickFromKeyboard(
-                        Strings.sendDirection(lang),
-                        directionKeyboard(lang),
-                        DIR_PREFIX
-                    ) ?: run {
-                        sendMessage(message.chat.id, Strings.cancelled(lang))
-                        return@onCommand
-                    }
-                    val fDir = if (dRaw == DIR_NONE) null
+                    var fDir: Direction? = null
+                    if (!logOnly) {
+                        val dRaw = pickFromKeyboard(
+                            Strings.sendDirection(lang),
+                            directionKeyboard(lang),
+                            DIR_PREFIX
+                        ) ?: run {
+                            sendMessage(message.chat.id, Strings.cancelled(lang))
+                            return@onCommand
+                        }
+                        fDir = if (dRaw == DIR_NONE) null
                                else Direction.entries.firstOrNull { it.value == dRaw }
+                    }
 
                     groupFields.add(HabitService.FieldSpec(fname.take(64), fTarget, fUnit, fDir))
                 }
@@ -185,19 +203,21 @@ fun BehaviourContext.registerAddHabitCommand() {
                     return@onCommand
                 }
             } else {
-                sendMessage(message.chat.id, Strings.sendDailyTargetValue(lang))
-                val raw = nextText()
-                if (raw.startsWith("/")) {
-                    sendMessage(message.chat.id, Strings.cancelled(lang))
-                    return@onCommand
-                }
-                if (!isSkipped(raw)) {
-                    val v = raw.replace(',', '.').toDoubleOrNull()
-                    if (v == null || v <= 0.0 || v.isNaN() || v.isInfinite()) {
-                        sendMessage(message.chat.id, Strings.invalidTargetValue(lang))
+                if (!logOnly) {
+                    sendMessage(message.chat.id, Strings.sendDailyTargetValue(lang))
+                    val raw = nextText()
+                    if (raw.startsWith("/")) {
+                        sendMessage(message.chat.id, Strings.cancelled(lang))
                         return@onCommand
                     }
-                    dailyTarget = v
+                    if (!isSkipped(raw)) {
+                        val v = raw.replace(',', '.').toDoubleOrNull()
+                        if (v == null || v <= 0.0 || v.isNaN() || v.isInfinite()) {
+                            sendMessage(message.chat.id, Strings.invalidTargetValue(lang))
+                            return@onCommand
+                        }
+                        dailyTarget = v
+                    }
                 }
 
                 sendMessage(message.chat.id, Strings.sendUnit(lang))
@@ -210,19 +230,21 @@ fun BehaviourContext.registerAddHabitCommand() {
                     unit = unitRaw.take(16)
                 }
 
-                val dirChoice = pickFromKeyboard(
-                    Strings.sendDirection(lang),
-                    directionKeyboard(lang),
-                    DIR_PREFIX
-                ) ?: run {
-                    sendMessage(message.chat.id, Strings.cancelled(lang))
-                    return@onCommand
-                }
-                direction = if (dirChoice == DIR_NONE) null
-                            else Direction.entries.firstOrNull { it.value == dirChoice }
-                if (direction == null && dirChoice != DIR_NONE) {
-                    sendMessage(message.chat.id, Strings.cancelled(lang))
-                    return@onCommand
+                if (!logOnly) {
+                    val dirChoice = pickFromKeyboard(
+                        Strings.sendDirection(lang),
+                        directionKeyboard(lang),
+                        DIR_PREFIX
+                    ) ?: run {
+                        sendMessage(message.chat.id, Strings.cancelled(lang))
+                        return@onCommand
+                    }
+                    direction = if (dirChoice == DIR_NONE) null
+                                else Direction.entries.firstOrNull { it.value == dirChoice }
+                    if (direction == null && dirChoice != DIR_NONE) {
+                        sendMessage(message.chat.id, Strings.cancelled(lang))
+                        return@onCommand
+                    }
                 }
             }
         }
@@ -290,7 +312,8 @@ fun BehaviourContext.registerAddHabitCommand() {
                 userId = userId,
                 name = nameText,
                 fields = groupFields,
-                reminders = reminders
+                reminders = reminders,
+                logOnly = logOnly
             )
         } else {
             HabitService.addHabit(
@@ -300,7 +323,8 @@ fun BehaviourContext.registerAddHabitCommand() {
                 reminders = reminders,
                 dailyTarget = dailyTarget,
                 unit = unit,
-                direction = direction
+                direction = direction,
+                logOnly = logOnly
             )
         }
         sendMessage(message.chat.id, Strings.habitAddedDetailed(lang, habit))
@@ -313,6 +337,16 @@ private const val DIR_NONE = "none"
 private const val MODE_PREFIX = "am"
 private const val MODE_SINGLE = "single"
 private const val MODE_GROUP = "group"
+private const val LOG_PREFIX = "al"
+private const val LOG_ON = "log"
+private const val LOG_OFF = "tracked"
+
+private fun logModeKeyboard(lang: Lang) = InlineKeyboardMarkup(
+    listOf(
+        listOf(CallbackDataInlineKeyboardButton(Strings.btnTracked(lang), "$LOG_PREFIX|$LOG_OFF")),
+        listOf(CallbackDataInlineKeyboardButton(Strings.btnLogOnly(lang), "$LOG_PREFIX|$LOG_ON")),
+    )
+)
 
 private fun quantityModeKeyboard(lang: Lang) = InlineKeyboardMarkup(
     listOf(

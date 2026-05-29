@@ -43,7 +43,7 @@ object HabitRepository {
                 queryOf(
                     """
                     SELECT h.id, h.user_id, h.name, h.habit_type, h.daily_target,
-                           h.unit, h.direction, h.status, h.group_id
+                           h.unit, h.direction, h.status, h.group_id, h.log_only
                     FROM habits h
                     WHERE h.user_id = ? AND h.status <> 'deleted'
                     ORDER BY h.created_at
@@ -79,12 +79,12 @@ object HabitRepository {
                 val id = tx.updateAndReturnGeneratedKey(
                     queryOf(
                         """
-                        INSERT INTO habits (user_id, name, habit_type, daily_target, unit, direction, status)
-                        VALUES (?, ?, ?::habit_type, ?, ?, ?::habit_direction, ?::habit_status)
+                        INSERT INTO habits (user_id, name, habit_type, daily_target, unit, direction, status, log_only)
+                        VALUES (?, ?, ?::habit_type, ?, ?, ?::habit_direction, ?::habit_status, ?)
                         """.trimIndent(),
                         habit.userId, habit.name, habit.type.value,
                         habit.dailyTarget, habit.unit, habit.direction?.value,
-                        habit.status.value
+                        habit.status.value, habit.logOnly
                     )
                 ) ?: error("Failed to insert habit")
 
@@ -111,10 +111,10 @@ object HabitRepository {
                 val rootId = tx.updateAndReturnGeneratedKey(
                     queryOf(
                         """
-                        INSERT INTO habits (user_id, name, habit_type, status)
-                        VALUES (?, ?, ?::habit_type, ?::habit_status)
+                        INSERT INTO habits (user_id, name, habit_type, status, log_only)
+                        VALUES (?, ?, ?::habit_type, ?::habit_status, ?)
                         """.trimIndent(),
-                        root.userId, root.name, root.type.value, root.status.value
+                        root.userId, root.name, root.type.value, root.status.value, root.logOnly
                     )
                 ) ?: error("Failed to insert group root")
 
@@ -135,12 +135,12 @@ object HabitRepository {
                     val fid = tx.updateAndReturnGeneratedKey(
                         queryOf(
                             """
-                            INSERT INTO habits (user_id, name, habit_type, daily_target, unit, direction, status, group_id)
-                            VALUES (?, ?, ?::habit_type, ?, ?, ?::habit_direction, ?::habit_status, ?)
+                            INSERT INTO habits (user_id, name, habit_type, daily_target, unit, direction, status, group_id, log_only)
+                            VALUES (?, ?, ?::habit_type, ?, ?, ?::habit_direction, ?::habit_status, ?, ?)
                             """.trimIndent(),
                             f.userId, f.name, f.type.value,
                             f.dailyTarget, f.unit, f.direction?.value,
-                            f.status.value, rootId
+                            f.status.value, rootId, f.logOnly
                         )
                     ) ?: error("Failed to insert group field")
                     f.copy(id = fid, groupId = rootId)
@@ -163,12 +163,13 @@ object HabitRepository {
                         unit         = ?,
                         direction    = ?::habit_direction,
                         status       = ?::habit_status,
+                        log_only     = ?,
                         paused_at    = CASE WHEN ?::habit_status = 'paused'  AND status <> 'paused'  THEN now() ELSE paused_at  END,
                         deleted_at   = CASE WHEN ?::habit_status = 'deleted' AND status <> 'deleted' THEN now() ELSE deleted_at END
                     WHERE id = ? AND user_id = ?
                     """.trimIndent(),
                     habit.name, habit.type.value, habit.dailyTarget, habit.unit, habit.direction?.value,
-                    habit.status.value,
+                    habit.status.value, habit.logOnly,
                     habit.status.value, habit.status.value,
                     habit.id, habit.userId
                 )

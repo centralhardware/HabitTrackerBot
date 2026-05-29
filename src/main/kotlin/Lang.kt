@@ -160,8 +160,10 @@ object Strings {
         return days.filter { it in 1..7 }.sorted().joinToString(",") { names[it - 1] }
     }
 
+    fun logBadge(l: Lang): String = pick(l, " · 📒 log", " · 📒 журнал")
+
     fun habitAddedDetailed(l: Lang, h: Habit): String {
-        val type = habitTypeLabel(l, h)
+        val type = habitTypeLabel(l, h) + if (h.logOnly) logBadge(l) else ""
         val times = h.reminders.joinToString(", ") { rem ->
             val d = if (rem.days.isNotEmpty()) " (${formatDays(l, rem.days)})" else ""
             "${rem.time.format(Keyboards.TIME_FMT)}$d"
@@ -525,6 +527,13 @@ object Strings {
     fun btnLog(l: Lang) = pick(l, "➕ log", "➕ ввести")
     fun btnModeSingle(l: Lang) = pick(l, "📏 single value", "📏 одно значение")
     fun btnModeGroup(l: Lang) = pick(l, "🧩 multiple fields", "🧩 несколько полей")
+
+    fun pickLogMode(l: Lang) = pick(l,
+        "Track metrics, or just keep a log?\n• tracked — streaks, completion, trends and weekly summary\n• log only — just a journal of entries, no targets/streaks, hidden from /stats",
+        "Считать метрики или просто вести журнал?\n• с метриками — серии, выполнение, тренды и недельная сводка\n• только журнал — лог записей без целей/серий, скрыт из /stats")
+
+    fun btnTracked(l: Lang) = pick(l, "📊 tracked", "📊 с метриками")
+    fun btnLogOnly(l: Lang) = pick(l, "📒 log only", "📒 только журнал")
 
     fun pickQuantityMode(l: Lang) = pick(l,
         "Single value (one number per check-in) or multiple fields (e.g. distance + duration + calories)?",

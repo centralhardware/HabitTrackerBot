@@ -83,7 +83,8 @@ object CheckInService {
         CheckinAnalytics.quantitySumOn(CheckInRepository.loadForHabit(habitId), date)
 
     fun userStats(userId: Long, today: LocalDate): List<HabitStat> {
-        return HabitService.listActive(userId).map { habitStat(it, today) }
+        // Log-only habits are pure journals — no streaks/completion/trends — so they're omitted here.
+        return HabitService.listActive(userId).filterNot { it.logOnly }.map { habitStat(it, today) }
     }
 
     private fun habitStat(h: Habit, today: LocalDate): HabitStat {

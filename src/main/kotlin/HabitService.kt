@@ -18,6 +18,7 @@ object HabitService {
         dailyTarget: Double? = null,
         unit: String? = null,
         direction: Direction? = null,
+        logOnly: Boolean = false,
     ): Habit = HabitRepository.upsert(
         Habit(
             id = 0L,
@@ -28,7 +29,8 @@ object HabitService {
             unit = unit,
             direction = direction,
             reminders = reminders.sortedBy { it.time },
-            status = HabitStatus.ACTIVE
+            status = HabitStatus.ACTIVE,
+            logOnly = logOnly
         )
     )
 
@@ -41,6 +43,7 @@ object HabitService {
         name: String,
         fields: List<FieldSpec>,
         reminders: List<HabitReminder>,
+        logOnly: Boolean = false,
     ): Habit {
         require(fields.isNotEmpty()) { "Group must have at least one field" }
         val root = Habit(
@@ -49,7 +52,8 @@ object HabitService {
             name = name,
             type = HabitType.QUANTITY,
             reminders = reminders.sortedBy { it.time },
-            status = HabitStatus.ACTIVE
+            status = HabitStatus.ACTIVE,
+            logOnly = logOnly
         )
         val fieldHabits = fields.map { f ->
             Habit(
@@ -61,7 +65,8 @@ object HabitService {
                 unit = f.unit,
                 direction = f.direction,
                 reminders = emptyList(),
-                status = HabitStatus.ACTIVE
+                status = HabitStatus.ACTIVE,
+                logOnly = logOnly
             )
         }
         return HabitRepository.insertGroup(root, fieldHabits)

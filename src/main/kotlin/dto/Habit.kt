@@ -52,6 +52,7 @@ data class Habit(
     val status: HabitStatus,
     @EncodeDefault(EncodeDefault.Mode.NEVER) val groupId: Long? = null,
     @EncodeDefault(EncodeDefault.Mode.NEVER) val fields: List<Habit> = emptyList(),
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val logOnly: Boolean = false,
 ) {
     val isGroupRoot: Boolean get() = groupId != null && groupId == id
     val isGroupField: Boolean get() = groupId != null && groupId != id
@@ -68,6 +69,7 @@ fun Row.toHabit(): Habit = Habit(
     direction = Direction.parse(stringOrNull("direction")),
     status = HabitStatus.parse(stringOrNull("status")),
     groupId = longOrNull("group_id"),
+    logOnly = boolean("log_only"),
 )
 
 /** Reads a nullable Postgres int[] column; NULL becomes an empty list. */
