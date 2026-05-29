@@ -8,12 +8,10 @@ import dto.Direction
 import dto.HabitCreateArgs
 import dto.HabitType
 import dto.McpJson
-import io.modelcontextprotocol.kotlin.sdk.types.CallToolRequest
 import io.modelcontextprotocol.kotlin.sdk.types.CallToolResult
 import io.modelcontextprotocol.kotlin.sdk.types.ToolSchema
 import kotlinx.serialization.json.add
 import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.decodeFromJsonElement
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
 import kotlinx.serialization.json.putJsonObject
@@ -24,17 +22,13 @@ import java.time.format.DateTimeParseException
 
 private val TimeFmt: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm")
 
-object HabitCreateTool : McpTool {
+object HabitCreateTool : TypedMcpTool<HabitCreateArgs>(HabitCreateArgs.serializer()) {
     override val name = "habit_create"
     override val description =
         "Create a single habit. type: 'scheduled' (reminders required, each reminder is a daily check-in slot), 'counter' (tally events; optional dailyTarget and direction), or 'quantity' (log an amount; optional dailyTarget, unit, direction). reminders is an array of HH:MM strings; required for scheduled, optional otherwise. dailyTarget must be > 0. direction is 'more' or 'less'. For multi-field quantity habits use 'habit_create_group' instead."
     override val inputSchema: ToolSchema = buildSchema()
 
-    override fun handle(userId: Long, lang: Lang, tz: ZoneId, request: CallToolRequest): CallToolResult {
-        val rawArgs = request.arguments ?: return err("arguments required")
-        val args = runCatching { McpJson.decodeFromJsonElement<HabitCreateArgs>(rawArgs) }
-            .getOrElse { return err("Invalid arguments: ${it.message}") }
-
+    override fun handle(userId: Long, lang: Lang, tz: ZoneId, args: HabitCreateArgs): CallToolResult {
         val name = args.name.trim()
         if (name.isBlank()) return err("'name' must not be blank")
 

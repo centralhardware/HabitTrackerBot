@@ -8,12 +8,9 @@ import Strings
 import dto.CheckinRecordArgs
 import dto.CheckinStatus
 import dto.HabitType
-import dto.McpJson
 import dto.McpProp
-import io.modelcontextprotocol.kotlin.sdk.types.CallToolRequest
 import io.modelcontextprotocol.kotlin.sdk.types.CallToolResult
 import io.modelcontextprotocol.kotlin.sdk.types.ToolSchema
-import kotlinx.serialization.json.decodeFromJsonElement
 import java.time.LocalDate
 import java.time.LocalTime
 import java.time.ZoneId
@@ -23,7 +20,7 @@ import java.time.format.DateTimeParseException
 
 private val TimeFmt: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm")
 
-object CheckinRecordTool : McpTool {
+object CheckinRecordTool : TypedMcpTool<CheckinRecordArgs>(CheckinRecordArgs.serializer()) {
     override val name = "checkin_record"
     override val description =
         "Record a check-in. counter: value is an integer count 1..100 (default 1). quantity (single-field): value is the amount (>0); optional comment attaches a free-form note. For multi-field quantity habits prefer 'quantity_group_record' — it writes all fields with one shared comment in a single call; this tool will reject the group root's habitId. scheduled: status is 'done' (default) or 'skip'; if the habit has more than one reminder, pass reminderTime (HH:MM). Date is optional (YYYY-MM-DD), defaults to today in the user's timezone. Future dates are rejected; for scheduled habits, the reminder slot must have already fired today. 'comment' is only allowed for quantity habits."
@@ -39,10 +36,7 @@ object CheckinRecordTool : McpTool {
         required = listOf("habitId"),
     )
 
-    override fun handle(userId: Long, lang: Lang, tz: ZoneId, request: CallToolRequest): CallToolResult {
-        val rawArgs = request.arguments ?: return err("arguments required")
-        val args = runCatching { McpJson.decodeFromJsonElement<CheckinRecordArgs>(rawArgs) }
-            .getOrElse { return err("Invalid arguments: ${it.message}") }
+    override fun handle(userId: Long, lang: Lang, tz: ZoneId, args: CheckinRecordArgs): CallToolResult {
         val habit = HabitService.findById(args.habitId, userId)
             ?: return err("Habit ${args.habitId} not found")
         val nowLocal = ZonedDateTime.now(tz)

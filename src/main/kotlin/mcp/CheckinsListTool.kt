@@ -5,16 +5,14 @@ import Lang
 import dto.CheckinsListArgs
 import dto.McpJson
 import dto.McpProp
-import io.modelcontextprotocol.kotlin.sdk.types.CallToolRequest
 import io.modelcontextprotocol.kotlin.sdk.types.CallToolResult
 import io.modelcontextprotocol.kotlin.sdk.types.ToolSchema
-import kotlinx.serialization.json.decodeFromJsonElement
 import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeParseException
 import java.time.temporal.ChronoUnit
 
-object CheckinsListTool : McpTool {
+object CheckinsListTool : TypedMcpTool<CheckinsListArgs>(CheckinsListArgs.serializer()) {
     override val name = "checkins_list"
     override val description =
         "List past check-ins for a habit between two dates (inclusive). Defaults: from = today - 30 days, to = today (in the user's timezone). Maximum range 366 days. Returns each row with date, status (done/skip/null for pending), quantity (for quantity habits), reminderTime (for scheduled habits), and comment (for quantity habits, when set)."
@@ -27,10 +25,7 @@ object CheckinsListTool : McpTool {
         required = listOf("habitId"),
     )
 
-    override fun handle(userId: Long, lang: Lang, tz: ZoneId, request: CallToolRequest): CallToolResult {
-        val rawArgs = request.arguments ?: return err("arguments required")
-        val args = runCatching { McpJson.decodeFromJsonElement<CheckinsListArgs>(rawArgs) }
-            .getOrElse { return err("Invalid arguments: ${it.message}") }
+    override fun handle(userId: Long, lang: Lang, tz: ZoneId, args: CheckinsListArgs): CallToolResult {
         val today = LocalDate.now(tz)
         val to = args.to?.let {
             try { LocalDate.parse(it) } catch (_: DateTimeParseException) {

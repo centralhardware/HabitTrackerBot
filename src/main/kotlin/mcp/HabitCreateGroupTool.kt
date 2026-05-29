@@ -7,28 +7,22 @@ import Strings
 import dto.Direction
 import dto.HabitGroupCreateArgs
 import dto.McpJson
-import io.modelcontextprotocol.kotlin.sdk.types.CallToolRequest
 import io.modelcontextprotocol.kotlin.sdk.types.CallToolResult
 import io.modelcontextprotocol.kotlin.sdk.types.ToolSchema
 import kotlinx.serialization.json.add
 import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.decodeFromJsonElement
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
 import kotlinx.serialization.json.putJsonObject
 import java.time.ZoneId
 
-object HabitCreateGroupTool : McpTool {
+object HabitCreateGroupTool : TypedMcpTool<HabitGroupCreateArgs>(HabitGroupCreateArgs.serializer()) {
     override val name = "habit_create_group"
     override val description =
         "Create a multi-field quantity habit: a group root with one field per metric. 'fields' is a non-empty array of { name, dailyTarget?, unit?, direction? }; each field's dailyTarget must be > 0 and direction is 'more' or 'less'. 'reminders' is an optional array of HH:MM strings shared by the group. Use 'habit_create' for single-value habits."
     override val inputSchema: ToolSchema = buildSchema()
 
-    override fun handle(userId: Long, lang: Lang, tz: ZoneId, request: CallToolRequest): CallToolResult {
-        val rawArgs = request.arguments ?: return err("arguments required")
-        val args = runCatching { McpJson.decodeFromJsonElement<HabitGroupCreateArgs>(rawArgs) }
-            .getOrElse { return err("Invalid arguments: ${it.message}") }
-
+    override fun handle(userId: Long, lang: Lang, tz: ZoneId, args: HabitGroupCreateArgs): CallToolResult {
         val name = args.name.trim()
         if (name.isBlank()) return err("'name' must not be blank")
         if (args.fields.isEmpty()) return err("'fields' must be non-empty")

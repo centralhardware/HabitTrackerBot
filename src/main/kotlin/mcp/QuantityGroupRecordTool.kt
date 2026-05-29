@@ -5,14 +5,11 @@ import CheckInService
 import HabitService
 import Lang
 import Strings
-import dto.McpJson
 import dto.QuantityGroupRecordArgs
-import io.modelcontextprotocol.kotlin.sdk.types.CallToolRequest
 import io.modelcontextprotocol.kotlin.sdk.types.CallToolResult
 import io.modelcontextprotocol.kotlin.sdk.types.ToolSchema
 import kotlinx.serialization.json.add
 import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.decodeFromJsonElement
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
 import kotlinx.serialization.json.putJsonObject
@@ -20,16 +17,13 @@ import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeParseException
 
-object QuantityGroupRecordTool : McpTool {
+object QuantityGroupRecordTool : TypedMcpTool<QuantityGroupRecordArgs>(QuantityGroupRecordArgs.serializer()) {
     override val name = "quantity_group_record"
     override val description =
         "Record a multi-field quantity check-in in one call: writes one event row with a shared comment and one value row per field. 'habitId' is the group root id (where habits_list returns isGroupRoot/fields). 'values' is an array of { fieldId, value }; fieldId must be one of root.fields[].id; value must be > 0. Date is optional (YYYY-MM-DD), defaults to today in the user's timezone; future dates are rejected. 'comment' is optional and applies to the whole event."
     override val inputSchema: ToolSchema = buildSchema()
 
-    override fun handle(userId: Long, lang: Lang, tz: ZoneId, request: CallToolRequest): CallToolResult {
-        val rawArgs = request.arguments ?: return err("arguments required")
-        val args = runCatching { McpJson.decodeFromJsonElement<QuantityGroupRecordArgs>(rawArgs) }
-            .getOrElse { return err("Invalid arguments: ${it.message}") }
+    override fun handle(userId: Long, lang: Lang, tz: ZoneId, args: QuantityGroupRecordArgs): CallToolResult {
         val root = HabitService.findById(args.habitId, userId)
             ?: return err("Habit ${args.habitId} not found")
         if (!root.isGroupRoot) {
