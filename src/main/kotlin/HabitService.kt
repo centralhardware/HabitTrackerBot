@@ -123,4 +123,19 @@ object HabitService {
             )
         }
     }
+
+    fun backfillMissedScheduled(): List<DueReminder> {
+        return HabitRepository.backfillMissedScheduled().map { r ->
+            DueReminder(
+                reminderId = r.reminderId,
+                habitId = r.habitId,
+                habitType = HabitType.SCHEDULED,
+                userId = r.userId,
+                name = r.name,
+                reminderTime = r.reminderTime,
+                userDate = r.missedDate,
+                langCode = r.langCode
+            )
+        }
+    }
 }
