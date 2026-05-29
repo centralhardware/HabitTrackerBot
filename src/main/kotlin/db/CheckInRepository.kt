@@ -20,38 +20,37 @@ object CheckInRepository {
     /**
      * Upsert a scheduled-reminder check-in: keyed on (reminder_id, check_date).
      * Used for pending-row creation and for the done/skip click.
+     *
+     * Implemented as a single CTE so we avoid the `returnGeneratedKey` +
+     * explicit `RETURNING` + `asSingle` combo that crashes PG JDBC 42.7.4
+     * with "No results were returned by the query."
      */
     fun upsertScheduledValue(event: CheckinEvent, value: CheckinValue): Boolean {
         require(event.reminderId != null) { "scheduled upsert requires reminderId" }
-        return using(sessionOf(DatabaseService.dataSource, returnGeneratedKey = true)) { session ->
-            session.transaction { tx ->
-                val eventId = tx.run(
-                    queryOf(
-                        """
+        return using(sessionOf(DatabaseService.dataSource)) { session ->
+            val written = session.update(
+                queryOf(
+                    """
+                    WITH upsert_event AS (
                         INSERT INTO checkins (user_id, check_date, reminder_id, comment, checked_at)
                         VALUES (?, ?, ?, NULL, now())
-                        ON CONFLICT (reminder_id, check_date) WHERE reminder_id IS NOT NULL
+                        ON CONFLICT (reminder_id, check_date)
+                            WHERE reminder_id IS NOT NULL
                         DO UPDATE SET checked_at = now()
                         RETURNING id
-                        """.trimIndent(),
-                        event.userId, event.checkDate, event.reminderId
-                    ).map { it.long("id") }.asSingle
-                ) ?: return@transaction false
-
-                tx.update(
-                    queryOf(
-                        """
-                        INSERT INTO checkin_values (checkin_id, habit_id, status, quantity)
-                        VALUES (?, ?, ?::checkin_status, ?)
-                        ON CONFLICT (checkin_id, habit_id)
-                        DO UPDATE SET status = EXCLUDED.status,
-                                      quantity = EXCLUDED.quantity
-                        """.trimIndent(),
-                        eventId, value.habitId, value.status?.value, value.quantity
                     )
+                    INSERT INTO checkin_values (checkin_id, habit_id, status, quantity)
+                    SELECT id, ?, ?::checkin_status, ?
+                    FROM upsert_event
+                    ON CONFLICT (checkin_id, habit_id)
+                    DO UPDATE SET status = EXCLUDED.status,
+                                  quantity = EXCLUDED.quantity
+                    """.trimIndent(),
+                    event.userId, event.checkDate, event.reminderId,
+                    value.habitId, value.status?.value, value.quantity
                 )
-                true
-            }
+            )
+            written > 0
         }
     }
 
