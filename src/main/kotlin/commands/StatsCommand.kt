@@ -1,8 +1,8 @@
 package commands
 
-import CheckInService
+import services.CheckInService
 import Strings
-import UserSettingsService
+import services.UserSettingsService
 import dev.inmo.tgbotapi.extensions.api.send.sendMessage
 import dev.inmo.tgbotapi.extensions.behaviour_builder.BehaviourContext
 import dev.inmo.tgbotapi.extensions.behaviour_builder.triggers_handling.onCommand

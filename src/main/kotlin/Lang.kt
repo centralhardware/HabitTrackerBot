@@ -21,6 +21,9 @@ enum class Lang {
             "ru", "russian", "рус", "русский" -> RU
             else -> null
         }
+
+        /** Parses a stored language code (an enum name); null/unknown yields null. */
+        fun stored(code: String?): Lang? = code?.let { runCatching { valueOf(it) }.getOrNull() }
     }
 }
 

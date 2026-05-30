@@ -1,3 +1,5 @@
+package services
+
 import db.McpTokenRepository
 import dto.McpToken
 import java.security.MessageDigest

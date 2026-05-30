@@ -6,6 +6,9 @@ import dev.inmo.tgbotapi.extensions.behaviour_builder.triggers_handling.onMessag
 import dev.inmo.tgbotapi.types.queries.callback.MessageDataCallbackQuery
 import dto.CheckinStatus
 import dto.HabitType
+import services.CheckInService
+import services.HabitService
+import services.UserSettingsService
 import java.time.LocalDate
 
 fun BehaviourContext.registerCallbackHandler() {
@@ -19,8 +22,8 @@ fun BehaviourContext.registerCallbackHandler() {
 private fun queryLang(query: MessageDataCallbackQuery): Lang {
     val userId = query.user.id.chatId.long
     val detected = Lang.of(query.user)
-    UserSettingsService.touchLanguage(userId, detected)
-    return UserSettingsService.getLanguage(userId) ?: detected
+    UserSettingsService.touchLanguageCode(userId, detected.name)
+    return Lang.stored(UserSettingsService.getLanguageCode(userId)) ?: detected
 }
 
 private suspend fun BehaviourContext.handleCheckIn(query: MessageDataCallbackQuery) {
@@ -63,14 +66,10 @@ private suspend fun BehaviourContext.handleCheckIn(query: MessageDataCallbackQue
         return
     }
 
-    val icon = if (status == CheckinStatus.DONE) "✅" else "❌"
+    val icon = checkInIcon(status)
     val msg = query.message
     val originalText = (msg.content as? dev.inmo.tgbotapi.types.message.content.TextContent)?.text.orEmpty()
-    val newText = if (originalText.isNotEmpty()) {
-        originalText.replaceFirst(Regex("^[✅❌⏳]"), icon)
-    } else {
-        "$icon marked"
-    }
+    val newText = if (originalText.isNotEmpty()) resolvedReminderText(originalText, icon) else "$icon marked"
 
     runCatching {
         editMessageText(
@@ -79,6 +78,8 @@ private suspend fun BehaviourContext.handleCheckIn(query: MessageDataCallbackQue
             text = newText
         )
     }
+    // Settle every other reminder message we sent for this same check-in.
+    resolveCheckInMessages(reminderId, date, status, excludeMessageId = msg.messageId.long)
     answerCallbackQuery(
         query,
         text = if (status == CheckinStatus.DONE) Strings.cbDone(lang) else Strings.cbSkipped(lang)

@@ -1,3 +1,5 @@
+package services
+
 import db.UserSettingsRepository
 import dto.UserSettings
 import java.time.ZoneId
@@ -11,17 +13,19 @@ object UserSettingsService {
         UserSettingsRepository.upsert(current(userId).copy(timezone = tz.id))
     }
 
-    fun getLanguage(userId: Long): Lang? =
-        UserSettingsRepository.find(userId)?.language?.let { runCatching { Lang.valueOf(it) }.getOrNull() }
+    // Language is stored and returned as a raw code (the Lang enum name). Mapping to/from
+    // the UI-layer Lang type stays out of the service so this package keeps no UI coupling.
+    fun getLanguageCode(userId: Long): String? =
+        UserSettingsRepository.find(userId)?.language
 
-    fun setLanguage(userId: Long, lang: Lang) {
-        UserSettingsRepository.upsert(current(userId).copy(language = lang.name))
+    fun setLanguageCode(userId: Long, code: String) {
+        UserSettingsRepository.upsert(current(userId).copy(language = code))
     }
 
-    fun touchLanguage(userId: Long, lang: Lang) {
+    fun touchLanguageCode(userId: Long, code: String) {
         val current = current(userId)
         if (current.language == null) {
-            UserSettingsRepository.upsert(current.copy(language = lang.name))
+            UserSettingsRepository.upsert(current.copy(language = code))
         }
     }
 

@@ -5,11 +5,17 @@ import dev.inmo.tgbotapi.extensions.behaviour_builder.BehaviourContext
 import dev.inmo.tgbotapi.types.toChatId
 import dto.DueReminder
 import dto.HabitType
+import dto.CheckinStatus
+import services.CheckInService
+import services.HabitService
+import services.ReminderMessageService
 
 object ReminderScheduler {
 
     suspend fun BehaviourContext.sendDueReminders() {
-        CheckInService.autoSkipOverdue()
+        CheckInService.autoSkipOverdue().forEach { resolved ->
+            resolveCheckInMessages(resolved.reminderId, resolved.checkDate, CheckinStatus.SKIP)
+        }
         HabitService.backfillMissedScheduled().forEach { reminder ->
             deliver(reminder, markPending = false, withDate = true)
         }
@@ -38,11 +44,18 @@ object ReminderScheduler {
                 // Quantity habits are logged via MCP, not the bot — fire a plain reminder.
                 HabitType.QUANTITY -> null
             }
-            sendMessage(
+            val sent = sendMessage(
                 chatId = reminder.userId.toChatId(),
                 text = text,
                 replyMarkup = keyboard
             )
+            // Remember scheduled-reminder messages so they can all be settled to done/skip
+            // when the check-in is resolved through any single button or by auto-skip.
+            if (reminder.habitType == HabitType.SCHEDULED) {
+                ReminderMessageService.remember(
+                    reminder.userId, sent.messageId.long, reminder.reminderId, reminder.userDate, text
+                )
+            }
         }.onFailure { e ->
             KSLog.info("Failed to send reminder to ${reminder.userId}: ${e.message}")
         }

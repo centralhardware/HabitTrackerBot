@@ -1,3 +1,5 @@
+package services
+
 import db.CheckInRepository
 import db.HabitRepository
 import dto.CheckinEvent
@@ -135,9 +137,10 @@ object CheckInService {
         )
     }
 
-    fun autoSkipOverdue() {
+    /** Skips pending scheduled check-ins older than 24h; returns the ones flipped, for message updates. */
+    fun autoSkipOverdue(): List<dto.ResolvedCheckin> {
         val threshold = Instant.now().minus(Duration.ofHours(24))
-        CheckInRepository.markPendingAsSkip(threshold)
+        return CheckInRepository.markPendingAsSkip(threshold)
     }
 
     fun markPending(habitId: Long, userId: Long, reminderId: Long, date: LocalDate) {

@@ -15,11 +15,7 @@ import dev.inmo.krontab.doInfinity
 import dev.inmo.kslog.common.KSLog
 import dev.inmo.kslog.common.error
 import dev.inmo.micro_utils.common.Warning
-import dev.inmo.tgbotapi.AppConfig
 import dev.inmo.tgbotapi.extensions.api.bot.setMyCommands
-import dev.inmo.tgbotapi.extensions.api.bot.setMyDescription
-import dev.inmo.tgbotapi.extensions.api.bot.setMyName
-import dev.inmo.tgbotapi.extensions.api.bot.setMyShortDescription
 import dev.inmo.tgbotapi.extensions.api.chat.modify.setDefaultChatMenuButton
 import dev.inmo.tgbotapi.longPolling
 import dev.inmo.tgbotapi.types.BotCommand
@@ -27,6 +23,8 @@ import dev.inmo.tgbotapi.types.MenuButton
 import dev.inmo.tgbotapi.types.commands.BotCommandScope.Companion.Default
 import dev.inmo.tgbotapi.utils.RiskFeature
 import kotlinx.coroutines.launch
+import mcp.McpServer
+import services.DatabaseService
 
 @OptIn(Warning::class, RiskFeature::class)
 suspend fun main() {

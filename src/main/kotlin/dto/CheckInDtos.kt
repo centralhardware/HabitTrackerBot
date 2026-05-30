@@ -34,6 +34,19 @@ data class PendingCheckIn(
     val date: LocalDate
 )
 
+/** A scheduled-reminder message we sent, awaiting its check-in to be resolved. */
+data class SentReminderMessage(
+    val userId: Long,
+    val messageId: Long,
+    val text: String,
+)
+
+/** Identifies a scheduled check-in by its reminder and date — the key its messages share. */
+data class ResolvedCheckin(
+    val reminderId: Long,
+    val checkDate: LocalDate,
+)
+
 @Serializable
 data class CheckinRecord(
     @Serializable(LocalDateSerializer::class) val date: LocalDate,
@@ -63,6 +76,17 @@ fun Row.toCheckinValueRow(): CheckinValueRow = CheckinValueRow(
     quantity = doubleOrNull("quantity"),
     comment = stringOrNull("comment"),
     reminderTime = localTimeOrNull("reminder_time"),
+)
+
+fun Row.toSentReminderMessage(): SentReminderMessage = SentReminderMessage(
+    userId = long("user_id"),
+    messageId = long("message_id"),
+    text = string("text"),
+)
+
+fun Row.toResolvedCheckin(): ResolvedCheckin = ResolvedCheckin(
+    reminderId = long("reminder_id"),
+    checkDate = localDate("check_date"),
 )
 
 fun Row.toPendingCheckIn(): PendingCheckIn = PendingCheckIn(

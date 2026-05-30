@@ -1,8 +1,8 @@
 package mcp
 
 import BotNotifier
-import CheckInService
-import HabitService
+import services.CheckInService
+import services.HabitService
 import Lang
 import Strings
 import dto.HabitType

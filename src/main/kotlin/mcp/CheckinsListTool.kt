@@ -1,6 +1,6 @@
 package mcp
 
-import CheckInService
+import services.CheckInService
 import Lang
 import dto.CheckinsListArgs
 import dto.HabitCheckins

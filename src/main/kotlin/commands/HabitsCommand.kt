@@ -1,6 +1,6 @@
 package commands
 
-import HabitService
+import services.HabitService
 import Keyboards
 import Strings
 import dev.inmo.tgbotapi.extensions.api.send.sendMessage

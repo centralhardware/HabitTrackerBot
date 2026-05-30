@@ -1,6 +1,6 @@
 package db
 
-import DatabaseService
+import services.DatabaseService
 import dto.McpToken
 import dto.toMcpToken
 import kotliquery.queryOf

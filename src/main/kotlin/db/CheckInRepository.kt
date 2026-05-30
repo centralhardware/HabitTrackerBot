@@ -1,11 +1,12 @@
 package db
 
-import DatabaseService
+import services.DatabaseService
 import dto.CheckinEvent
 import dto.CheckinValue
 import dto.CheckinValueRow
 import dto.PendingCheckIn
 import dto.toCheckinValueRow
+import dto.toResolvedCheckin
 import dto.toPendingCheckIn
 import kotliquery.queryOf
 import kotliquery.sessionOf
@@ -88,9 +89,10 @@ object CheckInRepository {
         }
     }
 
-    fun markPendingAsSkip(threshold: Instant): Int {
+    /** Skips overdue pending scheduled values, returning the (reminder, date) of each flipped row. */
+    fun markPendingAsSkip(threshold: Instant): List<dto.ResolvedCheckin> {
         return sessionOf(DatabaseService.dataSource).use { session ->
-            session.update(
+            session.run(
                 queryOf(
                     """
                     UPDATE checkin_values v
@@ -100,9 +102,10 @@ object CheckInRepository {
                       AND v.status IS NULL
                       AND e.reminder_id IS NOT NULL
                       AND e.checked_at < ?
+                    RETURNING e.reminder_id AS reminder_id, e.check_date AS check_date
                     """.trimIndent(),
                     threshold
-                )
+                ).map { it.toResolvedCheckin() }.asList
             )
         }
     }

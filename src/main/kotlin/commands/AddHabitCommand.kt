@@ -1,10 +1,10 @@
 package commands
 
-import HabitService
+import services.HabitService
 import Keyboards
 import Lang
 import Strings
-import UserSettingsService
+import services.UserSettingsService
 import dev.inmo.tgbotapi.extensions.api.answers.answerCallbackQuery
 import dev.inmo.tgbotapi.extensions.api.edit.reply_markup.editMessageReplyMarkup
 import dev.inmo.tgbotapi.extensions.api.send.sendMessage

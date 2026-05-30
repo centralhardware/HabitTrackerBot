@@ -1,3 +1,6 @@
+package mcp
+
+import Lang
 import dev.inmo.kslog.common.KSLog
 import dev.inmo.kslog.common.error
 import dev.inmo.kslog.common.info
@@ -21,11 +24,8 @@ import io.modelcontextprotocol.kotlin.sdk.types.CallToolResult
 import io.modelcontextprotocol.kotlin.sdk.types.Implementation
 import io.modelcontextprotocol.kotlin.sdk.types.ServerCapabilities
 import io.modelcontextprotocol.kotlin.sdk.types.TextContent
-import mcp.CheckinsListTool
-import mcp.HabitsListTool
-import mcp.McpTool
-import mcp.QuantityRecordTool
-import mcp.StatsUserTool
+import services.McpTokenService
+import services.UserSettingsService
 import java.time.ZoneId
 import java.time.ZoneOffset
 
@@ -54,7 +54,7 @@ object McpServer {
                     return@intercept
                 }
                 context.attributes.put(UserIdKey, userId)
-                context.attributes.put(LangKey, UserSettingsService.getLanguage(userId) ?: Lang.EN)
+                context.attributes.put(LangKey, Lang.stored(UserSettingsService.getLanguageCode(userId)) ?: Lang.EN)
                 context.attributes.put(TzKey, UserSettingsService.getTimezone(userId) ?: ZoneOffset.UTC)
             }
             mcpStatelessStreamableHttp(

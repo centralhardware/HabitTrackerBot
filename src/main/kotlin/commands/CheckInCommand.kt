@@ -1,10 +1,10 @@
 package commands
 
-import CheckInService
-import HabitService
+import services.CheckInService
+import services.HabitService
 import Keyboards
 import Strings
-import UserSettingsService
+import services.UserSettingsService
 import db.CheckInRepository
 import dev.inmo.tgbotapi.extensions.api.send.sendMessage
 import dev.inmo.tgbotapi.extensions.behaviour_builder.BehaviourContext

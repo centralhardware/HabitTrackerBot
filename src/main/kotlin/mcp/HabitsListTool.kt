@@ -1,6 +1,6 @@
 package mcp
 
-import HabitService
+import services.HabitService
 import Lang
 import dto.McpJson
 import io.modelcontextprotocol.kotlin.sdk.types.CallToolRequest

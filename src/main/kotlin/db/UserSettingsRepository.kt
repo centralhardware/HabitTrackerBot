@@ -1,6 +1,6 @@
 package db
 
-import DatabaseService
+import services.DatabaseService
 import dto.UserSettings
 import dto.toUserSettings
 import kotliquery.queryOf

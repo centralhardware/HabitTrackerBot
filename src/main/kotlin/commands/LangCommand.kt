@@ -2,7 +2,7 @@ package commands
 
 import Lang
 import Strings
-import UserSettingsService
+import services.UserSettingsService
 import dev.inmo.tgbotapi.extensions.api.send.sendMessage
 import dev.inmo.tgbotapi.extensions.behaviour_builder.BehaviourContext
 import dev.inmo.tgbotapi.extensions.behaviour_builder.triggers_handling.onCommandWithArgs
@@ -25,7 +25,7 @@ fun BehaviourContext.registerLangCommand() {
             return@onCommandWithArgs
         }
 
-        UserSettingsService.setLanguage(userId, chosen)
+        UserSettingsService.setLanguageCode(userId, chosen.name)
         sendMessage(message.chat.id, Strings.langSet(chosen))
     }
 }

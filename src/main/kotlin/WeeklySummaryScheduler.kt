@@ -4,6 +4,7 @@ import dev.inmo.kslog.common.info
 import dev.inmo.tgbotapi.extensions.api.send.sendMessage
 import dev.inmo.tgbotapi.extensions.behaviour_builder.BehaviourContext
 import dev.inmo.tgbotapi.types.toChatId
+import services.WeeklySummaryService
 
 object WeeklySummaryScheduler {
 

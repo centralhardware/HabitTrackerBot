@@ -1,3 +1,5 @@
+package services
+
 import db.CheckInRepository
 import dto.CheckinValueRow
 import dto.Direction
