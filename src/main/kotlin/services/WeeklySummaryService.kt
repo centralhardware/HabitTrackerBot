@@ -3,7 +3,6 @@ package services
 import db.CheckInRepository
 import dto.CheckinValueRow
 import dto.Direction
-import dto.Habit
 import dto.HabitType
 import dto.HabitWeekStat
 import java.time.LocalDate
@@ -15,46 +14,89 @@ object WeeklySummaryService {
         val habits = HabitService.listActive(userId).filterNot { it.logOnly }
         if (habits.isEmpty()) return emptyList()
 
-        val flat: List<Pair<String, Habit>> = habits.flatMap { h ->
-            if (h.isGroupRoot) h.fields.map { f -> "${h.name} / ${f.name}" to f }
-            else listOf(h.name to h)
-        }
-
-        return flat.map { (displayName, h) ->
+        return habits.flatMap { h ->
             val rows = CheckInRepository.loadForHabit(h.id)
-            val totals = CheckinAnalytics.weekTotals(rows, from, to)
-            val targetHitDays = computeTargetHits(h, rows, from, to)
-            HabitWeekStat(
-                habitId = h.id,
-                name = displayName,
-                type = h.type,
-                direction = h.direction,
-                dailyTarget = h.dailyTarget,
-                unit = h.unit,
-                scheduledDone = totals.done,
-                scheduledSkip = totals.skip,
-                counterTotal = totals.total,
-                counterDays = totals.days,
-                quantityTotal = totals.quantityTotal,
-                quantityDays = totals.quantityDays,
-                targetHitDays = targetHitDays
-            )
+            if (h.multiField) {
+                h.params.map { p ->
+                    weekStat(
+                        name = "${h.name} / ${p.name}",
+                        habitId = h.id,
+                        type = h.type,
+                        direction = p.direction,
+                        dailyTarget = p.dailyTarget,
+                        unit = p.unit,
+                        rows = rows.filter { it.paramId == p.id },
+                        from = from,
+                        to = to,
+                    )
+                }
+            } else {
+                listOf(
+                    weekStat(
+                        name = h.name,
+                        habitId = h.id,
+                        type = h.type,
+                        direction = h.direction,
+                        dailyTarget = h.dailyTarget,
+                        unit = h.unit,
+                        rows = rows,
+                        from = from,
+                        to = to,
+                    )
+                )
+            }
         }
     }
 
-    private fun computeTargetHits(h: Habit, rows: List<CheckinValueRow>, from: LocalDate, to: LocalDate): Int {
-        val target = h.dailyTarget ?: return 0
-        return when (h.type) {
+    private fun weekStat(
+        name: String,
+        habitId: Long,
+        type: HabitType,
+        direction: Direction?,
+        dailyTarget: Double?,
+        unit: String?,
+        rows: List<CheckinValueRow>,
+        from: LocalDate,
+        to: LocalDate,
+    ): HabitWeekStat {
+        val totals = CheckinAnalytics.weekTotals(rows, from, to)
+        return HabitWeekStat(
+            habitId = habitId,
+            name = name,
+            type = type,
+            direction = direction,
+            dailyTarget = dailyTarget,
+            unit = unit,
+            scheduledDone = totals.done,
+            scheduledSkip = totals.skip,
+            counterTotal = totals.total,
+            counterDays = totals.days,
+            quantityTotal = totals.quantityTotal,
+            quantityDays = totals.quantityDays,
+            targetHitDays = computeTargetHits(type, dailyTarget, direction, rows, from, to),
+        )
+    }
+
+    private fun computeTargetHits(
+        type: HabitType,
+        target: Double?,
+        direction: Direction?,
+        rows: List<CheckinValueRow>,
+        from: LocalDate,
+        to: LocalDate,
+    ): Int {
+        if (target == null) return 0
+        return when (type) {
             HabitType.COUNTER -> {
                 val targetInt = target.toInt()
                 CheckinAnalytics.counterCountsPerDay(rows, from, to).values.count { count ->
-                    if (h.direction == Direction.LESS) count <= targetInt
+                    if (direction == Direction.LESS) count <= targetInt
                     else count >= targetInt
                 }
             }
             HabitType.QUANTITY -> {
                 CheckinAnalytics.quantitySumsPerDayInRange(rows, from, to).values
-                    .count { hits(it, target, h.direction) }
+                    .count { hits(it, target, direction) }
             }
             HabitType.SCHEDULED -> 0
         }

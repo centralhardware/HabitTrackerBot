@@ -158,13 +158,13 @@ object Strings {
             val d = if (rem.days.isNotEmpty()) " (${formatDays(l, rem.days)})" else ""
             "${rem.time.format(Keyboards.TIME_FMT)}$d"
         }
-        if (h.isGroupRoot) {
+        if (h.multiField) {
             val header = pick(l, "Added: \"${h.name}\" [$type]", "Добавлено: «${h.name}» [$type]")
-            val fieldLines = h.fields.map { f ->
+            val fieldLines = h.params.map { f ->
                 val unit = f.unit?.let { " $it" } ?: ""
                 val target = f.dailyTarget?.let { " — ${formatAmount(it)}$unit/day" } ?: ""
                 val dir = f.direction?.let { " (${directionLabel(l, it)})" } ?: ""
-                "  – ${f.name}$target$dir"
+                "  – ${f.name ?: ""}$target$dir"
             }
             val timesLine = if (times.isNotEmpty()) listOf("  ⏰ $times") else emptyList()
             return (listOf(header) + fieldLines + timesLine).joinToString("\n")
@@ -433,10 +433,10 @@ object Strings {
         val header = pick(l,
             "🤖 via MCP — ${root.name} — $date",
             "🤖 через MCP — ${root.name} — $date")
-        val fieldLines = root.fields.mapNotNull { f ->
+        val fieldLines = root.params.mapNotNull { f ->
             val v = perField[f.id] ?: return@mapNotNull null
             val u = f.unit?.let { " $it" } ?: ""
-            "  – ${f.name}: ${formatAmount(v)}$u"
+            "  – ${f.name ?: ""}: ${formatAmount(v)}$u"
         }
         val body = (listOf(header) + fieldLines).joinToString("\n")
         return comment?.let { "$body\n💬 $it" } ?: body
@@ -453,6 +453,11 @@ object Strings {
     fun btnSkip(l: Lang) = pick(l, "❌ Skip", "❌ Пропуск")
     fun btnDelete(l: Lang) = pick(l, "🗑 Delete", "🗑 Удалить")
     fun btnPlusOne(l: Lang) = pick(l, "➕1", "➕1")
+    fun btnPlusComment(l: Lang) = pick(l, "💬 +1", "💬 +1")
+
+    fun sendCounterComment(l: Lang) = pick(l,
+        "Send a comment for this +1:",
+        "Отправьте комментарий к этому +1:")
     fun btnModeSingle(l: Lang) = pick(l, "📏 single value", "📏 одно значение")
     fun btnModeGroup(l: Lang) = pick(l, "🧩 multiple fields", "🧩 несколько полей")
 

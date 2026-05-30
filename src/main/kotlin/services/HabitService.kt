@@ -4,6 +4,7 @@ import db.HabitRepository
 import dto.Direction
 import dto.DueReminder
 import dto.Habit
+import dto.HabitParam
 import dto.HabitReminder
 import dto.HabitStatus
 import dto.HabitType
@@ -32,49 +33,48 @@ object HabitService {
             direction = direction,
             reminders = reminders.sortedBy { it.time },
             status = HabitStatus.ACTIVE,
+            // Every habit carries >=1 param; a single-field habit keeps its metadata on the habit row.
+            params = listOf(HabitParam(id = 0)),
             logOnly = logOnly
         )
     )
 
     /**
-     * Создаёт мульти-полевую quantity-привычку: корень с именем группы и напоминаниями
-     * + N полей со своими target/unit/direction. Чек-ины пишутся под id поля.
+     * Создаёт мульти-полевую quantity-привычку: привычку с именем и напоминаниями плюс N params
+     * со своими target/unit/direction. Чек-ины пишутся под id param-а.
      */
     fun addHabitGroup(
         userId: Long,
         name: String,
-        fields: List<FieldSpec>,
+        params: List<ParamSpec>,
         reminders: List<HabitReminder>,
         logOnly: Boolean = false,
     ): Habit {
-        require(fields.isNotEmpty()) { "Group must have at least one field" }
-        val root = Habit(
-            id = 0L,
-            userId = userId,
-            name = name,
-            type = HabitType.QUANTITY,
-            reminders = reminders.sortedBy { it.time },
-            status = HabitStatus.ACTIVE,
-            logOnly = logOnly
-        )
-        val fieldHabits = fields.map { f ->
+        require(params.isNotEmpty()) { "Quantity habit must have at least one param" }
+        return HabitRepository.upsert(
             Habit(
                 id = 0L,
                 userId = userId,
-                name = f.name,
+                name = name,
                 type = HabitType.QUANTITY,
-                dailyTarget = f.dailyTarget,
-                unit = f.unit,
-                direction = f.direction,
-                reminders = emptyList(),
+                reminders = reminders.sortedBy { it.time },
                 status = HabitStatus.ACTIVE,
+                params = params.mapIndexed { i, s ->
+                    HabitParam(
+                        id = 0,
+                        name = s.name,
+                        unit = s.unit,
+                        direction = s.direction,
+                        dailyTarget = s.dailyTarget,
+                        position = i,
+                    )
+                },
                 logOnly = logOnly
             )
-        }
-        return HabitRepository.insertGroup(root, fieldHabits)
+        )
     }
 
-    data class FieldSpec(
+    data class ParamSpec(
         val name: String,
         val dailyTarget: Double? = null,
         val unit: String? = null,
@@ -86,6 +86,8 @@ object HabitService {
     fun findById(habitId: Long, userId: Long): Habit? = HabitRepository.find(habitId, userId)
 
     fun findAnyRow(habitId: Long, userId: Long): Habit? = HabitRepository.findAnyRow(habitId, userId)
+
+    fun firstParamId(habitId: Long, userId: Long): Long? = HabitRepository.firstParamId(habitId, userId)
 
     fun listReminders(habitId: Long, userId: Long): List<HabitReminder> =
         HabitRepository.listReminders(habitId, userId)
@@ -106,10 +108,8 @@ object HabitService {
     ): Boolean {
         val habit = HabitRepository.find(habitId, userId) ?: return false
         if (!allow(habit)) return false
-        // Load-modify-save: flip status on the entity (root + group fields) and persist via the
-        // generic row save. The cascade lives here in Kotlin, not in a specialized SQL statement.
-        val rows = if (habit.isGroupRoot) listOf(habit) + habit.fields else listOf(habit)
-        rows.forEach { HabitRepository.upsert(it.copy(status = to)) }
+        // Params cascade with the habit row; flipping the habit's status is enough.
+        HabitRepository.upsert(habit.copy(status = to))
         return true
     }
 

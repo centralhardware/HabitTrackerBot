@@ -124,7 +124,7 @@ fun BehaviourContext.registerAddHabitCommand() {
             }
         }
 
-        var groupFields: MutableList<HabitService.FieldSpec>? = null
+        var groupFields: MutableList<HabitService.ParamSpec>? = null
 
         if (type == HabitType.QUANTITY) {
             val modeChoice = pickFromKeyboard(
@@ -195,7 +195,7 @@ fun BehaviourContext.registerAddHabitCommand() {
                                else Direction.entries.firstOrNull { it.value == dRaw }
                     }
 
-                    groupFields.add(HabitService.FieldSpec(fname.take(64), fTarget, fUnit, fDir))
+                    groupFields.add(HabitService.ParamSpec(fname.take(64), fTarget, fUnit, fDir))
                 }
 
                 if (groupFields.isEmpty()) {
@@ -305,7 +305,7 @@ fun BehaviourContext.registerAddHabitCommand() {
             HabitService.addHabitGroup(
                 userId = userId,
                 name = nameText,
-                fields = groupFields,
+                params = groupFields,
                 reminders = reminders,
                 logOnly = logOnly
             )

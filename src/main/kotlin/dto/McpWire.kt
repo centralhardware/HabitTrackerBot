@@ -34,7 +34,7 @@ data class QuantityRecordArgs(
 
 @Serializable
 data class FieldValueArg(
-    val fieldId: Long,
+    val paramId: Long,
     val value: Double,
 )
 

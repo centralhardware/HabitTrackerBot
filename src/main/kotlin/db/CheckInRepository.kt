@@ -33,22 +33,22 @@ object CheckInRepository {
                 queryOf(
                     """
                     WITH upsert_event AS (
-                        INSERT INTO checkins (user_id, check_date, reminder_id, comment, checked_at)
-                        VALUES (?, ?, ?, NULL, now())
+                        INSERT INTO checkins (user_id, check_date, reminder_id, habit_id, comment, checked_at)
+                        VALUES (?, ?, ?, ?, NULL, now())
                         ON CONFLICT (reminder_id, check_date)
                             WHERE reminder_id IS NOT NULL
                         DO UPDATE SET checked_at = now()
                         RETURNING id
                     )
-                    INSERT INTO checkin_values (checkin_id, habit_id, status, quantity)
+                    INSERT INTO checkin_values (checkin_id, param_id, status, quantity)
                     SELECT id, ?, ?::checkin_status, ?
                     FROM upsert_event
-                    ON CONFLICT (checkin_id, habit_id)
+                    ON CONFLICT (checkin_id, param_id)
                     DO UPDATE SET status = EXCLUDED.status,
                                   quantity = EXCLUDED.quantity
                     """.trimIndent(),
-                    event.userId, event.checkDate, event.reminderId,
-                    value.habitId, value.status?.value, value.quantity
+                    event.userId, event.checkDate, event.reminderId, event.habitId,
+                    value.paramId, value.status?.value, value.quantity
                 )
             )
             written > 0
@@ -68,10 +68,10 @@ object CheckInRepository {
                 tx.update(
                     queryOf(
                         """
-                        INSERT INTO checkins (user_id, check_date, reminder_id, comment, checked_at)
-                        VALUES (?, ?, NULL, ?, now())
+                        INSERT INTO checkins (user_id, check_date, reminder_id, habit_id, comment, checked_at)
+                        VALUES (?, ?, NULL, ?, ?, now())
                         """.trimIndent(),
-                        event.userId, event.checkDate, event.comment
+                        event.userId, event.checkDate, event.habitId, event.comment
                     )
                 )
                 var wrote = 0
@@ -79,10 +79,10 @@ object CheckInRepository {
                     wrote += tx.update(
                         queryOf(
                             """
-                            INSERT INTO checkin_values (checkin_id, habit_id, status, quantity)
+                            INSERT INTO checkin_values (checkin_id, param_id, status, quantity)
                             VALUES (lastval(), ?, ?::checkin_status, ?)
                             """.trimIndent(),
-                            v.habitId, v.status?.value, v.quantity
+                            v.paramId, v.status?.value, v.quantity
                         )
                     )
                 }
@@ -114,22 +114,23 @@ object CheckInRepository {
     }
 
     /**
-     * Loads the full check-in history of a single habit as raw rows. All per-habit
-     * stats (counts, sums, streaks, weekly totals) are computed over this list in
-     * Kotlin (see [CheckinAnalytics]) instead of via specialized aggregate queries.
+     * Loads the full check-in history of a single habit as raw rows (one per param value).
+     * All per-habit stats (counts, sums, streaks, weekly totals) are computed over this list
+     * in Kotlin (see [CheckinAnalytics]) instead of via specialized aggregate queries.
      */
     fun loadForHabit(habitId: Long): List<CheckinValueRow> {
         return sessionOf(DatabaseService.dataSource).use { session ->
             session.run(
                 queryOf(
                     """
-                    SELECT e.id AS checkin_id, e.check_date, e.reminder_id, v.status, v.quantity, e.comment, r.reminder_time
+                    SELECT e.id AS checkin_id, v.param_id, e.check_date, e.reminder_id,
+                           v.status, v.quantity, e.comment, r.reminder_time
                     FROM checkins e
                     JOIN checkin_values v ON v.checkin_id = e.id
                     LEFT JOIN habit_reminders r ON r.id = e.reminder_id
-                    WHERE v.habit_id = ?
+                    WHERE e.habit_id = ?
                       AND e.deleted = false
-                    ORDER BY e.check_date, r.reminder_time NULLS FIRST, e.id
+                    ORDER BY e.check_date, r.reminder_time NULLS FIRST, e.id, v.param_id
                     """.trimIndent(),
                     habitId
                 ).map { it.toCheckinValueRow() }.asList
@@ -138,52 +139,65 @@ object CheckInRepository {
     }
 
     /**
-     * Loads a manual (non-scheduled, not-yet-deleted) check-in event with all its values,
-     * scoped to [userId]. Scheduled reminder check-ins are not deletable, so they are excluded.
-     * Returns null when no such event exists.
+     * Loads a quantity check-in event (not-yet-deleted) with all its values, scoped to [userId].
+     * Only quantity entries are deletable: scheduled reminder check-ins (reminder_id set) and
+     * counter events (quantity null) are excluded. Returns null when no such event exists.
      */
     fun loadEventForDelete(checkinId: Long, userId: Long): DeletableCheckin? {
         return sessionOf(DatabaseService.dataSource).use { session ->
             val rows = session.run(
                 queryOf(
                     """
-                    SELECT e.check_date, v.habit_id, v.status, v.quantity
+                    SELECT e.habit_id, e.check_date, v.param_id, v.status, v.quantity
                     FROM checkins e
                     JOIN checkin_values v ON v.checkin_id = e.id
                     WHERE e.id = ?
                       AND e.user_id = ?
                       AND e.reminder_id IS NULL
                       AND e.deleted = false
+                      AND v.quantity IS NOT NULL
                     """.trimIndent(),
                     checkinId, userId
                 ).map { row ->
-                    row.localDate("check_date") to CheckinValue(
-                        habitId = row.long("habit_id"),
-                        status = row.stringOrNull("status")
-                            ?.let { s -> CheckinStatus.entries.firstOrNull { it.value == s } },
-                        quantity = row.doubleOrNull("quantity"),
+                    Triple(
+                        row.long("habit_id"),
+                        row.localDate("check_date"),
+                        CheckinValue(
+                            paramId = row.long("param_id"),
+                            status = row.stringOrNull("status")
+                                ?.let { s -> CheckinStatus.entries.firstOrNull { it.value == s } },
+                            quantity = row.doubleOrNull("quantity"),
+                        )
                     )
                 }.asList
             )
             if (rows.isEmpty()) null
-            else DeletableCheckin(checkinId, rows.first().first, rows.map { it.second })
+            else DeletableCheckin(checkinId, rows.first().first, rows.first().second, rows.map { it.third })
         }
     }
 
-    /** Soft-deletes a manual check-in event (scheduled ones excluded); true when a row was flipped. */
-    fun softDeleteEvent(checkinId: Long, userId: Long): Boolean {
+    /**
+     * Soft-deletes a quantity check-in event dated on or before [notAfter]; true when a row was
+     * flipped. Mirrors [loadEventForDelete]'s guards so the delete itself enforces the bounds.
+     */
+    fun softDeleteEvent(checkinId: Long, userId: Long, notAfter: LocalDate): Boolean {
         return using(sessionOf(DatabaseService.dataSource)) { session ->
             session.update(
                 queryOf(
                     """
-                    UPDATE checkins
+                    UPDATE checkins e
                     SET deleted = true
-                    WHERE id = ?
-                      AND user_id = ?
-                      AND reminder_id IS NULL
-                      AND deleted = false
+                    WHERE e.id = ?
+                      AND e.user_id = ?
+                      AND e.reminder_id IS NULL
+                      AND e.deleted = false
+                      AND e.check_date <= ?
+                      AND EXISTS (
+                          SELECT 1 FROM checkin_values v
+                          WHERE v.checkin_id = e.id AND v.quantity IS NOT NULL
+                      )
                     """.trimIndent(),
-                    checkinId, userId
+                    checkinId, userId, notAfter
                 )
             ) > 0
         }
@@ -196,9 +210,9 @@ object CheckInRepository {
                     """
                     SELECT e.reminder_id, h.name, r.reminder_time, e.check_date
                     FROM checkins e
-                    JOIN checkin_values v ON v.checkin_id = e.id
+                    JOIN habits h ON h.id = e.habit_id
                     JOIN habit_reminders r ON r.id = e.reminder_id
-                    JOIN habits h ON h.id = v.habit_id
+                    JOIN checkin_values v ON v.checkin_id = e.id
                     WHERE h.user_id = ?
                       AND v.status IS NULL
                       AND e.deleted = false

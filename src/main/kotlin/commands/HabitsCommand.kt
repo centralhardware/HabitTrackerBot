@@ -33,15 +33,15 @@ fun BehaviourContext.registerHabitsCommand() {
                 val tail = when {
                     times.isNotEmpty() -> " — $times"
                     habit.type == HabitType.SCHEDULED -> ""
-                    habit.isGroupRoot -> ""
+                    habit.multiField -> ""
                     else -> " — ${Strings.noReminders(lang)}"
                 }
                 appendLine("• ${habit.name}$flag [$typeLabel]$tail")
-                if (habit.isGroupRoot) {
-                    habit.fields.forEach { f ->
+                if (habit.multiField) {
+                    habit.params.forEach { f ->
                         val unit = f.unit?.let { " $it" } ?: ""
                         val target = f.dailyTarget?.let { " — ${Strings.formatAmount(it)}$unit/day" } ?: ""
-                        appendLine("    – ${f.name}$target")
+                        appendLine("    – ${f.name ?: ""}$target")
                     }
                 }
             }

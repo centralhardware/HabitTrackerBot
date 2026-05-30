@@ -2,10 +2,13 @@ package db
 
 import services.DatabaseService
 import dto.Habit
+import dto.HabitParam
 import dto.HabitReminder
+import dto.HabitType
 import dto.RawDue
 import dto.RawMissed
 import dto.toHabit
+import dto.toHabitParam
 import dto.toHabitReminder
 import dto.toRawDue
 import dto.toRawMissed
@@ -15,27 +18,13 @@ import kotliquery.using
 
 object HabitRepository {
 
-    fun find(habitId: Long, userId: Long): Habit? {
-        val raw = listRawActive(userId).firstOrNull { it.id == habitId } ?: return null
-        return if (raw.isGroupRoot) raw.copy(fields = listFieldsRaw(userId, raw.id)) else raw
-    }
+    fun find(habitId: Long, userId: Long): Habit? =
+        listRawActive(userId).firstOrNull { it.id == habitId }
 
     fun findAnyRow(habitId: Long, userId: Long): Habit? =
         listRawActive(userId).firstOrNull { it.id == habitId }
 
-    fun listActive(userId: Long): List<Habit> {
-        val all = listRawActive(userId)
-        val fieldsByRoot = all.filter { it.isGroupField }.groupBy { it.groupId!! }
-        return all
-            .filter { !it.isGroupField }
-            .map { row ->
-                if (row.isGroupRoot) row.copy(fields = fieldsByRoot[row.id].orEmpty())
-                else row
-            }
-    }
-
-    private fun listFieldsRaw(userId: Long, rootId: Long): List<Habit> =
-        listRawActive(userId).filter { it.groupId == rootId && it.id != rootId }
+    fun listActive(userId: Long): List<Habit> = listRawActive(userId)
 
     private fun listRawActive(userId: Long): List<Habit> {
         return sessionOf(DatabaseService.dataSource).use { session ->
@@ -43,7 +32,7 @@ object HabitRepository {
                 queryOf(
                     """
                     SELECT h.id, h.user_id, h.name, h.habit_type, h.daily_target,
-                           h.unit, h.direction, h.status, h.group_id, h.log_only
+                           h.unit, h.direction, h.status, h.log_only
                     FROM habits h
                     WHERE h.user_id = ? AND h.status <> 'deleted'
                     ORDER BY h.created_at
@@ -66,13 +55,43 @@ object HabitRepository {
                 ).map { it.long("habit_id") to it.toHabitReminder() }.asList
             ).groupBy({ it.first }, { it.second })
 
-            habits.map { it.copy(reminders = remindersByHabit[it.id].orEmpty()) }
+            val paramsByHabit = session.run(
+                queryOf(
+                    """
+                    SELECT p.id, p.habit_id, p.name, p.unit, p.direction, p.daily_target, p.position
+                    FROM habit_params p
+                    JOIN habits h ON h.id = p.habit_id
+                    WHERE h.user_id = ? AND h.status <> 'deleted'
+                    ORDER BY p.habit_id, p.position, p.id
+                    """.trimIndent(),
+                    userId
+                ).map { it.long("habit_id") to it.toHabitParam() }.asList
+            ).groupBy({ it.first }, { it.second })
+
+            habits.map { h ->
+                val params = paramsByHabit[h.id].orEmpty()
+                // Single-field quantity habits keep their metadata on the param row; hoist it onto
+                // the habit so every single-field habit looks the same to callers.
+                val hoisted = if (h.type == HabitType.QUANTITY && params.size == 1) {
+                    val p = params[0]
+                    h.copy(
+                        unit = h.unit ?: p.unit,
+                        dailyTarget = h.dailyTarget ?: p.dailyTarget,
+                        direction = h.direction ?: p.direction,
+                    )
+                } else h
+                hoisted.copy(
+                    reminders = remindersByHabit[h.id].orEmpty(),
+                    params = params,
+                )
+            }
         }
     }
 
     fun upsert(habit: Habit): Habit =
         if (habit.id == 0L) insert(habit) else update(habit)
 
+    /** Inserts a habit, its reminders and its params (every habit carries >=1 param). */
     private fun insert(habit: Habit): Habit {
         return using(sessionOf(DatabaseService.dataSource, returnGeneratedKey = true)) { session ->
             session.transaction { tx ->
@@ -96,57 +115,22 @@ object HabitRepository {
                         )
                     )
                 }
-                habit.copy(id = id)
-            }
-        }
-    }
 
-    /**
-     * Создаёт группу: корневую строку (с reminders) и поля (со своими target/unit/direction).
-     * Корень получает group_id = id, поля — group_id = id корня.
-     */
-    fun insertGroup(root: Habit, fields: List<Habit>): Habit {
-        return using(sessionOf(DatabaseService.dataSource, returnGeneratedKey = true)) { session ->
-            session.transaction { tx ->
-                val rootId = tx.updateAndReturnGeneratedKey(
-                    queryOf(
-                        """
-                        INSERT INTO habits (user_id, name, habit_type, status, log_only)
-                        VALUES (?, ?, ?::habit_type, ?::habit_status, ?)
-                        """.trimIndent(),
-                        root.userId, root.name, root.type.value, root.status.value, root.logOnly
-                    )
-                ) ?: error("Failed to insert group root")
-
-                tx.execute(
-                    queryOf("UPDATE habits SET group_id = ? WHERE id = ?", rootId, rootId)
-                )
-
-                root.reminders.forEach { rem ->
-                    tx.execute(
-                        queryOf(
-                            "INSERT INTO habit_reminders (habit_id, reminder_time, reminder_days) VALUES (?, ?, ?::int[])",
-                            rootId, rem.time, rem.days.toPgArray()
-                        )
-                    )
-                }
-
-                val savedFields = fields.map { f ->
-                    val fid = tx.updateAndReturnGeneratedKey(
+                val params = habit.params.ifEmpty { listOf(HabitParam(id = 0)) }
+                val savedParams = params.mapIndexed { i, p ->
+                    val pid = tx.updateAndReturnGeneratedKey(
                         queryOf(
                             """
-                            INSERT INTO habits (user_id, name, habit_type, daily_target, unit, direction, status, group_id, log_only)
-                            VALUES (?, ?, ?::habit_type, ?, ?, ?::habit_direction, ?::habit_status, ?, ?)
+                            INSERT INTO habit_params (habit_id, name, unit, direction, daily_target, position)
+                            VALUES (?, ?, ?, ?::habit_direction, ?, ?)
                             """.trimIndent(),
-                            f.userId, f.name, f.type.value,
-                            f.dailyTarget, f.unit, f.direction?.value,
-                            f.status.value, rootId, f.logOnly
+                            id, p.name, p.unit, p.direction?.value, p.dailyTarget, i
                         )
-                    ) ?: error("Failed to insert group field")
-                    f.copy(id = fid, groupId = rootId)
+                    ) ?: error("Failed to insert habit param")
+                    p.copy(id = pid, habitId = id, position = i)
                 }
 
-                root.copy(id = rootId, groupId = rootId, fields = savedFields)
+                habit.copy(id = id, params = savedParams)
             }
         }
     }
@@ -176,6 +160,25 @@ object HabitRepository {
             )
         }
         return habit
+    }
+
+    /** The first (lowest-position) param id of a habit — used to write status/quantity rows. */
+    fun firstParamId(habitId: Long, userId: Long): Long? {
+        return sessionOf(DatabaseService.dataSource).use { session ->
+            session.run(
+                queryOf(
+                    """
+                    SELECT p.id
+                    FROM habit_params p
+                    JOIN habits h ON h.id = p.habit_id
+                    WHERE p.habit_id = ? AND h.user_id = ? AND h.status <> 'deleted'
+                    ORDER BY p.position, p.id
+                    LIMIT 1
+                    """.trimIndent(),
+                    habitId, userId
+                ).map { it.long("id") }.asSingle
+            )
+        }
     }
 
     fun listReminders(habitId: Long, userId: Long): List<HabitReminder> {
@@ -280,16 +283,19 @@ object HabitRepository {
                               < now() - INTERVAL '1 minute'
                     ),
                     ins_events AS (
-                        INSERT INTO checkins (user_id, check_date, reminder_id, comment, checked_at)
-                        SELECT user_id, missed_date, reminder_id, NULL, fired_at
+                        INSERT INTO checkins (user_id, check_date, reminder_id, habit_id, comment, checked_at)
+                        SELECT user_id, missed_date, reminder_id, habit_id, NULL, fired_at
                         FROM missed
                         ON CONFLICT (reminder_id, check_date)
                             WHERE reminder_id IS NOT NULL DO NOTHING
                         RETURNING id, reminder_id, check_date, checked_at
                     ),
                     ins_values AS (
-                        INSERT INTO checkin_values (checkin_id, habit_id, status, quantity)
-                        SELECT ie.id, m.habit_id,
+                        INSERT INTO checkin_values (checkin_id, param_id, status, quantity)
+                        SELECT ie.id,
+                               (SELECT hp.id FROM habit_params hp
+                                WHERE hp.habit_id = m.habit_id
+                                ORDER BY hp.position, hp.id LIMIT 1),
                                CASE WHEN now() - ie.checked_at > INTERVAL '24 hours'
                                     THEN 'skip'::checkin_status
                                     ELSE NULL END,

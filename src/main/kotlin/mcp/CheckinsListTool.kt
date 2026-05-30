@@ -21,8 +21,9 @@ object CheckinsListTool : TypedMcpTool<CheckinsListArgs>(CheckinsListArgs.serial
         "List past check-ins for one or more habits between two dates (inclusive). 'habitIds' is an array of habit ids " +
             "(batch query); the result is one entry per id. Defaults: from = today - 30 days, to = today (in the user's " +
             "timezone). Maximum range 366 days. Each check-in row has checkinId (pass it to checkin_delete to remove the " +
-            "entry), date, status (done/skip/null for pending), quantity (for quantity habits), reminderTime (for " +
-            "scheduled habits), and comment (for quantity habits, when set). Unknown habit ids are returned with found=false."
+            "entry), paramId (which field of a multi-field habit it belongs to; see habits_list params), date, status " +
+            "(done/skip/null for pending), quantity (for quantity habits), reminderTime (for scheduled habits), and " +
+            "comment (when set). Unknown habit ids are returned with found=false."
     override val inputSchema: ToolSchema = buildSchema()
 
     override fun handle(userId: Long, lang: Lang, tz: ZoneId, args: CheckinsListArgs): CallToolResult {

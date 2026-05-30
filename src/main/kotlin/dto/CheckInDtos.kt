@@ -14,22 +14,26 @@ enum class CheckinStatus(val value: String) {
     @SerialName("skip") SKIP("skip"),
 }
 
+/** A check-in event: one row in `checkins`, owned by a single habit. */
 data class CheckinEvent(
     val userId: Long,
     val checkDate: LocalDate,
     val reminderId: Long?,
+    val habitId: Long,
     val comment: String?,
 )
 
+/** One per-param value of an event: a row in `checkin_values`. */
 data class CheckinValue(
-    val habitId: Long,
+    val paramId: Long,
     val status: CheckinStatus?,
     val quantity: Double?,
 )
 
-/** A manual check-in event resolved for soft-deletion: the event id, its date and all its values. */
+/** A manual check-in event resolved for soft-deletion: the event id, its habit, date and all its values. */
 data class DeletableCheckin(
     val checkinId: Long,
+    val habitId: Long,
     val date: LocalDate,
     val values: List<CheckinValue>,
 )
@@ -57,6 +61,7 @@ data class ResolvedCheckin(
 @Serializable
 data class CheckinRecord(
     val checkinId: Long,
+    val paramId: Long,
     @Serializable(LocalDateSerializer::class) val date: LocalDate,
     val status: CheckinStatus?,
     @EncodeDefault(EncodeDefault.Mode.NEVER) val quantity: Double? = null,
@@ -66,10 +71,12 @@ data class CheckinRecord(
 
 /**
  * One `checkin_values` row joined with its parent `checkins` event — the raw unit the
- * analytics layer computes over. `isScheduled` mirrors `reminder_id IS NOT NULL`.
+ * analytics layer computes over. `isScheduled` mirrors `reminder_id IS NOT NULL`;
+ * `paramId` distinguishes the fields of a multi-field habit.
  */
 data class CheckinValueRow(
     val checkinId: Long,
+    val paramId: Long,
     val date: LocalDate,
     val isScheduled: Boolean,
     val status: CheckinStatus?,
@@ -80,6 +87,7 @@ data class CheckinValueRow(
 
 fun Row.toCheckinValueRow(): CheckinValueRow = CheckinValueRow(
     checkinId = long("checkin_id"),
+    paramId = long("param_id"),
     date = localDate("check_date"),
     isScheduled = longOrNull("reminder_id") != null,
     status = stringOrNull("status")?.let { v -> CheckinStatus.entries.firstOrNull { it.value == v } },

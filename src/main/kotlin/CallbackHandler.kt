@@ -1,9 +1,13 @@
 import dev.inmo.tgbotapi.extensions.api.answers.answerCallbackQuery
 import dev.inmo.tgbotapi.extensions.api.deleteMessage
 import dev.inmo.tgbotapi.extensions.api.edit.text.editMessageText
+import dev.inmo.tgbotapi.extensions.api.send.sendMessage
 import dev.inmo.tgbotapi.extensions.behaviour_builder.BehaviourContext
+import dev.inmo.tgbotapi.extensions.behaviour_builder.expectations.waitTextMessage
 import dev.inmo.tgbotapi.extensions.behaviour_builder.triggers_handling.onMessageDataCallbackQuery
 import dev.inmo.tgbotapi.types.queries.callback.MessageDataCallbackQuery
+import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.first
 import dto.CheckinStatus
 import dto.HabitType
 import services.CheckInService
@@ -103,13 +107,24 @@ private suspend fun BehaviourContext.handleLog(query: MessageDataCallbackQuery) 
         answerCallbackQuery(query, text = Strings.cbDeleted(lang))
         return
     }
-    if (parts[3] != "1") {
-        answerCallbackQuery(query, text = Strings.cbBadButton(lang))
-        return
+
+    // "1" logs a plain +1; "c" first asks for a free-text comment, then logs +1 with it.
+    val comment = when (parts[3]) {
+        "1" -> null
+        "c" -> {
+            answerCallbackQuery(query)
+            sendMessage(query.message.chat.id, Strings.sendCounterComment(lang))
+            val chatLong = query.user.id.chatId.long
+            waitTextMessage().filter { it.chat.id.chatId.long == chatLong }.first().content.text.trim()
+        }
+        else -> {
+            answerCallbackQuery(query, text = Strings.cbBadButton(lang))
+            return
+        }
     }
 
-    if (!CheckInService.checkInCounter(habitId, userId, date)) {
-        answerCallbackQuery(query, text = Strings.cbNotFound(lang))
+    if (!CheckInService.checkInCounter(habitId, userId, date, comment)) {
+        if (parts[3] != "c") answerCallbackQuery(query, text = Strings.cbNotFound(lang))
         return
     }
 
@@ -131,7 +146,7 @@ private suspend fun BehaviourContext.handleLog(query: MessageDataCallbackQuery) 
             replyMarkup = Keyboards.logPlus(habitId, date, lang)
         )
     }
-    answerCallbackQuery(query, text = Strings.cbLogged(lang))
+    if (parts[3] != "c") answerCallbackQuery(query, text = Strings.cbLogged(lang))
 }
 
 private suspend fun BehaviourContext.handleHabitAction(

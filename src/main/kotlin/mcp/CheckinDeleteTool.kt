@@ -11,28 +11,38 @@ import io.modelcontextprotocol.kotlin.sdk.types.ToolSchema
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonObject
+import java.time.LocalDate
 import java.time.ZoneId
 
 object CheckinDeleteTool : TypedMcpTool<CheckinDeleteArgs>(CheckinDeleteArgs.serializer()) {
     override val name = "checkin_delete"
     override val description =
-        "Soft-delete a previously logged check-in by its 'checkinId' (the id each row carries in checkins_list). " +
-            "Removes the whole event at once — a multi-field quantity entry has all its values dropped together. " +
-            "Only manual entries (counter/quantity) can be deleted, not scheduled reminder check-ins. Use this to " +
-            "retract a mistake, e.g. a quantity logged just after midnight that belonged to the previous day: delete " +
-            "it, then re-record with quantity_record passing the correct 'date'."
+        "Soft-delete a previously logged quantity check-in by its 'checkinId' (the id each row carries in " +
+            "checkins_list). Removes the whole event at once — a multi-field quantity entry has all its values dropped " +
+            "together. Only quantity entries can be deleted (not counter or scheduled reminder check-ins), and only " +
+            "those dated yesterday or earlier — today's entries cannot be deleted. Use this to retract a mistake, e.g. " +
+            "a quantity logged just after midnight that belonged to the previous day: delete it, then re-record with " +
+            "quantity_record passing the correct 'date'."
     override val inputSchema: ToolSchema = buildSchema()
 
     override fun handle(userId: Long, lang: Lang, tz: ZoneId, args: CheckinDeleteArgs): CallToolResult {
-        val deleted = CheckInService.deleteCheckin(args.checkinId, userId)
-            ?: return err("Check-in ${args.checkinId} not found, already deleted, or not a manual entry")
+        val yesterday = LocalDate.now(tz).minusDays(1)
+        val deleted = when (val outcome = CheckInService.deleteCheckin(args.checkinId, userId, yesterday)) {
+            is CheckInService.DeleteOutcome.Deleted -> outcome.checkin
+            CheckInService.DeleteOutcome.NotFound ->
+                return err("Check-in ${args.checkinId} not found, already deleted, or not a quantity entry")
+            is CheckInService.DeleteOutcome.TooRecent ->
+                return err("Cannot delete check-ins dated later than yesterday ($yesterday); ${outcome.date} is too recent")
+        }
 
+        val habit = HabitService.findById(deleted.habitId, userId)
         val lines = deleted.values.map { v ->
-            val habit = HabitService.findById(v.habitId, userId)
-            val name = habit?.name ?: "#${v.habitId}"
+            val param = habit?.params?.firstOrNull { it.id == v.paramId }
+            val name = param?.name ?: habit?.name ?: "#${v.paramId}"
+            val unitSrc = param?.unit ?: habit?.unit
             val detail = when {
                 v.quantity != null -> {
-                    val unit = habit?.unit?.let { " $it" } ?: ""
+                    val unit = unitSrc?.let { " $it" } ?: ""
                     "${Strings.formatAmount(v.quantity)}$unit"
                 }
                 v.status != null -> v.status.value

@@ -22,11 +22,10 @@ object QuantityRecordTool : TypedMcpTool<QuantityRecordArgs>(QuantityRecordArgs.
     override val name = "quantity_record"
     override val description =
         "Record a quantity check-in in one call: writes one event row with a shared comment and one value row per " +
-            "entry. 'habitId' is the quantity habit. 'values' is an array of { fieldId, value } with value > 0. For a " +
-            "multi-field group root (habits_list returns isGroupRoot/fields) each fieldId is one of root.fields[].id. " +
-            "A single quantity habit is just a group with one value — pass one entry whose fieldId is the habit's own " +
-            "id. Date is optional (YYYY-MM-DD), defaults to today in the user's timezone; future dates are rejected. " +
-            "'comment' is optional and applies to the whole event."
+            "entry. 'habitId' is the quantity habit. 'values' is an array of { paramId, value } with value > 0. Each " +
+            "paramId is one of the habit's params (habits_list returns params[].id) — a single-field quantity habit has " +
+            "exactly one param, a multi-field one has several. Date is optional (YYYY-MM-DD), defaults to today in the " +
+            "user's timezone; future dates are rejected. 'comment' is optional and applies to the whole event."
     override val inputSchema: ToolSchema = buildSchema()
 
     override fun handle(userId: Long, lang: Lang, tz: ZoneId, args: QuantityRecordArgs): CallToolResult {
@@ -48,21 +47,20 @@ object QuantityRecordTool : TypedMcpTool<QuantityRecordArgs>(QuantityRecordArgs.
             return err("Cannot check in for a future date ($date > $today in $tz)")
         }
 
-        // A single quantity habit logs against its own id; a group root against its field ids.
-        val allowedIds = if (habit.isGroupRoot) habit.fields.map { it.id }.toSet() else setOf(habit.id)
-        val unknown = args.values.map { it.fieldId }.filter { it !in allowedIds }
+        val allowedIds = habit.params.map { it.id }.toSet()
+        val unknown = args.values.map { it.paramId }.filter { it !in allowedIds }
         if (unknown.isNotEmpty()) {
-            return err("Unknown fieldId(s) ${unknown.joinToString()}; allowed: ${allowedIds.joinToString()}")
+            return err("Unknown paramId(s) ${unknown.joinToString()}; allowed: ${allowedIds.joinToString()}")
         }
         args.values.firstOrNull { it.value <= 0.0 || it.value.isNaN() || it.value.isInfinite() }?.let {
-            return err("All 'value' entries must be > 0 (fieldId ${it.fieldId})")
+            return err("All 'value' entries must be > 0 (paramId ${it.paramId})")
         }
 
-        val map = args.values.associate { it.fieldId to it.value }
+        val map = args.values.associate { it.paramId to it.value }
         val comment = args.comment?.trim()?.ifEmpty { null }
         val wrote = CheckInService.recordQuantity(args.habitId, userId, date, map, comment)
         if (wrote > 0) {
-            val note = if (habit.isGroupRoot) Strings.mcpRecordedQuantityGroup(lang, habit, map, date, comment)
+            val note = if (habit.multiField) Strings.mcpRecordedQuantityGroup(lang, habit, map, date, comment)
             else Strings.mcpRecordedQuantity(lang, habit.name, map.values.first(), habit.unit, date, comment)
             BotNotifier.notify(userId, note)
         }
@@ -78,14 +76,14 @@ object QuantityRecordTool : TypedMcpTool<QuantityRecordArgs>(QuantityRecordArgs.
                 putJsonObject("items") {
                     put("type", "object")
                     putJsonObject("properties") {
-                        putJsonObject("fieldId") { put("type", "integer") }
+                        putJsonObject("paramId") { put("type", "integer") }
                         putJsonObject("value") {
                             put("type", "number")
                             put("exclusiveMinimum", 0)
                         }
                     }
                     putJsonArray("required") {
-                        add("fieldId"); add("value")
+                        add("paramId"); add("value")
                     }
                 }
             }

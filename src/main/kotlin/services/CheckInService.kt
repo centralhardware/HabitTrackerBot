@@ -8,7 +8,9 @@ import dto.CheckinStatus
 import dto.CheckinValue
 import dto.CheckinValueRow
 import dto.DeletableCheckin
+import dto.Direction
 import dto.Habit
+import dto.HabitParam
 import dto.HabitStat
 import dto.HabitType
 import dto.QuantityTrend
@@ -22,26 +24,26 @@ object CheckInService {
 
     fun record(reminderId: Long, userId: Long, date: LocalDate, status: CheckinStatus): Boolean {
         val habitId = HabitRepository.findHabitIdByReminder(reminderId, userId) ?: return false
+        val paramId = HabitRepository.firstParamId(habitId, userId) ?: return false
         return CheckInRepository.upsertScheduledValue(
-            CheckinEvent(userId, date, reminderId, comment = null),
-            CheckinValue(habitId, status, quantity = null),
+            CheckinEvent(userId, date, reminderId, habitId, comment = null),
+            CheckinValue(paramId, status, quantity = null),
         )
     }
 
-    fun checkInCounter(habitId: Long, userId: Long, date: LocalDate): Boolean {
+    fun checkInCounter(habitId: Long, userId: Long, date: LocalDate, comment: String? = null): Boolean {
         val habit = HabitService.findById(habitId, userId) ?: return false
         if (habit.type != HabitType.COUNTER) return false
+        val paramId = habit.params.firstOrNull()?.id ?: return false
         return CheckInRepository.insertEventWithValues(
-            CheckinEvent(userId, date, reminderId = null, comment = null),
-            listOf(CheckinValue(habitId, CheckinStatus.DONE, quantity = null)),
+            CheckinEvent(userId, date, reminderId = null, habitId = habitId, comment = comment?.trim()?.ifEmpty { null }),
+            listOf(CheckinValue(paramId, CheckinStatus.DONE, quantity = null)),
         ) > 0
     }
 
     /**
      * Записывает событие чекина quantity-привычки: одну строку в checkins (с общим комментом)
-     * и N строк в checkin_values. [values] ключуется по id цели: для группы — по id полей,
-     * для одиночной привычки — по её собственному id (одиночная = группа с одним значением).
-     * Возвращает количество записанных строк.
+     * и N строк в checkin_values. [values] ключуется по id param-а. Возвращает количество записанных строк.
      */
     fun recordQuantity(
         habitId: Long,
@@ -53,26 +55,35 @@ object CheckInService {
         if (values.isEmpty()) return 0
         val habit = HabitService.findById(habitId, userId) ?: return 0
         if (habit.type != HabitType.QUANTITY) return 0
-        val allowedIds = if (habit.isGroupRoot) habit.fields.map { it.id }.toSet() else setOf(habit.id)
+        val allowedIds = habit.params.map { it.id }.toSet()
         val sanitized = values.filterKeys { it in allowedIds }
         if (sanitized.isEmpty()) return 0
-        val valueRows = sanitized.map { (id, value) ->
-            CheckinValue(id, CheckinStatus.DONE, quantity = value)
+        val valueRows = sanitized.map { (paramId, value) ->
+            CheckinValue(paramId, CheckinStatus.DONE, quantity = value)
         }
         return CheckInRepository.insertEventWithValues(
-            CheckinEvent(userId, date, reminderId = null, comment = comment),
+            CheckinEvent(userId, date, reminderId = null, habitId = habitId, comment = comment),
             valueRows,
         )
     }
 
     /**
-     * Soft-deletes a manual check-in event (and, with it, all of its values at once),
-     * scoped to [userId]. Returns the deleted event for notification, or null when it
-     * does not exist, was already deleted, or is a scheduled reminder check-in.
+     * Soft-deletes a quantity check-in event (and, with it, all of its values at once), scoped to
+     * [userId]. Only events dated on or before [notAfter] may be deleted — typically yesterday, so
+     * today's live entries are protected.
      */
-    fun deleteCheckin(checkinId: Long, userId: Long): DeletableCheckin? {
-        val event = CheckInRepository.loadEventForDelete(checkinId, userId) ?: return null
-        return if (CheckInRepository.softDeleteEvent(checkinId, userId)) event else null
+    fun deleteCheckin(checkinId: Long, userId: Long, notAfter: LocalDate): DeleteOutcome {
+        val event = CheckInRepository.loadEventForDelete(checkinId, userId) ?: return DeleteOutcome.NotFound
+        if (event.date.isAfter(notAfter)) return DeleteOutcome.TooRecent(event.date)
+        return if (CheckInRepository.softDeleteEvent(checkinId, userId, notAfter)) DeleteOutcome.Deleted(event)
+        else DeleteOutcome.NotFound
+    }
+
+    /** Outcome of a [deleteCheckin] attempt — distinguished so the caller can explain failures. */
+    sealed interface DeleteOutcome {
+        data class Deleted(val checkin: DeletableCheckin) : DeleteOutcome
+        data object NotFound : DeleteOutcome
+        data class TooRecent(val date: LocalDate) : DeleteOutcome
     }
 
     fun listInRange(habitId: Long, userId: Long, from: LocalDate, to: LocalDate): List<CheckinRecord>? {
@@ -94,7 +105,7 @@ object CheckInService {
     }
 
     private fun habitStat(h: Habit, today: LocalDate): HabitStat {
-        val rows = loadRows(h)
+        val rows = CheckInRepository.loadForHabit(h.id)
         val loggedDates = CheckinAnalytics.loggedDates(rows)
         val skipDates = CheckinAnalytics.skipDates(rows)
         val pastLogged = loggedDates.count { it < today }
@@ -104,15 +115,25 @@ object CheckInService {
             streak = streak(loggedDates, skipDates, today),
             loggedDays = pastLogged,
             totalDays = pastDaysSince(rows, today),
-            trend = if (h.type == HabitType.QUANTITY && !h.isGroupRoot) quantityTrend(h, rows, today) else null,
-            groupFields = if (h.isGroupRoot) h.fields.map { habitStat(it, today) } else emptyList(),
+            trend = if (h.type == HabitType.QUANTITY && !h.multiField) quantityTrend(h.unit, h.direction, rows, today) else null,
+            groupFields = if (h.multiField) h.params.map { paramStat(h, it, rows, today) } else emptyList(),
         )
     }
 
-    /** Loads a habit's rows; for a group root, the union of its fields' rows. */
-    private fun loadRows(h: Habit): List<CheckinValueRow> =
-        if (h.isGroupRoot) h.fields.flatMap { CheckInRepository.loadForHabit(it.id) }
-        else CheckInRepository.loadForHabit(h.id)
+    /** Per-param sub-stat of a multi-field quantity habit, over rows of just that param. */
+    private fun paramStat(h: Habit, p: HabitParam, allRows: List<CheckinValueRow>, today: LocalDate): HabitStat {
+        val rows = allRows.filter { it.paramId == p.id }
+        val loggedDates = CheckinAnalytics.loggedDates(rows)
+        val skipDates = CheckinAnalytics.skipDates(rows)
+        return HabitStat(
+            habitId = h.id,
+            name = p.name ?: h.name,
+            streak = streak(loggedDates, skipDates, today),
+            loggedDays = loggedDates.count { it < today },
+            totalDays = pastDaysSince(rows, today),
+            trend = quantityTrend(p.unit, p.direction, rows, today),
+        )
+    }
 
     private fun pastDaysSince(rows: List<CheckinValueRow>, today: LocalDate): Int {
         val start = CheckinAnalytics.firstDate(rows) ?: return 0
@@ -132,15 +153,15 @@ object CheckInService {
 
     private const val TREND_WINDOW_DAYS = 7
 
-    private fun quantityTrend(h: Habit, rows: List<CheckinValueRow>, today: LocalDate): QuantityTrend {
+    private fun quantityTrend(unit: String?, direction: Direction?, rows: List<CheckinValueRow>, today: LocalDate): QuantityTrend {
         val perDay = CheckinAnalytics.quantitySumsPerDay(rows)
         val recent = (1..TREND_WINDOW_DAYS)
             .mapNotNull { perDay[today.minusDays(it.toLong())] }
             .toDoubleArray()
         val all = perDay.filterKeys { it < today }.values.toDoubleArray()
         return QuantityTrend(
-            unit = h.unit,
-            direction = h.direction,
+            unit = unit,
+            direction = direction,
             today = perDay[today] ?: 0.0,
             recentAvg = if (recent.isEmpty()) 0.0 else Mean().evaluate(recent),
             overallAvg = if (all.isEmpty()) 0.0 else Mean().evaluate(all),
@@ -155,9 +176,10 @@ object CheckInService {
     }
 
     fun markPending(habitId: Long, userId: Long, reminderId: Long, date: LocalDate) {
+        val paramId = HabitRepository.firstParamId(habitId, userId) ?: return
         CheckInRepository.upsertScheduledValue(
-            CheckinEvent(userId, date, reminderId, comment = null),
-            CheckinValue(habitId, status = null, quantity = null),
+            CheckinEvent(userId, date, reminderId, habitId, comment = null),
+            CheckinValue(paramId, status = null, quantity = null),
         )
     }
 }

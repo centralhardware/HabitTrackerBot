@@ -24,6 +24,7 @@ object Keyboards {
             listOf(
                 listOf(
                     CallbackDataInlineKeyboardButton(Strings.btnPlusOne(lang), "lg|$habitId|$date|1"),
+                    CallbackDataInlineKeyboardButton(Strings.btnPlusComment(lang), "lg|$habitId|$date|c"),
                     CallbackDataInlineKeyboardButton(Strings.btnDelete(lang), "lg|$habitId|$date|del")
                 )
             )

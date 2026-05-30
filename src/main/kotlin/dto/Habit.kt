@@ -39,6 +39,22 @@ enum class HabitStatus(val value: String) {
     }
 }
 
+/**
+ * A "field" of a habit, in its own `habit_params` row. Every habit has at least one:
+ * scheduled/counter habits a single service param (metadata null — those keep their
+ * targets/direction on the habit row), quantity habits one param per tracked field.
+ */
+@Serializable
+data class HabitParam(
+    val id: Long,
+    @Transient val habitId: Long = 0,
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val name: String? = null,
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val unit: String? = null,
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val direction: Direction? = null,
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val dailyTarget: Double? = null,
+    val position: Int = 0,
+)
+
 @Serializable
 data class Habit(
     val id: Long,
@@ -50,15 +66,15 @@ data class Habit(
     @EncodeDefault(EncodeDefault.Mode.NEVER) val direction: Direction? = null,
     val reminders: List<HabitReminder> = emptyList(),
     val status: HabitStatus,
-    @EncodeDefault(EncodeDefault.Mode.NEVER) val groupId: Long? = null,
-    @EncodeDefault(EncodeDefault.Mode.NEVER) val fields: List<Habit> = emptyList(),
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val params: List<HabitParam> = emptyList(),
     @EncodeDefault(EncodeDefault.Mode.NEVER) val logOnly: Boolean = false,
 ) {
-    val isGroupRoot: Boolean get() = groupId != null && groupId == id
-    val isGroupField: Boolean get() = groupId != null && groupId != id
+    /** A multi-field quantity habit: more than one param. Single-field habits hoist their
+     *  param's metadata onto the habit row, so callers can treat them as plain habits. */
+    val multiField: Boolean get() = params.size > 1
 }
 
-/** Maps a `habits` row. Reminders are loaded separately and filled in by the repository. */
+/** Maps a `habits` row. Reminders and params are loaded separately and filled in by the repository. */
 fun Row.toHabit(): Habit = Habit(
     id = long("id"),
     userId = long("user_id"),
@@ -68,8 +84,17 @@ fun Row.toHabit(): Habit = Habit(
     unit = stringOrNull("unit"),
     direction = Direction.parse(stringOrNull("direction")),
     status = HabitStatus.parse(stringOrNull("status")),
-    groupId = longOrNull("group_id"),
     logOnly = boolean("log_only"),
+)
+
+fun Row.toHabitParam(): HabitParam = HabitParam(
+    id = long("id"),
+    habitId = long("habit_id"),
+    name = stringOrNull("name"),
+    unit = stringOrNull("unit"),
+    direction = Direction.parse(stringOrNull("direction")),
+    dailyTarget = doubleOrNull("daily_target"),
+    position = int("position"),
 )
 
 /** Reads a nullable Postgres int[] column; NULL becomes an empty list. */
