@@ -11,7 +11,7 @@ import kotlinx.serialization.json.JsonObject
 import java.time.ZoneId
 
 /**
- * Base for tools that take typed arguments: decodes [request].arguments into [A] once,
+ * Base for tools that take typed arguments: decodes the request arguments into [A] once,
  * so concrete tools only implement the typed [handle].
  */
 abstract class TypedMcpTool<A>(

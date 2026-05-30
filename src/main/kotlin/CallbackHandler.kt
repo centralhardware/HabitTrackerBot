@@ -6,7 +6,6 @@ import dev.inmo.tgbotapi.extensions.behaviour_builder.BehaviourContext
 import dev.inmo.tgbotapi.extensions.behaviour_builder.expectations.waitTextMessage
 import dev.inmo.tgbotapi.extensions.behaviour_builder.triggers_handling.onMessageDataCallbackQuery
 import dev.inmo.tgbotapi.types.queries.callback.MessageDataCallbackQuery
-import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
 import dto.CheckinStatus
 import dto.HabitType
@@ -30,25 +29,34 @@ private fun queryLang(query: MessageDataCallbackQuery): Lang {
     return Lang.stored(UserSettingsService.getLanguageCode(userId)) ?: detected
 }
 
-private suspend fun BehaviourContext.handleCheckIn(query: MessageDataCallbackQuery) {
+/** Parsed `<prefix>|<id>|<date>|<action>` callback payload shared by check-in and log handlers. */
+private data class ParsedCallback(val userId: Long, val lang: Lang, val id: Long, val date: LocalDate, val action: String)
+
+/** Decodes the common callback payload, answering with an error and returning null on any malformed part. */
+private suspend fun BehaviourContext.parseCallback(query: MessageDataCallbackQuery): ParsedCallback? {
     val userId = query.user.id.chatId.long
     val lang = queryLang(query)
     val parts = query.data.split("|")
     if (parts.size != 4) {
         answerCallbackQuery(query, text = Strings.cbBadButton(lang))
-        return
+        return null
     }
-    val reminderId = parts[1].toLongOrNull() ?: run {
+    val id = parts[1].toLongOrNull() ?: run {
         answerCallbackQuery(query, text = Strings.cbError(lang))
-        return
+        return null
     }
     val date = try {
         LocalDate.parse(parts[2])
     } catch (_: Exception) {
         answerCallbackQuery(query, text = Strings.cbBadDate(lang))
-        return
+        return null
     }
-    val status = when (parts[3]) {
+    return ParsedCallback(userId, lang, id, date, parts[3])
+}
+
+private suspend fun BehaviourContext.handleCheckIn(query: MessageDataCallbackQuery) {
+    val (userId, lang, reminderId, date, action) = parseCallback(query) ?: return
+    val status = when (action) {
         "done" -> CheckinStatus.DONE
         "skip" -> CheckinStatus.SKIP
         else -> {
@@ -75,7 +83,6 @@ private suspend fun BehaviourContext.handleCheckIn(query: MessageDataCallbackQue
             text = newText
         )
     }
-    // Settle every other reminder message we sent for this same check-in.
     resolveCheckInMessages(reminderId, date, status, excludeMessageId = msg.messageId.long)
     answerCallbackQuery(
         query,
@@ -84,24 +91,8 @@ private suspend fun BehaviourContext.handleCheckIn(query: MessageDataCallbackQue
 }
 
 private suspend fun BehaviourContext.handleLog(query: MessageDataCallbackQuery) {
-    val userId = query.user.id.chatId.long
-    val lang = queryLang(query)
-    val parts = query.data.split("|")
-    if (parts.size != 4) {
-        answerCallbackQuery(query, text = Strings.cbBadButton(lang))
-        return
-    }
-    val habitId = parts[1].toLongOrNull() ?: run {
-        answerCallbackQuery(query, text = Strings.cbError(lang))
-        return
-    }
-    val date = try {
-        LocalDate.parse(parts[2])
-    } catch (_: Exception) {
-        answerCallbackQuery(query, text = Strings.cbBadDate(lang))
-        return
-    }
-    if (parts[3] == "del") {
+    val (userId, lang, habitId, date, action) = parseCallback(query) ?: return
+    if (action == "del") {
         val msg = query.message
         runCatching { deleteMessage(chatId = msg.chat.id, messageId = msg.messageId) }
         answerCallbackQuery(query, text = Strings.cbDeleted(lang))
@@ -109,13 +100,13 @@ private suspend fun BehaviourContext.handleLog(query: MessageDataCallbackQuery) 
     }
 
     // "1" logs a plain +1; "c" first asks for a free-text comment, then logs +1 with it.
-    val comment = when (parts[3]) {
+    val comment = when (action) {
         "1" -> null
         "c" -> {
             answerCallbackQuery(query)
             sendMessage(query.message.chat.id, Strings.sendCounterComment(lang))
             val chatLong = query.user.id.chatId.long
-            waitTextMessage().filter { it.chat.id.chatId.long == chatLong }.first().content.text.trim()
+            waitTextMessage().first { it.chat.id.chatId.long == chatLong }.content.text.trim()
         }
         else -> {
             answerCallbackQuery(query, text = Strings.cbBadButton(lang))
@@ -124,7 +115,7 @@ private suspend fun BehaviourContext.handleLog(query: MessageDataCallbackQuery) 
     }
 
     if (!CheckInService.checkInCounter(habitId, userId, date, comment)) {
-        if (parts[3] != "c") answerCallbackQuery(query, text = Strings.cbNotFound(lang))
+        if (action != "c") answerCallbackQuery(query, text = Strings.cbNotFound(lang))
         return
     }
 
@@ -146,7 +137,7 @@ private suspend fun BehaviourContext.handleLog(query: MessageDataCallbackQuery) 
             replyMarkup = Keyboards.logPlus(habitId, date, lang)
         )
     }
-    if (parts[3] != "c") answerCallbackQuery(query, text = Strings.cbLogged(lang))
+    if (action != "c") answerCallbackQuery(query, text = Strings.cbLogged(lang))
 }
 
 private suspend fun BehaviourContext.handleHabitAction(

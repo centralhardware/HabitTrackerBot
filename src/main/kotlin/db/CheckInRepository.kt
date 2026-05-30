@@ -61,14 +61,13 @@ object CheckInRepository {
     /**
      * Insert a non-scheduled event (counter/quantity) with one or more values.
      * Each call creates a fresh event row — there is no per-day uniqueness.
-     * The event id is pulled into the values via lastval() within the same
-     * transaction, avoiding a RETURNING round-trip.
+     * Returns the new `checkins.id`, or 0 when there is nothing to write.
      */
-    fun insertEventWithValues(event: CheckinEvent, values: List<CheckinValue>): Int {
+    fun insertEventWithValues(event: CheckinEvent, values: List<CheckinValue>): Long {
         if (values.isEmpty()) return 0
         return using(sessionOf(DatabaseService.dataSource)) { session ->
             session.transaction { tx ->
-                tx.update(
+                val checkinId = tx.updateAndReturnGeneratedKey(
                     queryOf(
                         """
                         INSERT INTO checkins (user_id, check_date, reminder_id, habit_id, comment, checked_at)
@@ -76,20 +75,19 @@ object CheckInRepository {
                         """.trimIndent(),
                         event.userId, event.checkDate, event.habitId, event.comment
                     )
-                )
-                var wrote = 0
+                ) ?: return@transaction 0L
                 values.forEach { v ->
-                    wrote += tx.update(
+                    tx.update(
                         queryOf(
                             """
                             INSERT INTO checkin_values (checkin_id, param_id, status, quantity)
-                            VALUES (lastval(), ?, ?::checkin_status, ?)
+                            VALUES (?, ?, ?::checkin_status, ?)
                             """.trimIndent(),
-                            v.paramId, v.status?.value, v.quantity
+                            checkinId, v.paramId, v.status?.value, v.quantity
                         )
                     )
                 }
-                wrote
+                checkinId
             }
         }
     }
@@ -134,7 +132,7 @@ object CheckInRepository {
     /**
      * Loads the full check-in history of a single habit as raw rows (one per param value).
      * All per-habit stats (counts, sums, streaks, weekly totals) are computed over this list
-     * in Kotlin (see [CheckinAnalytics]) instead of via specialized aggregate queries.
+     * in Kotlin (see CheckinAnalytics) instead of via specialized aggregate queries.
      */
     fun loadForHabit(habitId: Long): List<CheckinValueRow> {
         return sessionOf(DatabaseService.dataSource).use { session ->

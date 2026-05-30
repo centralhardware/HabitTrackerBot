@@ -14,7 +14,6 @@ object McpTokenService {
 
     private val random = SecureRandom()
     private val encoder = Base64.getUrlEncoder().withoutPadding()
-    private val decoder = Base64.getUrlDecoder()
 
     data class Issued(val token: McpToken, val plaintext: String)
 

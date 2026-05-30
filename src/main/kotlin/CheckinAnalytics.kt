@@ -19,10 +19,6 @@ object CheckinAnalytics {
     fun countOn(rows: List<CheckinValueRow>, date: LocalDate): Int =
         rows.count { !it.isScheduled && it.date == date }
 
-    /** Sum of manual quantities on [date] (old `todayQuantitySum`). */
-    fun quantitySumOn(rows: List<CheckinValueRow>, date: LocalDate): Double =
-        rows.filter { !it.isScheduled && it.date == date }.sumOf { it.quantity ?: 0.0 }
-
     /** Earliest check-in date, or null when there is no history. */
     fun firstDate(rows: List<CheckinValueRow>): LocalDate? =
         rows.minOfOrNull { it.date }

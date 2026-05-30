@@ -85,6 +85,7 @@ object McpServer {
                 name = tool.name,
                 description = tool.description,
                 inputSchema = tool.inputSchema,
+                toolAnnotations = tool.annotations,
             ) { request -> invokeWithLogging(tool, userId, lang, tz, request) }
         }
         return server

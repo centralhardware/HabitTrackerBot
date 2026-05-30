@@ -8,6 +8,7 @@ import Strings
 import dto.HabitType
 import dto.QuantityRecordArgs
 import io.modelcontextprotocol.kotlin.sdk.types.CallToolResult
+import io.modelcontextprotocol.kotlin.sdk.types.ToolAnnotations
 import io.modelcontextprotocol.kotlin.sdk.types.ToolSchema
 import kotlinx.serialization.json.add
 import kotlinx.serialization.json.buildJsonObject
@@ -25,8 +26,15 @@ object QuantityRecordTool : TypedMcpTool<QuantityRecordArgs>(QuantityRecordArgs.
             "entry. 'habitId' is the quantity habit. 'values' is an array of { paramId, value } with value > 0. Each " +
             "paramId is one of the habit's params (habits_list returns params[].id) — a single-field quantity habit has " +
             "exactly one param, a multi-field one has several. Date is optional (YYYY-MM-DD), defaults to today in the " +
-            "user's timezone; future dates are rejected. 'comment' is optional and applies to the whole event."
+            "user's timezone; future dates are rejected. 'comment' is optional and applies to the whole event. Returns " +
+            "the new checkinId — pass it to checkin_delete to retract this entry without looking it up again."
     override val inputSchema: ToolSchema = buildSchema()
+    override val annotations = ToolAnnotations(
+        readOnlyHint = false,
+        destructiveHint = false,
+        idempotentHint = false,
+        openWorldHint = false,
+    )
 
     override fun handle(userId: Long, lang: Lang, tz: ZoneId, args: QuantityRecordArgs): CallToolResult {
         val habit = HabitService.findById(args.habitId, userId)
@@ -58,28 +66,37 @@ object QuantityRecordTool : TypedMcpTool<QuantityRecordArgs>(QuantityRecordArgs.
 
         val map = args.values.associate { it.paramId to it.value }
         val comment = args.comment?.trim()?.ifEmpty { null }
-        val wrote = CheckInService.recordQuantity(args.habitId, userId, date, map, comment)
-        if (wrote > 0) {
-            val note = if (habit.multiField) Strings.mcpRecordedQuantityGroup(lang, habit, map, date, comment)
-            else Strings.mcpRecordedQuantity(lang, habit.name, map.values.first(), habit.unit, date, comment)
-            BotNotifier.notify(userId, note)
+        val checkinId = CheckInService.recordQuantity(args.habitId, userId, date, map, comment)
+        if (checkinId <= 0) {
+            return err("Failed to record check-in for habit ${args.habitId}")
         }
-        return ok("""{"recorded":true,"habitId":${args.habitId},"date":"$date","wrote":$wrote}""")
+        val note = if (habit.multiField) Strings.mcpRecordedQuantityGroup(lang, habit, map, date, comment)
+        else Strings.mcpRecordedQuantity(lang, habit.name, map.values.first(), habit.unit, date, comment)
+        BotNotifier.notify(userId, note)
+        return ok("""{"recorded":true,"checkinId":$checkinId,"habitId":${args.habitId},"date":"$date","values":${map.size}}""")
     }
 
     private fun buildSchema(): ToolSchema {
         val props = buildJsonObject {
-            putJsonObject("habitId") { put("type", "integer") }
+            putJsonObject("habitId") {
+                put("type", "integer")
+                put("description", "The quantity habit's id (from habits_list).")
+            }
             putJsonObject("values") {
                 put("type", "array")
                 put("minItems", 1)
+                put("description", "One { paramId, value } per field. Single-field habit: one entry; multi-field: one per param.")
                 putJsonObject("items") {
                     put("type", "object")
                     putJsonObject("properties") {
-                        putJsonObject("paramId") { put("type", "integer") }
+                        putJsonObject("paramId") {
+                            put("type", "integer")
+                            put("description", "A param id from habits_list params[].id of this habit.")
+                        }
                         putJsonObject("value") {
                             put("type", "number")
                             put("exclusiveMinimum", 0)
+                            put("description", "Amount recorded for this param; must be > 0.")
                         }
                     }
                     putJsonArray("required") {
@@ -89,9 +106,14 @@ object QuantityRecordTool : TypedMcpTool<QuantityRecordArgs>(QuantityRecordArgs.
             }
             putJsonObject("date") {
                 put("type", "string")
+                put("format", "date")
                 put("pattern", "^\\d{4}-\\d{2}-\\d{2}$")
+                put("description", "Check-in date (YYYY-MM-DD). Default: today in the user's timezone. Future dates rejected.")
             }
-            putJsonObject("comment") { put("type", "string") }
+            putJsonObject("comment") {
+                put("type", "string")
+                put("description", "Optional note attached to the whole event.")
+            }
         }
         return ToolSchema(properties = props, required = listOf("habitId", "values"))
     }

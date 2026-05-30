@@ -24,6 +24,14 @@ data class HabitCheckins(
     val checkins: List<CheckinRecord>,
 )
 
+/** Batch [CheckinsListArgs] response: echoes the resolved date window so callers know what range they got. */
+@Serializable
+data class CheckinsListResult(
+    val from: String,
+    val to: String,
+    val habits: List<HabitCheckins>,
+)
+
 @Serializable
 data class QuantityRecordArgs(
     val habitId: Long,

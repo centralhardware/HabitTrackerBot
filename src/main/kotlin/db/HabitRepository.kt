@@ -3,7 +3,6 @@ package db
 import services.DatabaseService
 import dto.Habit
 import dto.HabitParam
-import dto.HabitReminder
 import dto.HabitType
 import dto.RawDue
 import dto.RawMissed
@@ -19,9 +18,6 @@ import kotliquery.using
 object HabitRepository {
 
     fun find(habitId: Long, userId: Long): Habit? =
-        listRawActive(userId).firstOrNull { it.id == habitId }
-
-    fun findAnyRow(habitId: Long, userId: Long): Habit? =
         listRawActive(userId).firstOrNull { it.id == habitId }
 
     fun listActive(userId: Long): List<Habit> = listRawActive(userId)
@@ -177,23 +173,6 @@ object HabitRepository {
                     """.trimIndent(),
                     habitId, userId
                 ).map { it.long("id") }.asSingle
-            )
-        }
-    }
-
-    fun listReminders(habitId: Long, userId: Long): List<HabitReminder> {
-        return sessionOf(DatabaseService.dataSource).use { session ->
-            session.run(
-                queryOf(
-                    """
-                    SELECT r.id, r.reminder_time
-                    FROM habit_reminders r
-                    JOIN habits h ON h.id = r.habit_id
-                    WHERE r.habit_id = ? AND h.user_id = ? AND h.status <> 'deleted'
-                    ORDER BY r.reminder_time
-                    """.trimIndent(),
-                    habitId, userId
-                ).map { HabitReminder(id = it.long("id"), time = it.localTime("reminder_time")) }.asList
             )
         }
     }

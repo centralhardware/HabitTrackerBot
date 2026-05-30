@@ -1,7 +1,6 @@
 package dto
 
 import kotlinx.serialization.EncodeDefault
-import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.Transient
@@ -57,7 +56,7 @@ data class HabitParam(
 
 @Serializable
 data class Habit(
-    val id: Long,
+    val id: Long = 0L,
     @Transient val userId: Long = 0,
     val name: String,
     val type: HabitType,
@@ -65,7 +64,7 @@ data class Habit(
     @EncodeDefault(EncodeDefault.Mode.NEVER) val unit: String? = null,
     @EncodeDefault(EncodeDefault.Mode.NEVER) val direction: Direction? = null,
     val reminders: List<HabitReminder> = emptyList(),
-    val status: HabitStatus,
+    val status: HabitStatus = HabitStatus.ACTIVE,
     @EncodeDefault(EncodeDefault.Mode.NEVER) val params: List<HabitParam> = emptyList(),
     @EncodeDefault(EncodeDefault.Mode.NEVER) val logOnly: Boolean = false,
 ) {

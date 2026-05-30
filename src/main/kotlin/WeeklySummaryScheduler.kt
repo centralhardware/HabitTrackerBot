@@ -9,7 +9,7 @@ import services.WeeklySummaryService
 object WeeklySummaryScheduler {
 
     private const val SEND_HOUR = 20
-    private const val SEND_DOW = 0 // Sunday
+    private const val SEND_DOW = 0
 
     suspend fun BehaviourContext.sendWeeklySummaries() {
         SchedulerRepository.findDueWeeklyUsers(SEND_DOW, SEND_HOUR).forEach { user ->

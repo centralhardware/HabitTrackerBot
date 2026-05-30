@@ -7,6 +7,7 @@ import Lang
 import Strings
 import dto.CheckinDeleteArgs
 import io.modelcontextprotocol.kotlin.sdk.types.CallToolResult
+import io.modelcontextprotocol.kotlin.sdk.types.ToolAnnotations
 import io.modelcontextprotocol.kotlin.sdk.types.ToolSchema
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
@@ -24,6 +25,12 @@ object CheckinDeleteTool : TypedMcpTool<CheckinDeleteArgs>(CheckinDeleteArgs.ser
             "a quantity logged just after midnight that belonged to the previous day: delete it, then re-record with " +
             "quantity_record passing the correct 'date'."
     override val inputSchema: ToolSchema = buildSchema()
+    override val annotations = ToolAnnotations(
+        readOnlyHint = false,
+        destructiveHint = true,
+        idempotentHint = true,
+        openWorldHint = false,
+    )
 
     override fun handle(userId: Long, lang: Lang, tz: ZoneId, args: CheckinDeleteArgs): CallToolResult {
         val yesterday = LocalDate.now(tz).minusDays(1)
@@ -57,7 +64,10 @@ object CheckinDeleteTool : TypedMcpTool<CheckinDeleteArgs>(CheckinDeleteArgs.ser
 
     private fun buildSchema(): ToolSchema {
         val props = buildJsonObject {
-            putJsonObject("checkinId") { put("type", "integer") }
+            putJsonObject("checkinId") {
+                put("type", "integer")
+                put("description", "checkinId of the entry to delete — the value each row carries in checkins_list (or returned by quantity_record).")
+            }
         }
         return ToolSchema(properties = props, required = listOf("checkinId"))
     }

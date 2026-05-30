@@ -16,9 +16,10 @@ import dev.inmo.tgbotapi.types.MessageId
 import dev.inmo.tgbotapi.types.buttons.InlineKeyboardButtons.CallbackDataInlineKeyboardButton
 import dev.inmo.tgbotapi.types.buttons.InlineKeyboardMarkup
 import dto.Direction
+import dto.Habit
+import dto.HabitParam
 import dto.HabitReminder
 import dto.HabitType
-import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
 import senderLang
 import senderUserId
@@ -38,8 +39,7 @@ fun BehaviourContext.registerAddHabitCommand() {
         val chatLong = message.chat.id.chatId.long
         suspend fun nextText(): String =
             waitTextMessage()
-                .filter { it.chat.id.chatId.long == chatLong }
-                .first()
+                .first { it.chat.id.chatId.long == chatLong }
                 .content
                 .text
                 .trim()
@@ -48,11 +48,20 @@ fun BehaviourContext.registerAddHabitCommand() {
             val prompt = sendMessage(message.chat.id, promptText, replyMarkup = keyboard)
             val promptId: MessageId = prompt.messageId
             val query = waitMessageDataCallbackQuery()
-                .filter { it.message.messageId == promptId && it.data.startsWith("$prefix|") }
-                .first()
+                .first { it.message.messageId == promptId && it.data.startsWith("$prefix|") }
             runCatching { answerCallbackQuery(query) }
             runCatching { editMessageReplyMarkup(chatId = prompt.chat.id, messageId = promptId, replyMarkup = null) }
             return query.data.removePrefix("$prefix|").takeIf { it.isNotEmpty() }
+        }
+
+        // Direction prompt is asked from three places (counter, single quantity, grouped field);
+        // keep the keyboard + parse + validate in one spot. Returns null when the user cancelled.
+        suspend fun pickDirection(): DirPick {
+            val choice = pickFromKeyboard(Strings.sendDirection(lang), directionKeyboard(lang), DIR_PREFIX)
+                ?: return DirPick.Cancelled
+            val dir = if (choice == DIR_NONE) null else Direction.entries.firstOrNull { it.value == choice }
+            if (dir == null && choice != DIR_NONE) return DirPick.Cancelled
+            return DirPick.Picked(dir)
         }
 
         sendMessage(message.chat.id, Strings.sendHabitName(lang))
@@ -108,23 +117,13 @@ fun BehaviourContext.registerAddHabitCommand() {
                 dailyTarget = n.toDouble()
             }
 
-            val dirChoice = pickFromKeyboard(
-                Strings.sendDirection(lang),
-                directionKeyboard(lang),
-                DIR_PREFIX
-            ) ?: run {
-                sendMessage(message.chat.id, Strings.cancelled(lang))
-                return@onCommand
-            }
-            direction = if (dirChoice == DIR_NONE) null
-                        else Direction.entries.firstOrNull { it.value == dirChoice }
-            if (direction == null && dirChoice != DIR_NONE) {
-                sendMessage(message.chat.id, Strings.cancelled(lang))
-                return@onCommand
+            direction = when (val d = pickDirection()) {
+                is DirPick.Picked -> d.direction
+                DirPick.Cancelled -> { sendMessage(message.chat.id, Strings.cancelled(lang)); return@onCommand }
             }
         }
 
-        var groupFields: MutableList<HabitService.ParamSpec>? = null
+        var groupFields: MutableList<HabitParam>? = null
 
         if (type == HabitType.QUANTITY) {
             val modeChoice = pickFromKeyboard(
@@ -183,19 +182,13 @@ fun BehaviourContext.registerAddHabitCommand() {
 
                     var fDir: Direction? = null
                     if (!logOnly) {
-                        val dRaw = pickFromKeyboard(
-                            Strings.sendDirection(lang),
-                            directionKeyboard(lang),
-                            DIR_PREFIX
-                        ) ?: run {
-                            sendMessage(message.chat.id, Strings.cancelled(lang))
-                            return@onCommand
+                        fDir = when (val d = pickDirection()) {
+                            is DirPick.Picked -> d.direction
+                            DirPick.Cancelled -> { sendMessage(message.chat.id, Strings.cancelled(lang)); return@onCommand }
                         }
-                        fDir = if (dRaw == DIR_NONE) null
-                               else Direction.entries.firstOrNull { it.value == dRaw }
                     }
 
-                    groupFields.add(HabitService.ParamSpec(fname.take(64), fTarget, fUnit, fDir))
+                    groupFields.add(HabitParam(id = 0, name = fname.take(64), unit = fUnit, direction = fDir, dailyTarget = fTarget))
                 }
 
                 if (groupFields.isEmpty()) {
@@ -231,19 +224,9 @@ fun BehaviourContext.registerAddHabitCommand() {
                 }
 
                 if (!logOnly) {
-                    val dirChoice = pickFromKeyboard(
-                        Strings.sendDirection(lang),
-                        directionKeyboard(lang),
-                        DIR_PREFIX
-                    ) ?: run {
-                        sendMessage(message.chat.id, Strings.cancelled(lang))
-                        return@onCommand
-                    }
-                    direction = if (dirChoice == DIR_NONE) null
-                                else Direction.entries.firstOrNull { it.value == dirChoice }
-                    if (direction == null && dirChoice != DIR_NONE) {
-                        sendMessage(message.chat.id, Strings.cancelled(lang))
-                        return@onCommand
+                    direction = when (val d = pickDirection()) {
+                        is DirPick.Picked -> d.direction
+                        DirPick.Cancelled -> { sendMessage(message.chat.id, Strings.cancelled(lang)); return@onCommand }
                     }
                 }
             }
@@ -301,28 +284,29 @@ fun BehaviourContext.registerAddHabitCommand() {
             reminders += HabitReminder(time = time, days = days)
         }
 
-        val habit = if (groupFields != null) {
-            HabitService.addHabitGroup(
-                userId = userId,
-                name = nameText,
-                params = groupFields,
-                reminders = reminders,
-                logOnly = logOnly
-            )
-        } else {
-            HabitService.addHabit(
+        // Group quantity habits carry their metadata on params[]; everything else leaves params empty
+        // and the repository injects a single service param. type is already QUANTITY whenever grouped.
+        val habit = HabitService.addHabit(
+            Habit(
                 userId = userId,
                 name = nameText,
                 type = type,
-                reminders = reminders,
                 dailyTarget = dailyTarget,
                 unit = unit,
                 direction = direction,
-                logOnly = logOnly
+                reminders = reminders,
+                params = groupFields ?: emptyList(),
+                logOnly = logOnly,
             )
-        }
+        )
         sendMessage(message.chat.id, Strings.habitAddedDetailed(lang, habit))
     }
+}
+
+/** Outcome of a direction prompt: a chosen direction (possibly null = "no direction") or a cancel. */
+private sealed interface DirPick {
+    data class Picked(val direction: Direction?) : DirPick
+    data object Cancelled : DirPick
 }
 
 private const val TYPE_PREFIX = "at"

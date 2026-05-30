@@ -41,7 +41,6 @@ object ReminderScheduler {
                     Keyboards.checkIn(reminder.reminderId, reminder.userDate, lang)
                 HabitType.COUNTER ->
                     Keyboards.logPlus(reminder.habitId, reminder.userDate, lang)
-                // Quantity habits are logged via MCP, not the bot — fire a plain reminder.
                 HabitType.QUANTITY -> null
             }
             val sent = sendMessage(
@@ -49,8 +48,6 @@ object ReminderScheduler {
                 text = text,
                 replyMarkup = keyboard
             )
-            // Remember scheduled-reminder messages so they can all be settled to done/skip
-            // when the check-in is resolved through any single button or by auto-skip.
             if (reminder.habitType == HabitType.SCHEDULED) {
                 ReminderMessageService.remember(
                     reminder.userId, sent.messageId.long, reminder.reminderId, reminder.userDate, text

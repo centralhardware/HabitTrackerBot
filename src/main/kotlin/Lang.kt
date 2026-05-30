@@ -6,6 +6,7 @@ import dto.HabitStat
 import dto.HabitType
 import dto.HabitWeekStat
 import java.time.LocalDate
+import kotlin.math.roundToLong
 
 enum class Lang {
     EN, RU;
@@ -239,7 +240,7 @@ object Strings {
 
     fun formatAmount(v: Double): String {
         if (v.isNaN() || v.isInfinite()) return "0"
-        val rounded = Math.round(v * 1000.0) / 1000.0
+        val rounded = (v * 1000.0).roundToLong() / 1000.0
         return if (rounded % 1.0 == 0.0) rounded.toLong().toString()
                else String.format(java.util.Locale.ROOT, "%.3f", rounded).trimEnd('0').trimEnd('.')
     }
@@ -498,6 +499,8 @@ object Strings {
     private fun pick(l: Lang, en: String, ru: String): String = if (l == Lang.RU) ru else en
 }
 
+/** Bot name/description/short-description texts, wired up via the (currently commented) profile setup in Main.kt. */
+@Suppress("unused")
 object BotProfileI18n {
     fun name(l: Lang): String = when (l) {
         Lang.EN -> "Habit Tracker"

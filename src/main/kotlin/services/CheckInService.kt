@@ -43,7 +43,8 @@ object CheckInService {
 
     /**
      * Записывает событие чекина quantity-привычки: одну строку в checkins (с общим комментом)
-     * и N строк в checkin_values. [values] ключуется по id param-а. Возвращает количество записанных строк.
+     * и N строк в checkin_values. [values] ключуется по id param-а. Возвращает id созданного
+     * события (`checkins.id`), либо 0, если записать нечего.
      */
     fun recordQuantity(
         habitId: Long,
@@ -51,7 +52,7 @@ object CheckInService {
         date: LocalDate,
         values: Map<Long, Double>,
         comment: String? = null
-    ): Int {
+    ): Long {
         if (values.isEmpty()) return 0
         val habit = HabitService.findById(habitId, userId) ?: return 0
         if (habit.type != HabitType.QUANTITY) return 0
@@ -94,10 +95,6 @@ object CheckInService {
     /** Number of counter/manual events logged for [habitId] on [date]. */
     fun counterCountOn(habitId: Long, date: LocalDate): Int =
         CheckinAnalytics.countOn(CheckInRepository.loadForHabit(habitId), date)
-
-    /** Sum of manual quantities logged for [habitId] on [date]. */
-    fun quantitySumOn(habitId: Long, date: LocalDate): Double =
-        CheckinAnalytics.quantitySumOn(CheckInRepository.loadForHabit(habitId), date)
 
     fun userStats(userId: Long, today: LocalDate): List<HabitStat> {
         // Log-only habits are pure journals — no streaks/completion/trends — so they're omitted here.

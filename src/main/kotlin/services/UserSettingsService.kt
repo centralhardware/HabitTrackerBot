@@ -13,8 +13,6 @@ object UserSettingsService {
         UserSettingsRepository.upsert(current(userId).copy(timezone = tz.id))
     }
 
-    // Language is stored and returned as a raw code (the Lang enum name). Mapping to/from
-    // the UI-layer Lang type stays out of the service so this package keeps no UI coupling.
     fun getLanguageCode(userId: Long): String? =
         UserSettingsRepository.find(userId)?.language
 

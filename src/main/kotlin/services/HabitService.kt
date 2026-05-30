@@ -1,11 +1,8 @@
 package services
 
 import db.HabitRepository
-import dto.Direction
 import dto.DueReminder
 import dto.Habit
-import dto.HabitParam
-import dto.HabitReminder
 import dto.HabitStatus
 import dto.HabitType
 import java.time.Instant
@@ -13,84 +10,17 @@ import java.time.ZoneId
 
 object HabitService {
 
-    fun addHabit(
-        userId: Long,
-        name: String,
-        type: HabitType,
-        reminders: List<HabitReminder>,
-        dailyTarget: Double? = null,
-        unit: String? = null,
-        direction: Direction? = null,
-        logOnly: Boolean = false,
-    ): Habit = HabitRepository.upsert(
-        Habit(
+    fun addHabit(habit: Habit): Habit = HabitRepository.upsert(
+        habit.copy(
             id = 0L,
-            userId = userId,
-            name = name,
-            type = type,
-            dailyTarget = dailyTarget,
-            unit = unit,
-            direction = direction,
-            reminders = reminders.sortedBy { it.time },
             status = HabitStatus.ACTIVE,
-            // Every habit carries >=1 param; a single-field habit keeps its metadata on the habit row.
-            params = listOf(HabitParam(id = 0)),
-            logOnly = logOnly
+            reminders = habit.reminders.sortedBy { it.time },
         )
-    )
-
-    /**
-     * Создаёт мульти-полевую quantity-привычку: привычку с именем и напоминаниями плюс N params
-     * со своими target/unit/direction. Чек-ины пишутся под id param-а.
-     */
-    fun addHabitGroup(
-        userId: Long,
-        name: String,
-        params: List<ParamSpec>,
-        reminders: List<HabitReminder>,
-        logOnly: Boolean = false,
-    ): Habit {
-        require(params.isNotEmpty()) { "Quantity habit must have at least one param" }
-        return HabitRepository.upsert(
-            Habit(
-                id = 0L,
-                userId = userId,
-                name = name,
-                type = HabitType.QUANTITY,
-                reminders = reminders.sortedBy { it.time },
-                status = HabitStatus.ACTIVE,
-                params = params.mapIndexed { i, s ->
-                    HabitParam(
-                        id = 0,
-                        name = s.name,
-                        unit = s.unit,
-                        direction = s.direction,
-                        dailyTarget = s.dailyTarget,
-                        position = i,
-                    )
-                },
-                logOnly = logOnly
-            )
-        )
-    }
-
-    data class ParamSpec(
-        val name: String,
-        val dailyTarget: Double? = null,
-        val unit: String? = null,
-        val direction: Direction? = null
     )
 
     fun listActive(userId: Long): List<Habit> = HabitRepository.listActive(userId)
 
     fun findById(habitId: Long, userId: Long): Habit? = HabitRepository.find(habitId, userId)
-
-    fun findAnyRow(habitId: Long, userId: Long): Habit? = HabitRepository.findAnyRow(habitId, userId)
-
-    fun firstParamId(habitId: Long, userId: Long): Long? = HabitRepository.firstParamId(habitId, userId)
-
-    fun listReminders(habitId: Long, userId: Long): List<HabitReminder> =
-        HabitRepository.listReminders(habitId, userId)
 
     fun softDelete(habitId: Long, userId: Long): Boolean = transition(habitId, userId, HabitStatus.DELETED)
 

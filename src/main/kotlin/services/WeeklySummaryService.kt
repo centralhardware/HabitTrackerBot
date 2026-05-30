@@ -10,7 +10,6 @@ import java.time.LocalDate
 object WeeklySummaryService {
 
     fun weeklyStats(userId: Long, from: LocalDate, to: LocalDate): List<HabitWeekStat> {
-        // Log-only habits are pure journals; they never appear in the weekly summary.
         val habits = HabitService.listActive(userId).filterNot { it.logOnly }
         if (habits.isEmpty()) return emptyList()
 

@@ -21,12 +21,11 @@ import dev.inmo.tgbotapi.longPolling
 import dev.inmo.tgbotapi.types.BotCommand
 import dev.inmo.tgbotapi.types.MenuButton
 import dev.inmo.tgbotapi.types.commands.BotCommandScope.Companion.Default
-import dev.inmo.tgbotapi.utils.RiskFeature
 import kotlinx.coroutines.launch
 import mcp.McpServer
 import services.DatabaseService
 
-@OptIn(Warning::class, RiskFeature::class)
+@OptIn(Warning::class)
 suspend fun main() {
     DatabaseService.dataSource
 
