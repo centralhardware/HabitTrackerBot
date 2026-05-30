@@ -65,30 +65,35 @@ object CheckInRepository {
      */
     fun insertEventWithValues(event: CheckinEvent, values: List<CheckinValue>): Long {
         if (values.isEmpty()) return 0
+        // A single CTE: insert the event, fan its id out to every value row, and read the id
+        // back through a plain top-level SELECT. Keeping the RETURNING inside the CTE avoids
+        // the `updateAndReturnGeneratedKey` / top-level RETURNING path that crashes PG JDBC
+        // 42.7.4 (see upsertScheduledValue) and stays atomic in one round-trip.
+        val valuesSql = values.joinToString(", ") { "(?, ?::checkin_status, ?::numeric)" }
+        val params = buildList<Any?> {
+            add(event.userId); add(event.checkDate); add(event.habitId); add(event.comment)
+            values.forEach { add(it.paramId); add(it.status?.value); add(it.quantity) }
+        }
         return using(sessionOf(DatabaseService.dataSource)) { session ->
-            session.transaction { tx ->
-                val checkinId = tx.updateAndReturnGeneratedKey(
-                    queryOf(
-                        """
+            session.run(
+                queryOf(
+                    """
+                    WITH new_event AS (
                         INSERT INTO checkins (user_id, check_date, reminder_id, habit_id, comment, checked_at)
                         VALUES (?, ?, NULL, ?, ?, now())
-                        """.trimIndent(),
-                        event.userId, event.checkDate, event.habitId, event.comment
+                        RETURNING id
+                    ),
+                    new_values AS (
+                        INSERT INTO checkin_values (checkin_id, param_id, status, quantity)
+                        SELECT ne.id, t.param_id, t.status, t.quantity
+                        FROM new_event ne
+                        CROSS JOIN (VALUES $valuesSql) AS t(param_id, status, quantity)
                     )
-                ) ?: return@transaction 0L
-                values.forEach { v ->
-                    tx.update(
-                        queryOf(
-                            """
-                            INSERT INTO checkin_values (checkin_id, param_id, status, quantity)
-                            VALUES (?, ?, ?::checkin_status, ?)
-                            """.trimIndent(),
-                            checkinId, v.paramId, v.status?.value, v.quantity
-                        )
-                    )
-                }
-                checkinId
-            }
+                    SELECT id FROM new_event
+                    """.trimIndent(),
+                    *params.toTypedArray()
+                ).map { it.long("id") }.asSingle
+            ) ?: 0L
         }
     }
 
