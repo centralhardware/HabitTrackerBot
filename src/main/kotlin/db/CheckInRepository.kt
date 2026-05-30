@@ -2,8 +2,10 @@ package db
 
 import services.DatabaseService
 import dto.CheckinEvent
+import dto.CheckinStatus
 import dto.CheckinValue
 import dto.CheckinValueRow
+import dto.DeletableCheckin
 import dto.PendingCheckIn
 import dto.toCheckinValueRow
 import dto.toResolvedCheckin
@@ -101,6 +103,7 @@ object CheckInRepository {
                     WHERE v.checkin_id = e.id
                       AND v.status IS NULL
                       AND e.reminder_id IS NOT NULL
+                      AND e.deleted = false
                       AND e.checked_at < ?
                     RETURNING e.reminder_id AS reminder_id, e.check_date AS check_date
                     """.trimIndent(),
@@ -120,16 +123,69 @@ object CheckInRepository {
             session.run(
                 queryOf(
                     """
-                    SELECT e.check_date, e.reminder_id, v.status, v.quantity, e.comment, r.reminder_time
+                    SELECT e.id AS checkin_id, e.check_date, e.reminder_id, v.status, v.quantity, e.comment, r.reminder_time
                     FROM checkins e
                     JOIN checkin_values v ON v.checkin_id = e.id
                     LEFT JOIN habit_reminders r ON r.id = e.reminder_id
                     WHERE v.habit_id = ?
+                      AND e.deleted = false
                     ORDER BY e.check_date, r.reminder_time NULLS FIRST, e.id
                     """.trimIndent(),
                     habitId
                 ).map { it.toCheckinValueRow() }.asList
             )
+        }
+    }
+
+    /**
+     * Loads a manual (non-scheduled, not-yet-deleted) check-in event with all its values,
+     * scoped to [userId]. Scheduled reminder check-ins are not deletable, so they are excluded.
+     * Returns null when no such event exists.
+     */
+    fun loadEventForDelete(checkinId: Long, userId: Long): DeletableCheckin? {
+        return sessionOf(DatabaseService.dataSource).use { session ->
+            val rows = session.run(
+                queryOf(
+                    """
+                    SELECT e.check_date, v.habit_id, v.status, v.quantity
+                    FROM checkins e
+                    JOIN checkin_values v ON v.checkin_id = e.id
+                    WHERE e.id = ?
+                      AND e.user_id = ?
+                      AND e.reminder_id IS NULL
+                      AND e.deleted = false
+                    """.trimIndent(),
+                    checkinId, userId
+                ).map { row ->
+                    row.localDate("check_date") to CheckinValue(
+                        habitId = row.long("habit_id"),
+                        status = row.stringOrNull("status")
+                            ?.let { s -> CheckinStatus.entries.firstOrNull { it.value == s } },
+                        quantity = row.doubleOrNull("quantity"),
+                    )
+                }.asList
+            )
+            if (rows.isEmpty()) null
+            else DeletableCheckin(checkinId, rows.first().first, rows.map { it.second })
+        }
+    }
+
+    /** Soft-deletes a manual check-in event (scheduled ones excluded); true when a row was flipped. */
+    fun softDeleteEvent(checkinId: Long, userId: Long): Boolean {
+        return using(sessionOf(DatabaseService.dataSource)) { session ->
+            session.update(
+                queryOf(
+                    """
+                    UPDATE checkins
+                    SET deleted = true
+                    WHERE id = ?
+                      AND user_id = ?
+                      AND reminder_id IS NULL
+                      AND deleted = false
+                    """.trimIndent(),
+                    checkinId, userId
+                )
+            ) > 0
         }
     }
 
@@ -145,6 +201,7 @@ object CheckInRepository {
                     JOIN habits h ON h.id = v.habit_id
                     WHERE h.user_id = ?
                       AND v.status IS NULL
+                      AND e.deleted = false
                       AND e.check_date BETWEEN ?::date AND ?::date
                     ORDER BY e.check_date, r.reminder_time
                     """.trimIndent(),

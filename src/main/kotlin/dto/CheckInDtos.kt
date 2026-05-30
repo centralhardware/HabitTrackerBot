@@ -27,6 +27,13 @@ data class CheckinValue(
     val quantity: Double?,
 )
 
+/** A manual check-in event resolved for soft-deletion: the event id, its date and all its values. */
+data class DeletableCheckin(
+    val checkinId: Long,
+    val date: LocalDate,
+    val values: List<CheckinValue>,
+)
+
 data class PendingCheckIn(
     val reminderId: Long,
     val name: String,
@@ -49,6 +56,7 @@ data class ResolvedCheckin(
 
 @Serializable
 data class CheckinRecord(
+    val checkinId: Long,
     @Serializable(LocalDateSerializer::class) val date: LocalDate,
     val status: CheckinStatus?,
     @EncodeDefault(EncodeDefault.Mode.NEVER) val quantity: Double? = null,
@@ -61,6 +69,7 @@ data class CheckinRecord(
  * analytics layer computes over. `isScheduled` mirrors `reminder_id IS NOT NULL`.
  */
 data class CheckinValueRow(
+    val checkinId: Long,
     val date: LocalDate,
     val isScheduled: Boolean,
     val status: CheckinStatus?,
@@ -70,6 +79,7 @@ data class CheckinValueRow(
 )
 
 fun Row.toCheckinValueRow(): CheckinValueRow = CheckinValueRow(
+    checkinId = long("checkin_id"),
     date = localDate("check_date"),
     isScheduled = longOrNull("reminder_id") != null,
     status = stringOrNull("status")?.let { v -> CheckinStatus.entries.firstOrNull { it.value == v } },
@@ -94,12 +104,4 @@ fun Row.toPendingCheckIn(): PendingCheckIn = PendingCheckIn(
     name = string("name"),
     reminderTime = localTime("reminder_time"),
     date = localDate("check_date")
-)
-
-fun Row.toCheckinRecord(): CheckinRecord = CheckinRecord(
-    date = localDate("check_date"),
-    status = stringOrNull("status")?.let { v -> CheckinStatus.entries.firstOrNull { it.value == v } },
-    quantity = doubleOrNull("quantity"),
-    reminderTime = localTimeOrNull("reminder_time"),
-    comment = stringOrNull("comment"),
 )

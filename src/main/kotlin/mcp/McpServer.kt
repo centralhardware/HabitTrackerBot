@@ -37,6 +37,7 @@ private val tools: List<McpTool> = listOf(
     HabitsListTool,
     QuantityRecordTool,
     CheckinsListTool,
+    CheckinDeleteTool,
     StatsUserTool,
 )
 

@@ -442,6 +442,13 @@ object Strings {
         return comment?.let { "$body\n💬 $it" } ?: body
     }
 
+    fun mcpDeletedCheckin(l: Lang, lines: List<String>, date: LocalDate): String {
+        val header = pick(l,
+            "🗑 via MCP — check-in removed — $date",
+            "🗑 через MCP — чек-ин удалён — $date")
+        return (listOf(header) + lines.map { "  – $it" }).joinToString("\n")
+    }
+
     fun btnDone(l: Lang) = pick(l, "✅ Done", "✅ Готово")
     fun btnSkip(l: Lang) = pick(l, "❌ Skip", "❌ Пропуск")
     fun btnDelete(l: Lang) = pick(l, "🗑 Delete", "🗑 Удалить")

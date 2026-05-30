@@ -7,6 +7,7 @@ import dto.CheckinRecord
 import dto.CheckinStatus
 import dto.CheckinValue
 import dto.CheckinValueRow
+import dto.DeletableCheckin
 import dto.Habit
 import dto.HabitStat
 import dto.HabitType
@@ -62,6 +63,16 @@ object CheckInService {
             CheckinEvent(userId, date, reminderId = null, comment = comment),
             valueRows,
         )
+    }
+
+    /**
+     * Soft-deletes a manual check-in event (and, with it, all of its values at once),
+     * scoped to [userId]. Returns the deleted event for notification, or null when it
+     * does not exist, was already deleted, or is a scheduled reminder check-in.
+     */
+    fun deleteCheckin(checkinId: Long, userId: Long): DeletableCheckin? {
+        val event = CheckInRepository.loadEventForDelete(checkinId, userId) ?: return null
+        return if (CheckInRepository.softDeleteEvent(checkinId, userId)) event else null
     }
 
     fun listInRange(habitId: Long, userId: Long, from: LocalDate, to: LocalDate): List<CheckinRecord>? {

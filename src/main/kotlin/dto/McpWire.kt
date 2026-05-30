@@ -37,3 +37,8 @@ data class FieldValueArg(
     val fieldId: Long,
     val value: Double,
 )
+
+@Serializable
+data class CheckinDeleteArgs(
+    val checkinId: Long,
+)
