@@ -44,13 +44,6 @@ private suspend fun BehaviourContext.handleCheckIn(query: MessageDataCallbackQue
         answerCallbackQuery(query, text = Strings.cbBadDate(lang))
         return
     }
-    if (parts[3] == "del") {
-        val msg = query.message
-        runCatching { deleteMessage(chatId = msg.chat.id, messageId = msg.messageId) }
-        answerCallbackQuery(query, text = Strings.cbDeleted(lang))
-        return
-    }
-
     val status = when (parts[3]) {
         "done" -> CheckinStatus.DONE
         "skip" -> CheckinStatus.SKIP

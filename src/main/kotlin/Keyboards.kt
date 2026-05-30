@@ -13,8 +13,7 @@ object Keyboards {
             listOf(
                 listOf(
                     CallbackDataInlineKeyboardButton(Strings.btnDone(lang), "ci|$reminderId|$date|done"),
-                    CallbackDataInlineKeyboardButton(Strings.btnSkip(lang), "ci|$reminderId|$date|skip"),
-                    CallbackDataInlineKeyboardButton(Strings.btnDelete(lang), "ci|$reminderId|$date|del")
+                    CallbackDataInlineKeyboardButton(Strings.btnSkip(lang), "ci|$reminderId|$date|skip")
                 )
             )
         )
