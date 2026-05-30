@@ -2,6 +2,7 @@ package commands
 
 import services.CheckInService
 import services.HabitService
+import services.ReminderMessageService
 import Keyboards
 import Strings
 import services.UserSettingsService
@@ -39,11 +40,14 @@ fun BehaviourContext.registerCheckInCommand() {
 
         scheduled.forEach { item ->
             val time = item.reminderTime.format(Keyboards.TIME_FMT)
-            sendMessage(
+            val text = "⏳ ${item.date} $time — ${item.name}"
+            val sent = sendMessage(
                 chatId = message.chat.id,
-                text = "⏳ ${item.date} $time — ${item.name}",
+                text = text,
                 replyMarkup = Keyboards.checkIn(item.reminderId, item.date, lang)
             )
+            // Track this message too, so resolving the check-in settles it like a scheduled reminder.
+            ReminderMessageService.remember(userId, sent.messageId.long, item.reminderId, item.date, text)
         }
 
         counters.forEach { habit ->
