@@ -69,13 +69,13 @@ object CheckInService {
 
     /**
      * Soft-deletes a quantity check-in event (and, with it, all of its values at once), scoped to
-     * [userId]. Only events dated on or before [notAfter] may be deleted — typically yesterday, so
-     * today's live entries are protected.
+     * [userId]. Only events dated on or after [notBefore] may be deleted — typically yesterday, so
+     * mistakes from today or yesterday can be retracted while older history stays protected.
      */
-    fun deleteCheckin(checkinId: Long, userId: Long, notAfter: LocalDate): DeleteOutcome {
+    fun deleteCheckin(checkinId: Long, userId: Long, notBefore: LocalDate): DeleteOutcome {
         val event = CheckInRepository.loadEventForDelete(checkinId, userId) ?: return DeleteOutcome.NotFound
-        if (event.date.isAfter(notAfter)) return DeleteOutcome.TooRecent(event.date)
-        return if (CheckInRepository.softDeleteEvent(checkinId, userId, notAfter)) DeleteOutcome.Deleted(event)
+        if (event.date.isBefore(notBefore)) return DeleteOutcome.TooOld(event.date)
+        return if (CheckInRepository.softDeleteEvent(checkinId, userId, notBefore)) DeleteOutcome.Deleted(event)
         else DeleteOutcome.NotFound
     }
 
@@ -83,7 +83,7 @@ object CheckInService {
     sealed interface DeleteOutcome {
         data class Deleted(val checkin: DeletableCheckin) : DeleteOutcome
         data object NotFound : DeleteOutcome
-        data class TooRecent(val date: LocalDate) : DeleteOutcome
+        data class TooOld(val date: LocalDate) : DeleteOutcome
     }
 
     fun listInRange(habitId: Long, userId: Long, from: LocalDate, to: LocalDate): List<CheckinRecord>? {

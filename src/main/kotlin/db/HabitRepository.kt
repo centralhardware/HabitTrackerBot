@@ -244,9 +244,9 @@ object HabitRepository {
      * are inserted as `pending` (status NULL) and returned so the caller can
      * send a catch-up notification.
      *
-     * `checked_at` is set to the slot's original firing moment, which keeps
-     * historical accuracy and lets `autoSkipOverdue` continue to work for any
-     * recent rows that the user ignores past the 24h cutoff.
+     * Recent (pending) rows keep `checked_at` NULL — there's no check-in yet; the
+     * old rows backfilled straight to `skip` get `checked_at = now()` as their skip
+     * moment. The skip/pending split is decided off the slot's firing moment.
      */
     fun backfillMissedScheduled(): List<RawMissed> {
         return sessionOf(DatabaseService.dataSource).use { session ->
@@ -284,11 +284,14 @@ object HabitRepository {
                     ),
                     ins_events AS (
                         INSERT INTO checkins (user_id, check_date, reminder_id, habit_id, comment, checked_at)
-                        SELECT user_id, missed_date, reminder_id, habit_id, NULL, fired_at
+                        SELECT user_id, missed_date, reminder_id, habit_id, NULL,
+                               CASE WHEN now() - fired_at > INTERVAL '24 hours'
+                                    THEN now()
+                                    ELSE NULL END
                         FROM missed
                         ON CONFLICT (reminder_id, check_date)
                             WHERE reminder_id IS NOT NULL DO NOTHING
-                        RETURNING id, reminder_id, check_date, checked_at
+                        RETURNING id, reminder_id, check_date
                     ),
                     ins_values AS (
                         INSERT INTO checkin_values (checkin_id, param_id, status, quantity)
@@ -296,7 +299,7 @@ object HabitRepository {
                                (SELECT hp.id FROM habit_params hp
                                 WHERE hp.habit_id = m.habit_id
                                 ORDER BY hp.position, hp.id LIMIT 1),
-                               CASE WHEN now() - ie.checked_at > INTERVAL '24 hours'
+                               CASE WHEN now() - m.fired_at > INTERVAL '24 hours'
                                     THEN 'skip'::checkin_status
                                     ELSE NULL END,
                                NULL
@@ -312,7 +315,7 @@ object HabitRepository {
                     JOIN missed m
                       ON m.reminder_id = ie.reminder_id
                      AND m.missed_date = ie.check_date
-                    WHERE now() - ie.checked_at <= INTERVAL '24 hours'
+                    WHERE now() - m.fired_at <= INTERVAL '24 hours'
                     ORDER BY m.missed_date, m.reminder_time
                     """.trimIndent()
                 ).map { it.toRawMissed() }.asList
