@@ -29,12 +29,13 @@ data class CheckinValue(
     val quantity: Double?,
 )
 
-/** A manual check-in event resolved for soft-deletion: the event id, its habit, date and all its values. */
+/** A manual check-in event resolved for soft-deletion or editing: the event id, its habit, date, comment and values. */
 data class DeletableCheckin(
     val checkinId: Long,
     val habitId: Long,
     val date: LocalDate,
     val values: List<CheckinValue>,
+    val comment: String? = null,
 )
 
 data class PendingCheckIn(

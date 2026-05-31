@@ -87,6 +87,37 @@ object CheckInService {
         data class TooOld(val date: LocalDate) : DeleteOutcome
     }
 
+    /**
+     * Patches a quantity check-in: optionally updates the comment and/or individual param quantities.
+     * Only entries dated on or after [notBefore] may be edited.
+     * [updateComment] must be true to touch the comment field (allows setting it to null).
+     * [valuePatch] maps paramId → new quantity (only listed params are updated).
+     */
+    fun updateCheckin(
+        checkinId: Long,
+        userId: Long,
+        notBefore: LocalDate,
+        updateComment: Boolean,
+        comment: String?,
+        valuePatch: Map<Long, Double>,
+    ): UpdateOutcome {
+        val event = CheckInRepository.loadEventForDelete(checkinId, userId) ?: return UpdateOutcome.NotFound
+        if (event.date.isBefore(notBefore)) return UpdateOutcome.TooOld(event.date)
+        val allowedParamIds = event.values.map { it.paramId }.toSet()
+        if (updateComment) CheckInRepository.updateCheckinComment(checkinId, userId, comment)
+        for ((paramId, qty) in valuePatch) {
+            if (paramId !in allowedParamIds) continue
+            CheckInRepository.updateCheckinValue(checkinId, userId, paramId, qty)
+        }
+        return UpdateOutcome.Updated(CheckInRepository.loadEventForDelete(checkinId, userId) ?: event)
+    }
+
+    sealed interface UpdateOutcome {
+        data class Updated(val checkin: DeletableCheckin) : UpdateOutcome
+        data object NotFound : UpdateOutcome
+        data class TooOld(val date: LocalDate) : UpdateOutcome
+    }
+
     fun listInRange(habitId: Long, userId: Long, from: LocalDate, to: LocalDate): List<CheckinRecord>? {
         HabitService.findById(habitId, userId) ?: return null
         return CheckinAnalytics.inRange(CheckInRepository.loadForHabit(habitId), from, to)

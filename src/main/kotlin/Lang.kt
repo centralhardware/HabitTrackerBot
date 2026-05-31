@@ -450,6 +450,14 @@ object Strings {
         return (listOf(header) + lines.map { "  – $it" }).joinToString("\n")
     }
 
+    fun mcpUpdatedCheckin(l: Lang, lines: List<String>, date: LocalDate): String {
+        val header = pick(l,
+            "✏️ via MCP — check-in updated — $date",
+            "✏️ через MCP — чек-ин обновлён — $date")
+        return (listOf(header) + lines.map { "  – $it" }).joinToString("\n")
+    }
+
+
     fun btnDone(l: Lang) = pick(l, "✅ Done", "✅ Готово")
     fun btnSkip(l: Lang) = pick(l, "❌ Skip", "❌ Пропуск")
     fun btnDelete(l: Lang) = pick(l, "🗑 Delete", "🗑 Удалить")

@@ -169,7 +169,7 @@ object CheckInRepository {
             val rows = session.run(
                 queryOf(
                     """
-                    SELECT e.habit_id, e.check_date, v.param_id, v.status, v.quantity
+                    SELECT e.habit_id, e.check_date, e.comment, v.param_id, v.status, v.quantity
                     FROM checkins e
                     JOIN checkin_values v ON v.checkin_id = e.id
                     WHERE e.id = ?
@@ -181,8 +181,8 @@ object CheckInRepository {
                     checkinId, userId
                 ).map { row ->
                     Triple(
-                        row.long("habit_id"),
-                        row.localDate("check_date"),
+                        Pair(row.long("habit_id"), row.localDate("check_date")),
+                        row.stringOrNull("comment"),
                         CheckinValue(
                             paramId = row.long("param_id"),
                             status = row.stringOrNull("status")
@@ -193,7 +193,45 @@ object CheckInRepository {
                 }.asList
             )
             if (rows.isEmpty()) null
-            else DeletableCheckin(checkinId, rows.first().first, rows.first().second, rows.map { it.third })
+            else DeletableCheckin(
+                checkinId,
+                rows.first().first.first,
+                rows.first().first.second,
+                rows.map { it.third },
+                rows.first().second,
+            )
+        }
+    }
+
+    fun updateCheckinComment(checkinId: Long, userId: Long, comment: String?): Boolean {
+        return using(sessionOf(DatabaseService.dataSource)) { session ->
+            session.update(
+                queryOf(
+                    "UPDATE checkins SET comment = ? WHERE id = ? AND user_id = ? AND deleted = false",
+                    comment, checkinId, userId
+                )
+            ) > 0
+        }
+    }
+
+    fun updateCheckinValue(checkinId: Long, userId: Long, paramId: Long, quantity: Double): Boolean {
+        return using(sessionOf(DatabaseService.dataSource)) { session ->
+            session.update(
+                queryOf(
+                    """
+                    UPDATE checkin_values v
+                    SET quantity = ?
+                    FROM checkins e
+                    WHERE v.checkin_id = e.id
+                      AND e.id = ?
+                      AND e.user_id = ?
+                      AND e.deleted = false
+                      AND v.param_id = ?
+                      AND v.quantity IS NOT NULL
+                    """.trimIndent(),
+                    quantity, checkinId, userId, paramId
+                )
+            ) > 0
         }
     }
 
