@@ -3,6 +3,8 @@ CREATE TYPE param_type AS ENUM ('number', 'text');
 ALTER TABLE habit_params
     ADD COLUMN param_type param_type NOT NULL DEFAULT 'number';
 
+UPDATE habit_params SET param_type = 'number';
+
 ALTER TABLE checkin_values
     ADD COLUMN value TEXT;
 
