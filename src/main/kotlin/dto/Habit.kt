@@ -44,7 +44,7 @@ enum class ParamType(val value: String) {
     @SerialName("text") TEXT("text");
 
     companion object {
-        fun parse(s: String?): ParamType = entries.firstOrNull { it.value == s } ?: NUMBER
+        fun parse(s: String?): ParamType? = entries.firstOrNull { it.value == s }
     }
 }
 
@@ -63,7 +63,7 @@ data class HabitParam(
     @EncodeDefault(EncodeDefault.Mode.NEVER) val direction: Direction? = null,
     @EncodeDefault(EncodeDefault.Mode.NEVER) val dailyTarget: Double? = null,
     val position: Int = 0,
-    val paramType: ParamType = ParamType.NUMBER,
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val paramType: ParamType? = null,
 )
 
 @Serializable

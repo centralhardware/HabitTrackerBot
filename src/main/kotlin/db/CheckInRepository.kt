@@ -183,7 +183,7 @@ object CheckInRepository {
                     """.trimIndent(),
                     checkinId, userId
                 ).map { row ->
-                    val paramType = ParamType.parse(row.stringOrNull("param_type"))
+                    val pt = ParamType.parse(row.stringOrNull("param_type"))
                     val rawValue = row.stringOrNull("value")
                     Triple(
                         Pair(row.long("habit_id"), row.localDate("check_date")),
@@ -192,8 +192,8 @@ object CheckInRepository {
                             paramId = row.long("param_id"),
                             status = row.stringOrNull("status")
                                 ?.let { s -> CheckinStatus.entries.firstOrNull { it.value == s } },
-                            quantity = if (paramType == ParamType.NUMBER) rawValue?.toDoubleOrNull() else null,
-                            textValue = if (paramType == ParamType.TEXT) rawValue else null,
+                            quantity = if (pt == ParamType.NUMBER) rawValue?.toDoubleOrNull() else null,
+                            textValue = if (pt == ParamType.TEXT) rawValue else null,
                         )
                     )
                 }.asList

@@ -112,7 +112,10 @@ object HabitRepository {
                     )
                 }
 
-                val params = habit.params.ifEmpty { listOf(HabitParam(id = 0)) }
+                val params = habit.params.ifEmpty {
+                    val defaultType = if (habit.type == HabitType.QUANTITY) dto.ParamType.NUMBER else null
+                    listOf(HabitParam(id = 0, paramType = defaultType))
+                }
                 val savedParams = params.mapIndexed { i, p ->
                     val pid = tx.updateAndReturnGeneratedKey(
                         queryOf(
@@ -120,7 +123,7 @@ object HabitRepository {
                             INSERT INTO habit_params (habit_id, name, unit, direction, daily_target, position, param_type)
                             VALUES (?, ?, ?, ?::habit_direction, ?, ?, ?::param_type)
                             """.trimIndent(),
-                            id, p.name, p.unit, p.direction?.value, p.dailyTarget, i, p.paramType.value
+                            id, p.name, p.unit, p.direction?.value, p.dailyTarget, i, p.paramType?.value
                         )
                     ) ?: error("Failed to insert habit param")
                     p.copy(id = pid, habitId = id, position = i)
