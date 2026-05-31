@@ -175,6 +175,7 @@ object CheckInService {
     }
 
     private fun streak(logged: Set<LocalDate>, skipped: Set<LocalDate>, today: LocalDate): Int {
+        if (today in skipped) return 0
         val good: (LocalDate) -> Boolean = { it in logged && it !in skipped }
         var d = today.minusDays(1)
         var streak = 0
