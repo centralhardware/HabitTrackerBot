@@ -5,6 +5,7 @@ import dto.Habit
 import dto.HabitStat
 import dto.HabitType
 import dto.HabitWeekStat
+import dto.ParamType
 import java.time.LocalDate
 import kotlin.math.roundToLong
 
@@ -162,10 +163,15 @@ object Strings {
         if (h.multiField) {
             val header = pick(l, "Added: \"${h.name}\" [$type]", "Добавлено: «${h.name}» [$type]")
             val fieldLines = h.params.map { f ->
-                val unit = f.unit?.let { " $it" } ?: ""
-                val target = f.dailyTarget?.let { " — ${formatAmount(it)}$unit/day" } ?: ""
-                val dir = f.direction?.let { " (${directionLabel(l, it)})" } ?: ""
-                "  – ${f.name ?: ""}$target$dir"
+                if (f.paramType == ParamType.TEXT) {
+                    val label = pick(l, "text", "текст")
+                    "  – ${f.name ?: ""} ($label)"
+                } else {
+                    val unit = f.unit?.let { " $it" } ?: ""
+                    val target = f.dailyTarget?.let { " — ${formatAmount(it)}$unit/day" } ?: ""
+                    val dir = f.direction?.let { " (${directionLabel(l, it)})" } ?: ""
+                    "  – ${f.name ?: ""}$target$dir"
+                }
             }
             val timesLine = if (times.isNotEmpty()) listOf("  ⏰ $times") else emptyList()
             return (listOf(header) + fieldLines + timesLine).joinToString("\n")
@@ -430,17 +436,35 @@ object Strings {
             "🤖 через MCP — $name: ${formatAmount(amount)}$u — $date$c")
     }
 
-    fun mcpRecordedQuantityGroup(l: Lang, root: Habit, perField: Map<Long, Double>, date: LocalDate, comment: String?): String {
+    fun mcpRecordedQuantityGroup(
+        l: Lang,
+        root: Habit,
+        numericPerField: Map<Long, Double>,
+        textPerField: Map<Long, String> = emptyMap(),
+        date: LocalDate,
+        comment: String?
+    ): String {
         val header = pick(l,
             "🤖 via MCP — ${root.name} — $date",
             "🤖 через MCP — ${root.name} — $date")
         val fieldLines = root.params.mapNotNull { f ->
-            val v = perField[f.id] ?: return@mapNotNull null
-            val u = f.unit?.let { " $it" } ?: ""
-            "  – ${f.name ?: ""}: ${formatAmount(v)}$u"
+            val numV = numericPerField[f.id]
+            val textV = textPerField[f.id]
+            when {
+                numV != null -> { val u = f.unit?.let { " $it" } ?: ""; "  – ${f.name ?: ""}: ${formatAmount(numV)}$u" }
+                textV != null -> "  – ${f.name ?: ""}: $textV"
+                else -> null
+            }
         }
         val body = (listOf(header) + fieldLines).joinToString("\n")
         return comment?.let { "$body\n💬 $it" } ?: body
+    }
+
+    fun mcpRecordedQuantityText(l: Lang, name: String, text: String, date: LocalDate, comment: String?): String {
+        val c = comment?.let { "\n💬 $it" } ?: ""
+        return pick(l,
+            "🤖 via MCP — $name: $text — $date$c",
+            "🤖 через MCP — $name: $text — $date$c")
     }
 
     fun mcpDeletedCheckin(l: Lang, lines: List<String>, date: LocalDate): String {
@@ -469,6 +493,10 @@ object Strings {
         "Отправьте комментарий к этому +1:")
     fun btnModeSingle(l: Lang) = pick(l, "📏 single value", "📏 одно значение")
     fun btnModeGroup(l: Lang) = pick(l, "🧩 multiple fields", "🧩 несколько полей")
+
+    fun pickParamType(l: Lang) = pick(l, "Field type:", "Тип поля:")
+    fun btnParamTypeNumber(l: Lang) = pick(l, "🔢 number", "🔢 число")
+    fun btnParamTypeText(l: Lang) = pick(l, "📝 text", "📝 текст")
 
     fun pickLogMode(l: Lang) = pick(l,
         "Track metrics, or just keep a log?\n• tracked — streaks, completion, trends and weekly summary\n• log only — just a journal of entries, no targets/streaks, hidden from /stats",

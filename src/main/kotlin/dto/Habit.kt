@@ -38,10 +38,21 @@ enum class HabitStatus(val value: String) {
     }
 }
 
+@Serializable
+enum class ParamType(val value: String) {
+    @SerialName("number") NUMBER("number"),
+    @SerialName("text") TEXT("text");
+
+    companion object {
+        fun parse(s: String?): ParamType = entries.firstOrNull { it.value == s } ?: NUMBER
+    }
+}
+
 /**
  * A "field" of a habit, in its own `habit_params` row. Every habit has at least one:
  * scheduled/counter habits a single service param (metadata null — those keep their
  * targets/direction on the habit row), quantity habits one param per tracked field.
+ * `paramType` is NUMBER for regular decimal fields, TEXT for free-text fields.
  */
 @Serializable
 data class HabitParam(
@@ -52,6 +63,7 @@ data class HabitParam(
     @EncodeDefault(EncodeDefault.Mode.NEVER) val direction: Direction? = null,
     @EncodeDefault(EncodeDefault.Mode.NEVER) val dailyTarget: Double? = null,
     val position: Int = 0,
+    val paramType: ParamType = ParamType.NUMBER,
 )
 
 @Serializable
@@ -94,6 +106,7 @@ fun Row.toHabitParam(): HabitParam = HabitParam(
     direction = Direction.parse(stringOrNull("direction")),
     dailyTarget = doubleOrNull("daily_target"),
     position = int("position"),
+    paramType = ParamType.parse(stringOrNull("param_type")),
 )
 
 /** Reads a nullable Postgres int[] column; NULL becomes an empty list. */

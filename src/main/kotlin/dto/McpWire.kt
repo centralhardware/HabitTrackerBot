@@ -40,13 +40,33 @@ data class QuantityRecordArgs(
     val comment: String? = null,
 )
 
+/** Unified value arg: pass a number string (e.g. "5.5") for numeric params, any string for text params. */
 @Serializable
 data class FieldValueArg(
     val paramId: Long,
-    val value: Double,
+    val value: String,
 )
+
+/** Parsed form of [FieldValueArg] after type dispatch against [dto.ParamType]. */
+sealed interface FieldValue {
+    data class Numeric(val v: Double) : FieldValue
+    data class Text(val v: String) : FieldValue
+}
+
+fun FieldValueArg.parse(paramType: ParamType): FieldValue? = when (paramType) {
+    ParamType.TEXT -> value.trim().takeIf { it.isNotBlank() }?.let { FieldValue.Text(it) }
+    ParamType.NUMBER -> value.replace(',', '.').toDoubleOrNull()?.let { FieldValue.Numeric(it) }
+}
 
 @Serializable
 data class CheckinDeleteArgs(
     val checkinId: Long,
+)
+
+@Serializable
+data class CheckinUpdateArgs(
+    val checkinId: Long,
+    val comment: String? = null,
+    val clearComment: Boolean = false,
+    val values: List<FieldValueArg> = emptyList(),
 )

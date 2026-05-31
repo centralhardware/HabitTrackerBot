@@ -27,7 +27,11 @@ data class CheckinValue(
     val paramId: Long,
     val status: CheckinStatus?,
     val quantity: Double?,
-)
+    val textValue: String? = null,
+) {
+    /** Unified string written to `checkin_values.value`. */
+    val dbValue: String? get() = quantity?.toString() ?: textValue
+}
 
 /** A manual check-in event resolved for soft-deletion or editing: the event id, its habit, date, comment and values. */
 data class DeletableCheckin(
@@ -67,6 +71,7 @@ data class CheckinRecord(
     @EncodeDefault(EncodeDefault.Mode.NEVER) val quantity: Double? = null,
     @EncodeDefault(EncodeDefault.Mode.NEVER) @Serializable(LocalTimeSerializer::class) val reminderTime: LocalTime? = null,
     @EncodeDefault(EncodeDefault.Mode.NEVER) val comment: String? = null,
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val textValue: String? = null,
 )
 
 /**
@@ -83,18 +88,24 @@ data class CheckinValueRow(
     val quantity: Double?,
     val comment: String?,
     val reminderTime: LocalTime?,
+    val textValue: String? = null,
 )
 
-fun Row.toCheckinValueRow(): CheckinValueRow = CheckinValueRow(
-    checkinId = long("checkin_id"),
-    paramId = long("param_id"),
-    date = localDate("check_date"),
-    isScheduled = longOrNull("reminder_id") != null,
-    status = stringOrNull("status")?.let { v -> CheckinStatus.entries.firstOrNull { it.value == v } },
-    quantity = doubleOrNull("quantity"),
-    comment = stringOrNull("comment"),
-    reminderTime = localTimeOrNull("reminder_time"),
-)
+fun Row.toCheckinValueRow(): CheckinValueRow {
+    val paramType = ParamType.parse(stringOrNull("param_type"))
+    val rawValue = stringOrNull("value")
+    return CheckinValueRow(
+        checkinId = long("checkin_id"),
+        paramId = long("param_id"),
+        date = localDate("check_date"),
+        isScheduled = longOrNull("reminder_id") != null,
+        status = stringOrNull("status")?.let { v -> CheckinStatus.entries.firstOrNull { it.value == v } },
+        quantity = if (paramType == ParamType.NUMBER) rawValue?.toDoubleOrNull() else null,
+        comment = stringOrNull("comment"),
+        reminderTime = localTimeOrNull("reminder_time"),
+        textValue = if (paramType == ParamType.TEXT) rawValue else null,
+    )
+}
 
 fun Row.toSentReminderMessage(): SentReminderMessage = SentReminderMessage(
     userId = long("user_id"),

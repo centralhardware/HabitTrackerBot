@@ -42,26 +42,32 @@ object CheckInService {
     }
 
     /**
-     * Записывает событие чекина quantity-привычки: одну строку в checkins (с общим комментом)
-     * и N строк в checkin_values. [values] ключуется по id param-а. Возвращает id созданного
-     * события (`checkins.id`), либо 0, если записать нечего.
+     * Записывает событие чекина quantity-привычки. Принимает числовые значения ([numericValues],
+     * paramId → Double) и текстовые ([textValues], paramId → String) отдельно.
+     * Возвращает id созданного события (`checkins.id`), либо 0, если записать нечего.
      */
     fun recordQuantity(
         habitId: Long,
         userId: Long,
         date: LocalDate,
-        values: Map<Long, Double>,
+        numericValues: Map<Long, Double> = emptyMap(),
+        textValues: Map<Long, String> = emptyMap(),
         comment: String? = null
     ): Long {
-        if (values.isEmpty()) return 0
+        if (numericValues.isEmpty() && textValues.isEmpty()) return 0
         val habit = HabitService.findById(habitId, userId) ?: return 0
         if (habit.type != HabitType.QUANTITY) return 0
         val allowedIds = habit.params.map { it.id }.toSet()
-        val sanitized = values.filterKeys { it in allowedIds }
-        if (sanitized.isEmpty()) return 0
-        val valueRows = sanitized.map { (paramId, value) ->
-            CheckinValue(paramId, CheckinStatus.DONE, quantity = value)
+        val valueRows = habit.params.mapNotNull { p ->
+            when {
+                p.id in numericValues && p.id in allowedIds ->
+                    CheckinValue(p.id, CheckinStatus.DONE, quantity = numericValues[p.id]!!)
+                p.id in textValues && p.id in allowedIds ->
+                    CheckinValue(p.id, CheckinStatus.DONE, quantity = null, textValue = textValues[p.id])
+                else -> null
+            }
         }
+        if (valueRows.isEmpty()) return 0
         return CheckInRepository.insertEventWithValues(
             CheckinEvent(userId, date, reminderId = null, habitId = habitId, comment = comment),
             valueRows,
@@ -99,15 +105,15 @@ object CheckInService {
         notBefore: LocalDate,
         updateComment: Boolean,
         comment: String?,
-        valuePatch: Map<Long, Double>,
+        valuePatch: Map<Long, String> = emptyMap(),
     ): UpdateOutcome {
         val event = CheckInRepository.loadEventForDelete(checkinId, userId) ?: return UpdateOutcome.NotFound
         if (event.date.isBefore(notBefore)) return UpdateOutcome.TooOld(event.date)
         val allowedParamIds = event.values.map { it.paramId }.toSet()
         if (updateComment) CheckInRepository.updateCheckinComment(checkinId, userId, comment)
-        for ((paramId, qty) in valuePatch) {
+        for ((paramId, value) in valuePatch) {
             if (paramId !in allowedParamIds) continue
-            CheckInRepository.updateCheckinValue(checkinId, userId, paramId, qty)
+            CheckInRepository.updateCheckinValue(checkinId, userId, paramId, value)
         }
         return UpdateOutcome.Updated(CheckInRepository.loadEventForDelete(checkinId, userId) ?: event)
     }

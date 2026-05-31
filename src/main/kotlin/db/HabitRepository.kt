@@ -54,7 +54,7 @@ object HabitRepository {
             val paramsByHabit = session.run(
                 queryOf(
                     """
-                    SELECT p.id, p.habit_id, p.name, p.unit, p.direction, p.daily_target, p.position
+                    SELECT p.id, p.habit_id, p.name, p.unit, p.direction, p.daily_target, p.position, p.param_type
                     FROM habit_params p
                     JOIN habits h ON h.id = p.habit_id
                     WHERE h.user_id = ? AND h.status <> 'deleted'
@@ -117,10 +117,10 @@ object HabitRepository {
                     val pid = tx.updateAndReturnGeneratedKey(
                         queryOf(
                             """
-                            INSERT INTO habit_params (habit_id, name, unit, direction, daily_target, position)
-                            VALUES (?, ?, ?, ?::habit_direction, ?, ?)
+                            INSERT INTO habit_params (habit_id, name, unit, direction, daily_target, position, param_type)
+                            VALUES (?, ?, ?, ?::habit_direction, ?, ?, ?::param_type)
                             """.trimIndent(),
-                            id, p.name, p.unit, p.direction?.value, p.dailyTarget, i
+                            id, p.name, p.unit, p.direction?.value, p.dailyTarget, i, p.paramType.value
                         )
                     ) ?: error("Failed to insert habit param")
                     p.copy(id = pid, habitId = id, position = i)
@@ -273,7 +273,7 @@ object HabitRepository {
                         RETURNING id, reminder_id, check_date
                     ),
                     ins_values AS (
-                        INSERT INTO checkin_values (checkin_id, param_id, status, quantity)
+                        INSERT INTO checkin_values (checkin_id, param_id, status, value)
                         SELECT ie.id,
                                (SELECT hp.id FROM habit_params hp
                                 WHERE hp.habit_id = m.habit_id

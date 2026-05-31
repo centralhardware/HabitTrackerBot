@@ -42,12 +42,12 @@ object CheckinAnalytics {
     /** Rows in [from]..[to] mapped to the public [CheckinRecord] shape (old `findInRange`). */
     fun inRange(rows: List<CheckinValueRow>, from: LocalDate, to: LocalDate): List<CheckinRecord> =
         rows.filter { it.date in from..to }
-            .map { CheckinRecord(it.checkinId, it.paramId, it.date, it.status, it.quantity, it.reminderTime, it.comment) }
+            .map { CheckinRecord(it.checkinId, it.paramId, it.date, it.status, it.quantity, it.reminderTime, it.comment, it.textValue) }
 
     /** Weekly totals over [from]..[to] (old `WeeklySummaryRepository.weeklyTotals`). */
     fun weekTotals(rows: List<CheckinValueRow>, from: LocalDate, to: LocalDate): WeekTotals {
         val window = rows.filter { it.date in from..to }
-        val counterEvents = window.filter { !it.isScheduled && it.quantity == null }
+        val counterEvents = window.filter { !it.isScheduled && it.quantity == null && it.textValue == null }
         val quantityEvents = window.filter { !it.isScheduled && it.quantity != null }
         return WeekTotals(
             done = window.count { it.isScheduled && it.status == CheckinStatus.DONE },

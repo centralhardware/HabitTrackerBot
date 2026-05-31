@@ -1,26 +1,34 @@
 package mcp
 
 import BotNotifier
+import db.CheckInRepository
 import services.CheckInService
 import services.HabitService
 import Lang
 import Strings
-import io.modelcontextprotocol.kotlin.sdk.types.CallToolRequest
+import dto.CheckinUpdateArgs
+import dto.FieldValue
+import dto.ParamType
+import dto.parse
 import io.modelcontextprotocol.kotlin.sdk.types.CallToolResult
 import io.modelcontextprotocol.kotlin.sdk.types.ToolAnnotations
 import io.modelcontextprotocol.kotlin.sdk.types.ToolSchema
-import kotlinx.serialization.json.*
+import kotlinx.serialization.json.add
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
+import kotlinx.serialization.json.putJsonArray
+import kotlinx.serialization.json.putJsonObject
 import java.time.LocalDate
 import java.time.ZoneId
 
-object CheckinUpdateTool : McpTool {
+object CheckinUpdateTool : TypedMcpTool<CheckinUpdateArgs>(CheckinUpdateArgs.serializer()) {
     override val name = "checkin_update"
     override val description =
         "Edit a quantity check-in by its checkinId (same id returned by quantity_record or listed in checkins_list). " +
             "Only entries dated today or yesterday can be edited. Editable fields: " +
-            "'comment' (string or null to clear — key must be present to change it), " +
-            "'values' (array of { paramId, value } — only listed params are updated, others stay). " +
-            "At least one of 'comment' or 'values' must be provided."
+            "'comment' (string or omit to leave unchanged), 'clearComment' (true to remove the comment), " +
+            "'values' (array of { paramId, value } — same string format as quantity_record; only listed params are updated). " +
+            "At least one of 'comment'/'clearComment' or 'values' must be provided."
     override val inputSchema: ToolSchema = buildSchema()
     override val annotations = ToolAnnotations(
         readOnlyHint = false,
@@ -29,42 +37,42 @@ object CheckinUpdateTool : McpTool {
         openWorldHint = false,
     )
 
-    override fun handle(userId: Long, lang: Lang, tz: ZoneId, request: CallToolRequest): CallToolResult {
-        val args = request.arguments ?: return err("arguments required")
-        val checkinId = args["checkinId"]?.jsonPrimitive?.longOrNull ?: return err("checkinId is required")
+    override fun handle(userId: Long, lang: Lang, tz: ZoneId, args: CheckinUpdateArgs): CallToolResult {
+        val hasComment = args.clearComment || args.comment != null
+        if (!hasComment && args.values.isEmpty()) {
+            return err("Provide at least 'comment'/'clearComment' or 'values' to update")
+        }
+        val newComment = if (args.clearComment) null else args.comment?.trim()?.ifEmpty { null }
 
-        val hasComment = "comment" in args
-        val hasValues = "values" in args
-        if (!hasComment && !hasValues) return err("Provide at least 'comment' or 'values' to update")
-
-        val commentElem = args["comment"]
-        val newComment = if (!hasComment) null
-                         else if (commentElem == null || commentElem is JsonNull) null
-                         else commentElem.jsonPrimitive.content.trim().ifEmpty { null }
-
-        val valuePatch = mutableMapOf<Long, Double>()
-        if (hasValues) {
-            val arr = args["values"] as? JsonArray ?: return err("'values' must be an array")
-            for ((i, item) in arr.withIndex()) {
-                val obj = item as? JsonObject ?: return err("values[$i] must be an object")
-                val paramId = obj["paramId"]?.jsonPrimitive?.longOrNull
-                    ?: return err("values[$i].paramId is required")
-                val value = obj["value"]?.jsonPrimitive?.doubleOrNull
-                    ?: return err("values[$i].value is required and must be a number")
-                if (value <= 0 || value.isNaN() || value.isInfinite())
-                    return err("values[$i].value must be > 0 (paramId $paramId)")
-                valuePatch[paramId] = value
+        val valuePatch = mutableMapOf<Long, String>()
+        if (args.values.isNotEmpty()) {
+            val checkin = CheckInRepository.loadEventForDelete(args.checkinId, userId)
+                ?: return err("Check-in ${args.checkinId} not found, already deleted, or not editable")
+            val paramById = HabitService.findById(checkin.habitId, userId)?.params?.associateBy { it.id } ?: emptyMap()
+            for ((i, fv) in args.values.withIndex()) {
+                val paramType = paramById[fv.paramId]?.paramType ?: ParamType.NUMBER
+                when (val parsed = fv.parse(paramType)) {
+                    is FieldValue.Numeric -> {
+                        if (parsed.v <= 0 || parsed.v.isNaN() || parsed.v.isInfinite())
+                            return err("values[$i].value must be > 0 for number param ${fv.paramId}")
+                        valuePatch[fv.paramId] = parsed.v.toString()
+                    }
+                    is FieldValue.Text -> valuePatch[fv.paramId] = parsed.v
+                    null -> return err(
+                        if (paramType == ParamType.TEXT) "values[$i].value must be non-blank text for param ${fv.paramId}"
+                        else "values[$i].value must be a number for param ${fv.paramId}"
+                    )
+                }
             }
-            if (valuePatch.isEmpty()) return err("'values' must be non-empty")
         }
 
         val yesterday = LocalDate.now(tz).minusDays(1)
         val updated = when (val outcome = CheckInService.updateCheckin(
-            checkinId, userId, yesterday, hasComment, newComment, valuePatch
+            args.checkinId, userId, yesterday, hasComment, newComment, valuePatch
         )) {
             is CheckInService.UpdateOutcome.Updated -> outcome.checkin
             CheckInService.UpdateOutcome.NotFound ->
-                return err("Check-in $checkinId not found, already deleted, or not a quantity entry")
+                return err("Check-in ${args.checkinId} not found, already deleted, or not a quantity entry")
             is CheckInService.UpdateOutcome.TooOld ->
                 return err("Cannot edit check-ins dated earlier than yesterday ($yesterday); ${outcome.date} is too old")
         }
@@ -74,11 +82,14 @@ object CheckinUpdateTool : McpTool {
             updated.values.forEach { v ->
                 val param = habit?.params?.firstOrNull { it.id == v.paramId }
                 val name = param?.name ?: habit?.name ?: "#${v.paramId}"
-                val unitSrc = param?.unit ?: habit?.unit
                 val qty = v.quantity
-                if (qty != null) {
-                    val unit = unitSrc?.let { " $it" } ?: ""
-                    add("$name: ${Strings.formatAmount(qty)}$unit")
+                val textV = v.textValue
+                when {
+                    qty != null -> {
+                        val unit = (param?.unit ?: habit?.unit)?.let { " $it" } ?: ""
+                        add("$name: ${Strings.formatAmount(qty)}$unit")
+                    }
+                    textV != null -> add("$name: $textV")
                 }
             }
             if (hasComment) add(
@@ -87,8 +98,7 @@ object CheckinUpdateTool : McpTool {
             )
         }
         BotNotifier.notify(userId, Strings.mcpUpdatedCheckin(lang, lines, updated.date))
-
-        return ok("""{"updated":true,"checkinId":$checkinId,"date":"${updated.date}"}""")
+        return ok("""{"updated":true,"checkinId":${args.checkinId},"date":"${updated.date}"}""")
     }
 
     private fun buildSchema(): ToolSchema {
@@ -98,23 +108,27 @@ object CheckinUpdateTool : McpTool {
                 put("description", "The check-in id to edit (from quantity_record or checkins_list).")
             }
             putJsonObject("comment") {
-                put("description", "New comment string, or null to clear it. Omit this key entirely to leave the comment unchanged.")
+                put("type", "string")
+                put("description", "New comment. Omit to leave unchanged. Use clearComment=true to remove.")
+            }
+            putJsonObject("clearComment") {
+                put("type", "boolean")
+                put("description", "Set true to clear the comment. Default false.")
             }
             putJsonObject("values") {
                 put("type", "array")
                 put("minItems", 1)
-                put("description", "Params to update. Only listed paramIds are changed; unlisted params keep their current values.")
+                put("description", "Params to update. Same { paramId, value } string format as quantity_record. Unlisted params keep current values.")
                 putJsonObject("items") {
                     put("type", "object")
                     putJsonObject("properties") {
                         putJsonObject("paramId") {
                             put("type", "integer")
-                            put("description", "Param id (from habits_list params[].id for this habit).")
+                            put("description", "Param id (from habits_list params[].id).")
                         }
                         putJsonObject("value") {
-                            put("type", "number")
-                            put("exclusiveMinimum", 0)
-                            put("description", "New quantity value; must be > 0.")
+                            put("type", "string")
+                            put("description", "Number string for 'number' params; any text for 'text' params.")
                         }
                     }
                     putJsonArray("required") { add("paramId"); add("value") }

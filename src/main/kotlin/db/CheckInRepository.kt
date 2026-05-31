@@ -6,6 +6,7 @@ import dto.CheckinStatus
 import dto.CheckinValue
 import dto.CheckinValueRow
 import dto.DeletableCheckin
+import dto.ParamType
 import dto.PendingCheckIn
 import dto.toCheckinValueRow
 import dto.toResolvedCheckin
@@ -43,15 +44,14 @@ object CheckInRepository {
                         DO UPDATE SET checked_at = COALESCE(EXCLUDED.checked_at, checkins.checked_at)
                         RETURNING id
                     )
-                    INSERT INTO checkin_values (checkin_id, param_id, status, quantity)
-                    SELECT id, ?, ?::checkin_status, ?
+                    INSERT INTO checkin_values (checkin_id, param_id, status, value)
+                    SELECT id, ?, ?::checkin_status, NULL
                     FROM upsert_event
                     ON CONFLICT (checkin_id, param_id)
-                    DO UPDATE SET status = EXCLUDED.status,
-                                  quantity = EXCLUDED.quantity
+                    DO UPDATE SET status = EXCLUDED.status
                     """.trimIndent(),
                     event.userId, event.checkDate, event.reminderId, event.habitId, checkedAt,
-                    value.paramId, value.status?.value, value.quantity
+                    value.paramId, value.status?.value
                 )
             )
             written > 0
@@ -69,10 +69,10 @@ object CheckInRepository {
         // back through a plain top-level SELECT. Keeping the RETURNING inside the CTE avoids
         // the `updateAndReturnGeneratedKey` / top-level RETURNING path that crashes PG JDBC
         // 42.7.4 (see upsertScheduledValue) and stays atomic in one round-trip.
-        val valuesSql = values.joinToString(", ") { "(?, ?::checkin_status, ?::numeric)" }
+        val valuesSql = values.joinToString(", ") { "(?, ?::checkin_status, ?)" }
         val params = buildList<Any?> {
             add(event.userId); add(event.checkDate); add(event.habitId); add(event.comment)
-            values.forEach { add(it.paramId); add(it.status?.value); add(it.quantity) }
+            values.forEach { add(it.paramId); add(it.status?.value); add(it.dbValue) }
         }
         return using(sessionOf(DatabaseService.dataSource)) { session ->
             session.run(
@@ -84,10 +84,10 @@ object CheckInRepository {
                         RETURNING id
                     ),
                     new_values AS (
-                        INSERT INTO checkin_values (checkin_id, param_id, status, quantity)
-                        SELECT ne.id, t.param_id, t.status, t.quantity
+                        INSERT INTO checkin_values (checkin_id, param_id, status, value)
+                        SELECT ne.id, t.param_id, t.status, t.value
                         FROM new_event ne
-                        CROSS JOIN (VALUES $valuesSql) AS t(param_id, status, quantity)
+                        CROSS JOIN (VALUES $valuesSql) AS t(param_id, status, value)
                     )
                     SELECT id FROM new_event
                     """.trimIndent(),
@@ -144,10 +144,11 @@ object CheckInRepository {
             session.run(
                 queryOf(
                     """
-                    SELECT e.id AS checkin_id, v.param_id, e.check_date, e.reminder_id,
-                           v.status, v.quantity, e.comment, r.reminder_time
+                    SELECT e.id AS checkin_id, v.param_id, p.param_type, e.check_date, e.reminder_id,
+                           v.status, v.value, e.comment, r.reminder_time
                     FROM checkins e
                     JOIN checkin_values v ON v.checkin_id = e.id
+                    LEFT JOIN habit_params p ON p.id = v.param_id
                     LEFT JOIN habit_reminders r ON r.id = e.reminder_id
                     WHERE e.habit_id = ?
                       AND e.deleted = false
@@ -160,26 +161,30 @@ object CheckInRepository {
     }
 
     /**
-     * Loads a quantity check-in event (not-yet-deleted) with all its values, scoped to [userId].
-     * Only quantity entries are deletable: scheduled reminder check-ins (reminder_id set) and
-     * counter events (quantity null) are excluded. Returns null when no such event exists.
+     * Loads a quantity/text check-in event (not-yet-deleted) with all its values, scoped to [userId].
+     * Scheduled reminder check-ins (reminder_id set) and counter events (value null) are excluded.
+     * Returns null when no such event exists.
      */
     fun loadEventForDelete(checkinId: Long, userId: Long): DeletableCheckin? {
         return sessionOf(DatabaseService.dataSource).use { session ->
             val rows = session.run(
                 queryOf(
                     """
-                    SELECT e.habit_id, e.check_date, e.comment, v.param_id, v.status, v.quantity
+                    SELECT e.habit_id, e.check_date, e.comment,
+                           v.param_id, p.param_type, v.status, v.value
                     FROM checkins e
                     JOIN checkin_values v ON v.checkin_id = e.id
+                    JOIN habit_params p ON p.id = v.param_id
                     WHERE e.id = ?
                       AND e.user_id = ?
                       AND e.reminder_id IS NULL
                       AND e.deleted = false
-                      AND v.quantity IS NOT NULL
+                      AND v.value IS NOT NULL
                     """.trimIndent(),
                     checkinId, userId
                 ).map { row ->
+                    val paramType = ParamType.parse(row.stringOrNull("param_type"))
+                    val rawValue = row.stringOrNull("value")
                     Triple(
                         Pair(row.long("habit_id"), row.localDate("check_date")),
                         row.stringOrNull("comment"),
@@ -187,7 +192,8 @@ object CheckInRepository {
                             paramId = row.long("param_id"),
                             status = row.stringOrNull("status")
                                 ?.let { s -> CheckinStatus.entries.firstOrNull { it.value == s } },
-                            quantity = row.doubleOrNull("quantity"),
+                            quantity = if (paramType == ParamType.NUMBER) rawValue?.toDoubleOrNull() else null,
+                            textValue = if (paramType == ParamType.TEXT) rawValue else null,
                         )
                     )
                 }.asList
@@ -214,29 +220,30 @@ object CheckInRepository {
         }
     }
 
-    fun updateCheckinValue(checkinId: Long, userId: Long, paramId: Long, quantity: Double): Boolean {
+    /** Updates the stored [value] string of a single param row within a check-in. */
+    fun updateCheckinValue(checkinId: Long, userId: Long, paramId: Long, value: String): Boolean {
         return using(sessionOf(DatabaseService.dataSource)) { session ->
             session.update(
                 queryOf(
                     """
                     UPDATE checkin_values v
-                    SET quantity = ?
+                    SET value = ?
                     FROM checkins e
                     WHERE v.checkin_id = e.id
                       AND e.id = ?
                       AND e.user_id = ?
                       AND e.deleted = false
                       AND v.param_id = ?
-                      AND v.quantity IS NOT NULL
+                      AND v.value IS NOT NULL
                     """.trimIndent(),
-                    quantity, checkinId, userId, paramId
+                    value, checkinId, userId, paramId
                 )
             ) > 0
         }
     }
 
     /**
-     * Soft-deletes a quantity check-in event dated on or after [notBefore]; true when a row was
+     * Soft-deletes a quantity/text check-in event dated on or after [notBefore]; true when a row was
      * flipped. Mirrors [loadEventForDelete]'s guards so the delete itself enforces the bounds.
      */
     fun softDeleteEvent(checkinId: Long, userId: Long, notBefore: LocalDate): Boolean {
@@ -253,7 +260,7 @@ object CheckInRepository {
                       AND e.check_date >= ?
                       AND EXISTS (
                           SELECT 1 FROM checkin_values v
-                          WHERE v.checkin_id = e.id AND v.quantity IS NOT NULL
+                          WHERE v.checkin_id = e.id AND v.value IS NOT NULL
                       )
                     """.trimIndent(),
                     checkinId, userId, notBefore
