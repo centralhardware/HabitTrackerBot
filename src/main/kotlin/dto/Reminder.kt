@@ -54,7 +54,8 @@ data class RawMissed(
     val name: String,
     val reminderTime: LocalTime,
     val langCode: String?,
-    val missedDate: LocalDate
+    val missedDate: LocalDate,
+    val nextDay: Boolean,
 )
 
 data class DueUser(
@@ -83,7 +84,8 @@ fun Row.toRawMissed(): RawMissed = RawMissed(
     name = string("name"),
     reminderTime = localTime("reminder_time"),
     langCode = stringOrNull("lang"),
-    missedDate = localDate("missed_date")
+    missedDate = localDate("missed_date"),
+    nextDay = boolean("next_day"),
 )
 
 fun Row.toDueUser(): DueUser = DueUser(

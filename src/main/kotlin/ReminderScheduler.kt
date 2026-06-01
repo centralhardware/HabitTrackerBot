@@ -35,7 +35,8 @@ object ReminderScheduler {
             }
             val lang = reminder.langCode?.let { runCatching { Lang.valueOf(it) }.getOrNull() } ?: Lang.EN
             val datePrefix = if (withDate) "📅 ${reminder.userDate} " else ""
-            val text = "$datePrefix⏳ ${reminder.reminderTime.format(Keyboards.TIME_FMT)} — ${reminder.name}"
+            val nextDaySuffix = if (reminder.nextDay) "+1д" else ""
+            val text = "$datePrefix⏳ ${reminder.reminderTime.format(Keyboards.TIME_FMT)}$nextDaySuffix — ${reminder.name}"
             val keyboard = when (reminder.habitType) {
                 HabitType.SCHEDULED ->
                     Keyboards.checkIn(reminder.reminderId, reminder.userDate, lang)
