@@ -268,6 +268,10 @@ object HabitRepository {
                           AND (d::date
                                + CASE WHEN r.reminder_time >= 1440 THEN INTERVAL '1 day' ELSE INTERVAL '0' END
                                + (r.reminder_time % 1440) * INTERVAL '1 minute'
+                              ) AT TIME ZONE us.timezone >= h.created_at
+                          AND (d::date
+                               + CASE WHEN r.reminder_time >= 1440 THEN INTERVAL '1 day' ELSE INTERVAL '0' END
+                               + (r.reminder_time % 1440) * INTERVAL '1 minute'
                               ) AT TIME ZONE us.timezone < now() - INTERVAL '1 minute'
                     ),
                     ins_events AS (
