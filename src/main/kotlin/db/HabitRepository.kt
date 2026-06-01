@@ -265,9 +265,10 @@ object HabitRepository {
                           AND c.id IS NULL
                           AND (r.reminder_days IS NULL
                                OR EXTRACT(ISODOW FROM d::date)::int = ANY(r.reminder_days))
-                          AND ((d::date + r.reminder_time)
-                                  AT TIME ZONE us.timezone)
-                              < now() - INTERVAL '1 minute'
+                          AND CASE WHEN r.next_day
+                              THEN (((d::date + 1) + r.reminder_time) AT TIME ZONE us.timezone)
+                              ELSE ((d::date + r.reminder_time) AT TIME ZONE us.timezone)
+                          END < now() - INTERVAL '1 minute'
                     ),
                     ins_events AS (
                         INSERT INTO checkins (user_id, check_date, reminder_id, habit_id, comment, checked_at)
