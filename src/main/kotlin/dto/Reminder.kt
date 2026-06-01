@@ -12,12 +12,14 @@ data class HabitReminder(
     @Transient val id: Long = 0,
     @Serializable(LocalTimeSerializer::class) val time: LocalTime,
     @EncodeDefault(EncodeDefault.Mode.NEVER) val days: List<Int> = emptyList(),
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val nextDay: Boolean = false,
 )
 
 fun Row.toHabitReminder(): HabitReminder = HabitReminder(
     id = long("id"),
     time = localTime("reminder_time"),
     days = intArray("reminder_days"),
+    nextDay = boolean("next_day"),
 )
 
 data class DueReminder(
@@ -40,7 +42,8 @@ data class RawDue(
     val reminderTime: LocalTime,
     val tzId: String,
     val langCode: String?,
-    val reminderDays: List<Int>
+    val reminderDays: List<Int>,
+    val nextDay: Boolean,
 )
 
 data class RawMissed(
@@ -68,7 +71,8 @@ fun Row.toRawDue(): RawDue = RawDue(
     reminderTime = localTime("reminder_time"),
     tzId = string("tz"),
     langCode = stringOrNull("lang"),
-    reminderDays = intArray("reminder_days")
+    reminderDays = intArray("reminder_days"),
+    nextDay = boolean("next_day"),
 )
 
 fun Row.toRawMissed(): RawMissed = RawMissed(

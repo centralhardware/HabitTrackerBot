@@ -144,6 +144,13 @@ object Strings {
         "Invalid days. Use numbers 1-7 (1=Mon … 7=Sun), e.g. 1 3 5.",
         "Неверные дни. Используйте числа 1-7 (1=Пн … 7=Вс), например 1 3 5.")
 
+    fun sendReminderNextDay(l: Lang) = pick(l,
+        "Will this reminder fire on the next calendar day? (e.g. Mon night at 00:30 fires on Tue but counts as Mon)",
+        "Это напоминание сработает уже на следующий день? (например, ночь Пн в 00:30 — уже вторник, но считается как понедельник)")
+
+    fun btnNextDayYes(l: Lang) = pick(l, "Yes, next day", "Да, следующий день")
+    fun btnNextDayNo(l: Lang) = pick(l, "No, same day", "Нет, тот же день")
+
     /** Formats ISO weekday numbers (1=Mon..7=Sun) as short localized names. Empty = every day. */
     fun formatDays(l: Lang, days: List<Int>): String {
         if (days.isEmpty()) return ""
@@ -158,7 +165,8 @@ object Strings {
         val type = habitTypeLabel(l, h) + if (h.logOnly) logBadge(l) else ""
         val times = h.reminders.joinToString(", ") { rem ->
             val d = if (rem.days.isNotEmpty()) " (${formatDays(l, rem.days)})" else ""
-            "${rem.time.format(Keyboards.TIME_FMT)}$d"
+            val nd = if (rem.nextDay) "+1d" else ""
+            "${rem.time.format(Keyboards.TIME_FMT)}$nd$d"
         }
         if (h.multiField) {
             val header = pick(l, "Added: \"${h.name}\" [$type]", "Добавлено: «${h.name}» [$type]")

@@ -50,7 +50,9 @@ object HabitService {
             val zdt = now.atZone(tz)
             val localMinute = zdt.toLocalTime().withSecond(0).withNano(0)
             if (localMinute != r.reminderTime) return@mapNotNull null
-            if (r.reminderDays.isNotEmpty() && zdt.dayOfWeek.value !in r.reminderDays) return@mapNotNull null
+            val habitDow = if (r.nextDay) zdt.dayOfWeek.minus(1) else zdt.dayOfWeek
+            val habitDate = if (r.nextDay) zdt.toLocalDate().minusDays(1) else zdt.toLocalDate()
+            if (r.reminderDays.isNotEmpty() && habitDow.value !in r.reminderDays) return@mapNotNull null
             DueReminder(
                 reminderId = r.reminderId,
                 habitId = r.habitId,
@@ -58,7 +60,7 @@ object HabitService {
                 userId = r.userId,
                 name = r.name,
                 reminderTime = r.reminderTime,
-                userDate = zdt.toLocalDate(),
+                userDate = habitDate,
                 langCode = r.langCode
             )
         }

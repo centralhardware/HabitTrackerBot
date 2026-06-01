@@ -252,7 +252,18 @@ fun BehaviourContext.registerAddHabitCommand() {
                 }
                 parsed
             }
-            reminders += HabitReminder(time = time, days = days)
+
+            val nextDayChoice = pickFromKeyboard(
+                Strings.sendReminderNextDay(lang),
+                nextDayKeyboard(lang),
+                NEXT_DAY_PREFIX
+            ) ?: run {
+                sendMessage(message.chat.id, Strings.cancelled(lang))
+                return@onCommand
+            }
+            val nextDay = nextDayChoice == NEXT_DAY_YES
+
+            reminders += HabitReminder(time = time, days = days, nextDay = nextDay)
         }
 
         // Group quantity habits carry their metadata on params[]; everything else leaves params empty
@@ -289,6 +300,9 @@ private const val LOG_OFF = "tracked"
 private const val PTYPE_PREFIX = "apt"
 private const val PTYPE_NUMBER = "number"
 private const val PTYPE_TEXT = "text"
+private const val NEXT_DAY_PREFIX = "and"
+private const val NEXT_DAY_YES = "yes"
+private const val NEXT_DAY_NO = "no"
 
 private fun paramTypeKeyboard(lang: Lang) = InlineKeyboardMarkup(
     listOf(
@@ -333,6 +347,13 @@ private fun directionKeyboard(lang: Lang): InlineKeyboardMarkup {
     )
     return InlineKeyboardMarkup(rows)
 }
+
+private fun nextDayKeyboard(lang: Lang) = InlineKeyboardMarkup(
+    listOf(
+        listOf(CallbackDataInlineKeyboardButton(Strings.btnNextDayNo(lang), "$NEXT_DAY_PREFIX|$NEXT_DAY_NO")),
+        listOf(CallbackDataInlineKeyboardButton(Strings.btnNextDayYes(lang), "$NEXT_DAY_PREFIX|$NEXT_DAY_YES")),
+    )
+)
 
 private fun isSkipped(s: String): Boolean = s.isBlank() ||
         s == "-" || s.equals("no", ignoreCase = true) || s.equals("нет", ignoreCase = true)

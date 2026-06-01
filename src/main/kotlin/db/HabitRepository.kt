@@ -41,7 +41,7 @@ object HabitRepository {
             val remindersByHabit = session.run(
                 queryOf(
                     """
-                    SELECT r.id, r.habit_id, r.reminder_time, r.reminder_days
+                    SELECT r.id, r.habit_id, r.reminder_time, r.reminder_days, r.next_day
                     FROM habit_reminders r
                     JOIN habits h ON h.id = r.habit_id
                     WHERE h.user_id = ? AND h.status <> 'deleted'
@@ -106,8 +106,8 @@ object HabitRepository {
                 habit.reminders.forEach { rem ->
                     tx.execute(
                         queryOf(
-                            "INSERT INTO habit_reminders (habit_id, reminder_time, reminder_days) VALUES (?, ?, ?::int[])",
-                            id, rem.time, rem.days.toPgArray()
+                            "INSERT INTO habit_reminders (habit_id, reminder_time, reminder_days, next_day) VALUES (?, ?, ?::int[], ?)",
+                            id, rem.time, rem.days.toPgArray(), rem.nextDay
                         )
                     )
                 }
@@ -202,14 +202,17 @@ object HabitRepository {
                 queryOf(
                     """
                     SELECT r.id AS reminder_id, h.id AS habit_id, h.habit_type,
-                           h.user_id, h.name, r.reminder_time, r.reminder_days,
+                           h.user_id, h.name, r.reminder_time, r.reminder_days, r.next_day,
                            us.timezone AS tz, us.language AS lang
                     FROM habit_reminders r
                     JOIN habits h ON h.id = r.habit_id
                     JOIN user_settings us ON us.user_id = h.user_id
                     LEFT JOIN checkins c
                         ON c.reminder_id = r.id
-                       AND c.check_date = (now() AT TIME ZONE us.timezone)::date
+                       AND c.check_date = CASE WHEN r.next_day
+                           THEN (now() AT TIME ZONE us.timezone)::date - 1
+                           ELSE (now() AT TIME ZONE us.timezone)::date
+                       END
                     WHERE h.status = 'active'
                       AND us.timezone IS NOT NULL
                       AND (h.habit_type <> 'scheduled' OR c.id IS NULL)
@@ -238,8 +241,10 @@ object HabitRepository {
                     WITH missed AS (
                         SELECT r.id AS reminder_id, r.habit_id, h.user_id,
                                d::date AS missed_date,
-                               ((d::date + r.reminder_time)
-                                   AT TIME ZONE us.timezone) AS fired_at,
+                               CASE WHEN r.next_day
+                                   THEN (((d::date + 1) + r.reminder_time) AT TIME ZONE us.timezone)
+                                   ELSE ((d::date + r.reminder_time) AT TIME ZONE us.timezone)
+                               END AS fired_at,
                                us.language AS lang_code,
                                h.name AS habit_name,
                                r.reminder_time
