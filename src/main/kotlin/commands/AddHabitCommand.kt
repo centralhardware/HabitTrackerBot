@@ -202,7 +202,7 @@ fun BehaviourContext.registerAddHabitCommand() {
                             }
                         }
 
-                        groupFields.add(HabitParam(id = 0, name = fname.take(64), unit = fUnit, direction = fDir, dailyTarget = fTarget))
+                        groupFields.add(HabitParam(id = 0, name = fname.take(64), unit = fUnit, direction = fDir, dailyTarget = fTarget, paramType = ParamType.NUMBER))
                     }
                 }
 
