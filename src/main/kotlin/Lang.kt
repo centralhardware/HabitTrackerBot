@@ -491,9 +491,6 @@ object Strings {
     fun sendCounterComment(l: Lang) = pick(l,
         "Send a comment for this +1:",
         "Отправьте комментарий к этому +1:")
-    fun btnModeSingle(l: Lang) = pick(l, "📏 single value", "📏 одно значение")
-    fun btnModeGroup(l: Lang) = pick(l, "🧩 multiple fields", "🧩 несколько полей")
-
     fun pickParamType(l: Lang) = pick(l, "Field type:", "Тип поля:")
     fun btnParamTypeNumber(l: Lang) = pick(l, "🔢 number", "🔢 число")
     fun btnParamTypeText(l: Lang) = pick(l, "📝 text", "📝 текст")
@@ -504,10 +501,6 @@ object Strings {
 
     fun btnTracked(l: Lang) = pick(l, "📊 tracked", "📊 с метриками")
     fun btnLogOnly(l: Lang) = pick(l, "📒 log only", "📒 только журнал")
-
-    fun pickQuantityMode(l: Lang) = pick(l,
-        "Single value (one number per check-in) or multiple fields (e.g. distance + duration + calories)?",
-        "Одно значение (одно число на чек-ин) или несколько полей (напр. дистанция + время + ккал)?")
 
     fun sendFirstFieldName(l: Lang) = pick(l,
         "Name of the first field (e.g. \"km\"):",

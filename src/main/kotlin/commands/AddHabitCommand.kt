@@ -127,124 +127,80 @@ fun BehaviourContext.registerAddHabitCommand() {
         var groupFields: MutableList<HabitParam>? = null
 
         if (type == HabitType.QUANTITY) {
-            val modeChoice = pickFromKeyboard(
-                Strings.pickQuantityMode(lang),
-                quantityModeKeyboard(lang),
-                MODE_PREFIX
-            ) ?: run {
-                sendMessage(message.chat.id, Strings.cancelled(lang))
-                return@onCommand
-            }
+            val fields = mutableListOf<HabitParam>()
+            while (true) {
+                val nextLabel = if (fields.isEmpty()) Strings.sendFirstFieldName(lang)
+                                else Strings.sendNextFieldNameOrDone(lang)
+                sendMessage(message.chat.id, nextLabel)
+                val fname = nextText()
+                if (fname.startsWith("/")) {
+                    sendMessage(message.chat.id, Strings.cancelled(lang))
+                    return@onCommand
+                }
+                if (fields.isNotEmpty() && (fname.equals("done", ignoreCase = true) ||
+                                            fname.equals("готово", ignoreCase = true) ||
+                                            fname == "-")) break
+                if (fname.isBlank()) {
+                    sendMessage(message.chat.id, Strings.cancelled(lang))
+                    return@onCommand
+                }
 
-            if (modeChoice == MODE_GROUP) {
-                groupFields = mutableListOf()
-                while (true) {
-                    val nextLabel = if (groupFields.isEmpty()) Strings.sendFirstFieldName(lang)
-                                    else Strings.sendNextFieldNameOrDone(lang)
-                    sendMessage(message.chat.id, nextLabel)
-                    val fname = nextText()
-                    if (fname.startsWith("/")) {
-                        sendMessage(message.chat.id, Strings.cancelled(lang))
-                        return@onCommand
-                    }
-                    if (groupFields.isNotEmpty() && (fname.equals("done", ignoreCase = true) ||
-                                                     fname.equals("готово", ignoreCase = true) ||
-                                                     fname == "-")) break
-                    if (fname.isBlank()) {
-                        sendMessage(message.chat.id, Strings.cancelled(lang))
-                        return@onCommand
-                    }
+                val ptypeChoice = pickFromKeyboard(
+                    Strings.pickParamType(lang),
+                    paramTypeKeyboard(lang),
+                    PTYPE_PREFIX
+                ) ?: run {
+                    sendMessage(message.chat.id, Strings.cancelled(lang))
+                    return@onCommand
+                }
+                val isText = ptypeChoice == PTYPE_TEXT
 
-                    val ptypeChoice = pickFromKeyboard(
-                        Strings.pickParamType(lang),
-                        paramTypeKeyboard(lang),
-                        PTYPE_PREFIX
-                    ) ?: run {
-                        sendMessage(message.chat.id, Strings.cancelled(lang))
-                        return@onCommand
-                    }
-                    val isText = ptypeChoice == PTYPE_TEXT
-
-                    if (isText) {
-                        groupFields.add(HabitParam(id = 0, name = fname.take(64), paramType = ParamType.TEXT))
-                    } else {
-                        var fTarget: Double? = null
-                        if (!logOnly) {
-                            sendMessage(message.chat.id, Strings.sendDailyTargetValue(lang))
-                            val tRaw = nextText()
-                            if (tRaw.startsWith("/")) {
-                                sendMessage(message.chat.id, Strings.cancelled(lang))
-                                return@onCommand
-                            }
-                            fTarget = if (isSkipped(tRaw)) null else {
-                                val v = tRaw.replace(',', '.').toDoubleOrNull()
-                                if (v == null || v <= 0.0 || v.isNaN() || v.isInfinite()) {
-                                    sendMessage(message.chat.id, Strings.invalidTargetValue(lang))
-                                    return@onCommand
-                                }
-                                v
-                            }
-                        }
-
-                        sendMessage(message.chat.id, Strings.sendUnit(lang))
-                        val uRaw = nextText()
-                        if (uRaw.startsWith("/")) {
+                if (isText) {
+                    fields.add(HabitParam(id = 0, name = fname.take(64), paramType = ParamType.TEXT))
+                } else {
+                    var fTarget: Double? = null
+                    if (!logOnly) {
+                        sendMessage(message.chat.id, Strings.sendDailyTargetValue(lang))
+                        val tRaw = nextText()
+                        if (tRaw.startsWith("/")) {
                             sendMessage(message.chat.id, Strings.cancelled(lang))
                             return@onCommand
                         }
-                        val fUnit = if (isSkipped(uRaw)) null else uRaw.take(16)
-
-                        var fDir: Direction? = null
-                        if (!logOnly) {
-                            fDir = when (val d = pickDirection()) {
-                                is DirPick.Picked -> d.direction
-                                DirPick.Cancelled -> { sendMessage(message.chat.id, Strings.cancelled(lang)); return@onCommand }
+                        fTarget = if (isSkipped(tRaw)) null else {
+                            val v = tRaw.replace(',', '.').toDoubleOrNull()
+                            if (v == null || v <= 0.0 || v.isNaN() || v.isInfinite()) {
+                                sendMessage(message.chat.id, Strings.invalidTargetValue(lang))
+                                return@onCommand
                             }
+                            v
                         }
-
-                        groupFields.add(HabitParam(id = 0, name = fname.take(64), unit = fUnit, direction = fDir, dailyTarget = fTarget, paramType = ParamType.NUMBER))
                     }
-                }
 
-                if (groupFields.isEmpty()) {
-                    sendMessage(message.chat.id, Strings.cancelled(lang))
-                    return@onCommand
-                }
-            } else {
-                if (!logOnly) {
-                    sendMessage(message.chat.id, Strings.sendDailyTargetValue(lang))
-                    val raw = nextText()
-                    if (raw.startsWith("/")) {
+                    sendMessage(message.chat.id, Strings.sendUnit(lang))
+                    val uRaw = nextText()
+                    if (uRaw.startsWith("/")) {
                         sendMessage(message.chat.id, Strings.cancelled(lang))
                         return@onCommand
                     }
-                    if (!isSkipped(raw)) {
-                        val v = raw.replace(',', '.').toDoubleOrNull()
-                        if (v == null || v <= 0.0 || v.isNaN() || v.isInfinite()) {
-                            sendMessage(message.chat.id, Strings.invalidTargetValue(lang))
-                            return@onCommand
+                    val fUnit = if (isSkipped(uRaw)) null else uRaw.take(16)
+
+                    var fDir: Direction? = null
+                    if (!logOnly) {
+                        fDir = when (val d = pickDirection()) {
+                            is DirPick.Picked -> d.direction
+                            DirPick.Cancelled -> { sendMessage(message.chat.id, Strings.cancelled(lang)); return@onCommand }
                         }
-                        dailyTarget = v
                     }
-                }
 
-                sendMessage(message.chat.id, Strings.sendUnit(lang))
-                val unitRaw = nextText()
-                if (unitRaw.startsWith("/")) {
-                    sendMessage(message.chat.id, Strings.cancelled(lang))
-                    return@onCommand
-                }
-                if (!isSkipped(unitRaw)) {
-                    unit = unitRaw.take(16)
-                }
-
-                if (!logOnly) {
-                    direction = when (val d = pickDirection()) {
-                        is DirPick.Picked -> d.direction
-                        DirPick.Cancelled -> { sendMessage(message.chat.id, Strings.cancelled(lang)); return@onCommand }
-                    }
+                    fields.add(HabitParam(id = 0, name = fname.take(64), unit = fUnit, direction = fDir, dailyTarget = fTarget, paramType = ParamType.NUMBER))
                 }
             }
+
+            if (fields.isEmpty()) {
+                sendMessage(message.chat.id, Strings.cancelled(lang))
+                return@onCommand
+            }
+            groupFields = fields
         }
 
         // Collect reminders one at a time: each reminder gets its own time and its own
@@ -327,9 +283,6 @@ private sealed interface DirPick {
 private const val TYPE_PREFIX = "at"
 private const val DIR_PREFIX = "ad"
 private const val DIR_NONE = "none"
-private const val MODE_PREFIX = "am"
-private const val MODE_SINGLE = "single"
-private const val MODE_GROUP = "group"
 private const val LOG_PREFIX = "al"
 private const val LOG_ON = "log"
 private const val LOG_OFF = "tracked"
@@ -348,13 +301,6 @@ private fun logModeKeyboard(lang: Lang) = InlineKeyboardMarkup(
     listOf(
         listOf(CallbackDataInlineKeyboardButton(Strings.btnTracked(lang), "$LOG_PREFIX|$LOG_OFF")),
         listOf(CallbackDataInlineKeyboardButton(Strings.btnLogOnly(lang), "$LOG_PREFIX|$LOG_ON")),
-    )
-)
-
-private fun quantityModeKeyboard(lang: Lang) = InlineKeyboardMarkup(
-    listOf(
-        listOf(CallbackDataInlineKeyboardButton(Strings.btnModeSingle(lang), "$MODE_PREFIX|$MODE_SINGLE")),
-        listOf(CallbackDataInlineKeyboardButton(Strings.btnModeGroup(lang), "$MODE_PREFIX|$MODE_GROUP")),
     )
 )
 
