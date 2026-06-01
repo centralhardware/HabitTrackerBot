@@ -119,7 +119,10 @@ object CheckInRepository {
                           AND e.reminder_id IS NOT NULL
                           AND e.deleted = false
                           AND us.timezone IS NOT NULL
-                          AND ((e.check_date + r.reminder_time) AT TIME ZONE us.timezone) < ?
+                          AND CASE WHEN r.next_day
+                              THEN (((e.check_date + 1) + r.reminder_time) AT TIME ZONE us.timezone)
+                              ELSE ((e.check_date + r.reminder_time) AT TIME ZONE us.timezone)
+                          END < ?
                         RETURNING v.checkin_id, e.reminder_id AS reminder_id, e.check_date AS check_date
                     ),
                     touch AS (

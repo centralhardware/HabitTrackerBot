@@ -61,7 +61,8 @@ object HabitService {
                 name = r.name,
                 reminderTime = r.reminderTime,
                 userDate = habitDate,
-                langCode = r.langCode
+                langCode = r.langCode,
+                nextDay = r.nextDay,
             )
         }
     }

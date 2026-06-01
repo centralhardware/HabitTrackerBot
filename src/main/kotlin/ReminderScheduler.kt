@@ -20,7 +20,7 @@ object ReminderScheduler {
             deliver(reminder, markPending = false, withDate = true)
         }
         HabitService.findDue().forEach { reminder ->
-            deliver(reminder, markPending = true, withDate = false)
+            deliver(reminder, markPending = true, withDate = reminder.nextDay)
         }
     }
 

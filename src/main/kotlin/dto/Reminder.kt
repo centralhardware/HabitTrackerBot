@@ -30,7 +30,8 @@ data class DueReminder(
     val name: String,
     val reminderTime: LocalTime,
     val userDate: LocalDate,
-    val langCode: String?
+    val langCode: String?,
+    val nextDay: Boolean = false,
 )
 
 data class RawDue(
