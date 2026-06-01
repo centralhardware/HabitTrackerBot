@@ -280,6 +280,7 @@ object CheckInRepository {
                     JOIN habit_reminders r ON r.id = e.reminder_id
                     JOIN checkin_values v ON v.checkin_id = e.id
                     WHERE h.user_id = ?
+                      AND h.status = 'active'
                       AND v.status IS NULL
                       AND e.deleted = false
                       AND e.check_date BETWEEN ?::date AND ?::date
