@@ -39,8 +39,7 @@ fun BehaviourContext.registerCheckInCommand() {
         sendMessage(message.chat.id, Strings.pendingCheckIns(lang))
 
         scheduled.forEach { item ->
-            val time = item.reminderTime.format(Keyboards.TIME_FMT)
-            val text = "⏳ ${item.date} $time — ${item.name}"
+            val text = "⏳ ${item.date} ${Strings.formatDisplayTime(item.offsetMinutes)} — ${item.name}"
             val sent = sendMessage(
                 chatId = message.chat.id,
                 text = text,

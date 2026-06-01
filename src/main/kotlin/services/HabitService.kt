@@ -6,6 +6,7 @@ import dto.Habit
 import dto.HabitStatus
 import dto.HabitType
 import java.time.Instant
+import java.time.LocalTime
 import java.time.ZoneId
 
 object HabitService {
@@ -14,7 +15,7 @@ object HabitService {
         habit.copy(
             id = 0L,
             status = HabitStatus.ACTIVE,
-            reminders = habit.reminders.sortedBy { it.time },
+            reminders = habit.reminders.sortedBy { it.offsetMinutes },
         )
     )
 
@@ -49,9 +50,11 @@ object HabitService {
             val tz = runCatching { ZoneId.of(r.tzId) }.getOrNull() ?: return@mapNotNull null
             val zdt = now.atZone(tz)
             val localMinute = zdt.toLocalTime().withSecond(0).withNano(0)
-            if (localMinute != r.reminderTime) return@mapNotNull null
-            val habitDow = if (r.nextDay) zdt.dayOfWeek.minus(1) else zdt.dayOfWeek
-            val habitDate = if (r.nextDay) zdt.toLocalDate().minusDays(1) else zdt.toLocalDate()
+            val reminderLocalTime = LocalTime.ofSecondOfDay((r.offsetMinutes % 1440).toLong() * 60)
+            val nextDay = r.offsetMinutes >= 1440
+            if (localMinute != reminderLocalTime) return@mapNotNull null
+            val habitDow = if (nextDay) zdt.dayOfWeek.minus(1) else zdt.dayOfWeek
+            val habitDate = if (nextDay) zdt.toLocalDate().minusDays(1) else zdt.toLocalDate()
             if (r.reminderDays.isNotEmpty() && habitDow.value !in r.reminderDays) return@mapNotNull null
             DueReminder(
                 reminderId = r.reminderId,
@@ -59,10 +62,9 @@ object HabitService {
                 habitType = r.habitType,
                 userId = r.userId,
                 name = r.name,
-                reminderTime = r.reminderTime,
+                offsetMinutes = r.offsetMinutes,
                 userDate = habitDate,
                 langCode = r.langCode,
-                nextDay = r.nextDay,
             )
         }
     }
@@ -75,10 +77,9 @@ object HabitService {
                 habitType = HabitType.SCHEDULED,
                 userId = r.userId,
                 name = r.name,
-                reminderTime = r.reminderTime,
+                offsetMinutes = r.offsetMinutes,
                 userDate = r.missedDate,
                 langCode = r.langCode,
-                nextDay = r.nextDay,
             )
         }
     }

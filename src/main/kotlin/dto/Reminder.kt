@@ -5,21 +5,18 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.Transient
 import kotliquery.Row
 import java.time.LocalDate
-import java.time.LocalTime
 
 @Serializable
 data class HabitReminder(
     @Transient val id: Long = 0,
-    @Serializable(LocalTimeSerializer::class) val time: LocalTime,
+    val offsetMinutes: Int,
     @EncodeDefault(EncodeDefault.Mode.NEVER) val days: List<Int> = emptyList(),
-    @EncodeDefault(EncodeDefault.Mode.NEVER) val nextDay: Boolean = false,
 )
 
 fun Row.toHabitReminder(): HabitReminder = HabitReminder(
     id = long("id"),
-    time = localTime("reminder_time"),
+    offsetMinutes = int("reminder_time"),
     days = intArray("reminder_days"),
-    nextDay = boolean("next_day"),
 )
 
 data class DueReminder(
@@ -28,10 +25,9 @@ data class DueReminder(
     val habitType: HabitType,
     val userId: Long,
     val name: String,
-    val reminderTime: LocalTime,
+    val offsetMinutes: Int,
     val userDate: LocalDate,
     val langCode: String?,
-    val nextDay: Boolean = false,
 )
 
 data class RawDue(
@@ -40,11 +36,10 @@ data class RawDue(
     val habitType: HabitType,
     val userId: Long,
     val name: String,
-    val reminderTime: LocalTime,
+    val offsetMinutes: Int,
     val tzId: String,
     val langCode: String?,
     val reminderDays: List<Int>,
-    val nextDay: Boolean,
 )
 
 data class RawMissed(
@@ -52,10 +47,9 @@ data class RawMissed(
     val habitId: Long,
     val userId: Long,
     val name: String,
-    val reminderTime: LocalTime,
+    val offsetMinutes: Int,
     val langCode: String?,
     val missedDate: LocalDate,
-    val nextDay: Boolean,
 )
 
 data class DueUser(
@@ -70,11 +64,10 @@ fun Row.toRawDue(): RawDue = RawDue(
     habitType = HabitType.parse(stringOrNull("habit_type")),
     userId = long("user_id"),
     name = string("name"),
-    reminderTime = localTime("reminder_time"),
+    offsetMinutes = int("reminder_time"),
     tzId = string("tz"),
     langCode = stringOrNull("lang"),
     reminderDays = intArray("reminder_days"),
-    nextDay = boolean("next_day"),
 )
 
 fun Row.toRawMissed(): RawMissed = RawMissed(
@@ -82,10 +75,9 @@ fun Row.toRawMissed(): RawMissed = RawMissed(
     habitId = long("habit_id"),
     userId = long("user_id"),
     name = string("name"),
-    reminderTime = localTime("reminder_time"),
+    offsetMinutes = int("reminder_time"),
     langCode = stringOrNull("lang"),
     missedDate = localDate("missed_date"),
-    nextDay = boolean("next_day"),
 )
 
 fun Row.toDueUser(): DueUser = DueUser(

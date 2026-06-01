@@ -117,24 +117,24 @@ object Strings {
         "Направление:")
 
     fun sendFirstReminderTime(l: Lang) = pick(l,
-        "Send a reminder time (HH:MM), e.g. 09:00:",
-        "Отправьте время напоминания (ЧЧ:ММ), например 09:00:")
+        "Send a reminder time (HH:MM, 0–47h). Times ≥ 24:00 fire on the next calendar day, e.g. 25:30 = 01:30 next day:",
+        "Отправьте время напоминания (ЧЧ:ММ, 0–47ч). Часы ≥ 24 означают следующий день, например 25:30 = 01:30 следующего дня:")
 
     fun sendFirstReminderTimeOptional(l: Lang) = pick(l,
-        "Send a reminder time (HH:MM), or \"-\" if you don't need reminders:",
-        "Отправьте время напоминания (ЧЧ:ММ) или «-», если напоминания не нужны:")
+        "Send a reminder time (HH:MM, 0–47h), or \"-\" if you don't need reminders:",
+        "Отправьте время напоминания (ЧЧ:ММ, 0–47ч) или «-», если напоминания не нужны:")
 
     fun sendNextReminderTimeOrDone(l: Lang) = pick(l,
-        "Add another reminder time (HH:MM), or \"done\" to finish:",
-        "Добавьте ещё одно время напоминания (ЧЧ:ММ) или «готово», чтобы закончить:")
+        "Add another reminder time (HH:MM, 0–47h), or \"done\" to finish:",
+        "Добавьте ещё одно время напоминания (ЧЧ:ММ, 0–47ч) или «готово», чтобы закончить:")
 
     fun duplicateTime(l: Lang) = pick(l,
         "That time is already added. Send a different one.",
         "Это время уже добавлено. Отправьте другое.")
 
     fun invalidTime(l: Lang) = pick(l,
-        "Invalid time format. Use HH:MM, e.g. 09:00.",
-        "Неверный формат времени. Используйте ЧЧ:ММ, например 09:00.")
+        "Invalid time format. Use HH:MM with hours 0–47, e.g. 09:00 or 25:30.",
+        "Неверный формат времени. Используйте ЧЧ:ММ, часы 0–47, например 09:00 или 25:30.")
 
     fun sendReminderDaysFor(l: Lang, time: String) = pick(l,
         "Which weekdays should the $time reminder fire? Send numbers 1-7 (1=Mon … 7=Sun), space-separated. Example: 1 2 3 4 5. Send \"-\" for every day.",
@@ -144,13 +144,6 @@ object Strings {
         "Invalid days. Use numbers 1-7 (1=Mon … 7=Sun), e.g. 1 3 5.",
         "Неверные дни. Используйте числа 1-7 (1=Пн … 7=Вс), например 1 3 5.")
 
-    fun sendReminderNextDay(l: Lang) = pick(l,
-        "Will this reminder fire on the next calendar day? (e.g. Mon night at 00:30 fires on Tue but counts as Mon)",
-        "Это напоминание сработает уже на следующий день? (например, ночь Пн в 00:30 — уже вторник, но считается как понедельник)")
-
-    fun btnNextDayYes(l: Lang) = pick(l, "Yes, next day", "Да, следующий день")
-    fun btnNextDayNo(l: Lang) = pick(l, "No, same day", "Нет, тот же день")
-
     /** Formats ISO weekday numbers (1=Mon..7=Sun) as short localized names. Empty = every day. */
     fun formatDays(l: Lang, days: List<Int>): String {
         if (days.isEmpty()) return ""
@@ -159,14 +152,16 @@ object Strings {
         return days.filter { it in 1..7 }.sorted().joinToString(",") { names[it - 1] }
     }
 
+    fun formatDisplayTime(offsetMinutes: Int): String =
+        "%02d:%02d".format(offsetMinutes / 60, offsetMinutes % 60)
+
     fun logBadge(l: Lang): String = pick(l, " · 📒 log", " · 📒 журнал")
 
     fun habitAddedDetailed(l: Lang, h: Habit): String {
         val type = habitTypeLabel(l, h) + if (h.logOnly) logBadge(l) else ""
         val times = h.reminders.joinToString(", ") { rem ->
             val d = if (rem.days.isNotEmpty()) " (${formatDays(l, rem.days)})" else ""
-            val nd = if (rem.nextDay) "+1d" else ""
-            "${rem.time.format(Keyboards.TIME_FMT)}$nd$d"
+            "${formatDisplayTime(rem.offsetMinutes)}$d"
         }
         if (h.multiField) {
             val header = pick(l, "Added: \"${h.name}\" [$type]", "Добавлено: «${h.name}» [$type]")

@@ -5,7 +5,6 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotliquery.Row
 import java.time.LocalDate
-import java.time.LocalTime
 
 @Serializable
 enum class CheckinStatus(val value: String) {
@@ -45,7 +44,7 @@ data class DeletableCheckin(
 data class PendingCheckIn(
     val reminderId: Long,
     val name: String,
-    val reminderTime: LocalTime,
+    val offsetMinutes: Int,
     val date: LocalDate
 )
 
@@ -69,7 +68,7 @@ data class CheckinRecord(
     @Serializable(LocalDateSerializer::class) val date: LocalDate,
     val status: CheckinStatus?,
     @EncodeDefault(EncodeDefault.Mode.NEVER) val quantity: Double? = null,
-    @EncodeDefault(EncodeDefault.Mode.NEVER) @Serializable(LocalTimeSerializer::class) val reminderTime: LocalTime? = null,
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val offsetMinutes: Int? = null,
     @EncodeDefault(EncodeDefault.Mode.NEVER) val comment: String? = null,
     @EncodeDefault(EncodeDefault.Mode.NEVER) val textValue: String? = null,
 )
@@ -87,7 +86,7 @@ data class CheckinValueRow(
     val status: CheckinStatus?,
     val quantity: Double?,
     val comment: String?,
-    val reminderTime: LocalTime?,
+    val offsetMinutes: Int?,
     val textValue: String? = null,
 )
 
@@ -102,7 +101,7 @@ fun Row.toCheckinValueRow(): CheckinValueRow {
         status = stringOrNull("status")?.let { v -> CheckinStatus.entries.firstOrNull { it.value == v } },
         quantity = if (paramType == ParamType.NUMBER) rawValue?.toDoubleOrNull() else null,
         comment = stringOrNull("comment"),
-        reminderTime = localTimeOrNull("reminder_time"),
+        offsetMinutes = intOrNull("reminder_time"),
         textValue = if (paramType == ParamType.TEXT) rawValue else null,
     )
 }
@@ -121,6 +120,6 @@ fun Row.toResolvedCheckin(): ResolvedCheckin = ResolvedCheckin(
 fun Row.toPendingCheckIn(): PendingCheckIn = PendingCheckIn(
     reminderId = long("reminder_id"),
     name = string("name"),
-    reminderTime = localTime("reminder_time"),
+    offsetMinutes = int("reminder_time"),
     date = localDate("check_date")
 )

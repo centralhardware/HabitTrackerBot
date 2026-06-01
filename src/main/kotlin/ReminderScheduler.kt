@@ -20,7 +20,7 @@ object ReminderScheduler {
             deliver(reminder, markPending = false, withDate = true)
         }
         HabitService.findDue().forEach { reminder ->
-            deliver(reminder, markPending = true, withDate = reminder.nextDay)
+            deliver(reminder, markPending = true, withDate = reminder.offsetMinutes >= 1440)
         }
     }
 
@@ -35,8 +35,7 @@ object ReminderScheduler {
             }
             val lang = reminder.langCode?.let { runCatching { Lang.valueOf(it) }.getOrNull() } ?: Lang.EN
             val datePrefix = if (withDate) "📅 ${reminder.userDate} " else ""
-            val nextDaySuffix = if (reminder.nextDay) "+1д" else ""
-            val text = "$datePrefix⏳ ${reminder.reminderTime.format(Keyboards.TIME_FMT)}$nextDaySuffix — ${reminder.name}"
+            val text = "$datePrefix⏳ ${Strings.formatDisplayTime(reminder.offsetMinutes)} — ${reminder.name}"
             val keyboard = when (reminder.habitType) {
                 HabitType.SCHEDULED ->
                     Keyboards.checkIn(reminder.reminderId, reminder.userDate, lang)

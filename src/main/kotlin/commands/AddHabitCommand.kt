@@ -24,8 +24,6 @@ import dto.ParamType
 import kotlinx.coroutines.flow.first
 import senderLang
 import senderUserId
-import java.time.LocalTime
-import java.time.format.DateTimeParseException
 
 fun BehaviourContext.registerAddHabitCommand() {
     onCommand("addhabit") { message ->
@@ -226,17 +224,18 @@ fun BehaviourContext.registerAddHabitCommand() {
             if (!firstOne && isDone(timeText)) break
             if (firstOne && !timesRequired && isSkipped(timeText)) break
 
-            val time = parseTime(timeText)
-            if (time == null) {
+            val offsetMinutes = parseTime(timeText)
+            if (offsetMinutes == null) {
                 sendMessage(message.chat.id, Strings.invalidTime(lang))
                 return@onCommand
             }
-            if (reminders.any { it.time == time }) {
+            if (reminders.any { it.offsetMinutes == offsetMinutes }) {
                 sendMessage(message.chat.id, Strings.duplicateTime(lang))
                 continue
             }
 
-            sendMessage(message.chat.id, Strings.sendReminderDaysFor(lang, time.format(Keyboards.TIME_FMT)))
+            val displayTime = Strings.formatDisplayTime(offsetMinutes)
+            sendMessage(message.chat.id, Strings.sendReminderDaysFor(lang, displayTime))
             val daysText = nextText()
             if (daysText.startsWith("/")) {
                 sendMessage(message.chat.id, Strings.cancelled(lang))
@@ -245,25 +244,15 @@ fun BehaviourContext.registerAddHabitCommand() {
             val days = if (isSkipped(daysText)) {
                 emptyList()
             } else {
-                val parsed = parseDays(daysText)
-                if (parsed == null) {
+                val parsed2 = parseDays(daysText)
+                if (parsed2 == null) {
                     sendMessage(message.chat.id, Strings.invalidDays(lang))
                     return@onCommand
                 }
-                parsed
+                parsed2
             }
 
-            val nextDayChoice = pickFromKeyboard(
-                Strings.sendReminderNextDay(lang),
-                nextDayKeyboard(lang),
-                NEXT_DAY_PREFIX
-            ) ?: run {
-                sendMessage(message.chat.id, Strings.cancelled(lang))
-                return@onCommand
-            }
-            val nextDay = nextDayChoice == NEXT_DAY_YES
-
-            reminders += HabitReminder(time = time, days = days, nextDay = nextDay)
+            reminders += HabitReminder(offsetMinutes = offsetMinutes, days = days)
         }
 
         // Group quantity habits carry their metadata on params[]; everything else leaves params empty
@@ -300,10 +289,6 @@ private const val LOG_OFF = "tracked"
 private const val PTYPE_PREFIX = "apt"
 private const val PTYPE_NUMBER = "number"
 private const val PTYPE_TEXT = "text"
-private const val NEXT_DAY_PREFIX = "and"
-private const val NEXT_DAY_YES = "yes"
-private const val NEXT_DAY_NO = "no"
-
 private fun paramTypeKeyboard(lang: Lang) = InlineKeyboardMarkup(
     listOf(
         listOf(CallbackDataInlineKeyboardButton(Strings.btnParamTypeNumber(lang), "$PTYPE_PREFIX|$PTYPE_NUMBER")),
@@ -348,23 +333,19 @@ private fun directionKeyboard(lang: Lang): InlineKeyboardMarkup {
     return InlineKeyboardMarkup(rows)
 }
 
-private fun nextDayKeyboard(lang: Lang) = InlineKeyboardMarkup(
-    listOf(
-        listOf(CallbackDataInlineKeyboardButton(Strings.btnNextDayNo(lang), "$NEXT_DAY_PREFIX|$NEXT_DAY_NO")),
-        listOf(CallbackDataInlineKeyboardButton(Strings.btnNextDayYes(lang), "$NEXT_DAY_PREFIX|$NEXT_DAY_YES")),
-    )
-)
-
 private fun isSkipped(s: String): Boolean = s.isBlank() ||
         s == "-" || s.equals("no", ignoreCase = true) || s.equals("нет", ignoreCase = true)
 
 private fun isDone(s: String): Boolean = s == "-" ||
         s.equals("done", ignoreCase = true) || s.equals("готово", ignoreCase = true)
 
-private fun parseTime(text: String): LocalTime? = try {
-    LocalTime.parse(text.trim(), Keyboards.TIME_FMT)
-} catch (_: DateTimeParseException) {
-    null
+private fun parseTime(text: String): Int? {
+    val parts = text.trim().split(":")
+    if (parts.size != 2) return null
+    val hours = parts[0].toIntOrNull() ?: return null
+    val minutes = parts[1].toIntOrNull() ?: return null
+    if (hours !in 0..47 || minutes !in 0..59) return null
+    return hours * 60 + minutes
 }
 
 /** Parses weekday numbers (ISO 1=Mon..7=Sun), space- or comma-separated. */

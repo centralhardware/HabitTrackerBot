@@ -41,7 +41,7 @@ object HabitRepository {
             val remindersByHabit = session.run(
                 queryOf(
                     """
-                    SELECT r.id, r.habit_id, r.reminder_time, r.reminder_days, r.next_day
+                    SELECT r.id, r.habit_id, r.reminder_time, r.reminder_days
                     FROM habit_reminders r
                     JOIN habits h ON h.id = r.habit_id
                     WHERE h.user_id = ? AND h.status <> 'deleted'
@@ -106,8 +106,8 @@ object HabitRepository {
                 habit.reminders.forEach { rem ->
                     tx.execute(
                         queryOf(
-                            "INSERT INTO habit_reminders (habit_id, reminder_time, reminder_days, next_day) VALUES (?, ?, ?::int[], ?)",
-                            id, rem.time, rem.days.toPgArray(), rem.nextDay
+                            "INSERT INTO habit_reminders (habit_id, reminder_time, reminder_days) VALUES (?, ?, ?::int[])",
+                            id, rem.offsetMinutes, rem.days.toPgArray()
                         )
                     )
                 }
@@ -202,14 +202,14 @@ object HabitRepository {
                 queryOf(
                     """
                     SELECT r.id AS reminder_id, h.id AS habit_id, h.habit_type,
-                           h.user_id, h.name, r.reminder_time, r.reminder_days, r.next_day,
+                           h.user_id, h.name, r.reminder_time, r.reminder_days,
                            us.timezone AS tz, us.language AS lang
                     FROM habit_reminders r
                     JOIN habits h ON h.id = r.habit_id
                     JOIN user_settings us ON us.user_id = h.user_id
                     LEFT JOIN checkins c
                         ON c.reminder_id = r.id
-                       AND c.check_date = CASE WHEN r.next_day
+                       AND c.check_date = CASE WHEN r.reminder_time >= 1440
                            THEN (now() AT TIME ZONE us.timezone)::date - 1
                            ELSE (now() AT TIME ZONE us.timezone)::date
                        END
@@ -241,14 +241,13 @@ object HabitRepository {
                     WITH missed AS (
                         SELECT r.id AS reminder_id, r.habit_id, h.user_id,
                                d::date AS missed_date,
-                               CASE WHEN r.next_day
-                                   THEN (((d::date + 1) + r.reminder_time) AT TIME ZONE us.timezone)
-                                   ELSE ((d::date + r.reminder_time) AT TIME ZONE us.timezone)
-                               END AS fired_at,
+                               (d::date
+                                + CASE WHEN r.reminder_time >= 1440 THEN INTERVAL '1 day' ELSE INTERVAL '0' END
+                                + (r.reminder_time % 1440) * INTERVAL '1 minute'
+                               ) AT TIME ZONE us.timezone AS fired_at,
                                us.language AS lang_code,
                                h.name AS habit_name,
-                               r.reminder_time,
-                               r.next_day
+                               r.reminder_time
                         FROM habit_reminders r
                         JOIN habits h ON h.id = r.habit_id
                         JOIN user_settings us ON us.user_id = h.user_id
@@ -266,10 +265,10 @@ object HabitRepository {
                           AND c.id IS NULL
                           AND (r.reminder_days IS NULL
                                OR EXTRACT(ISODOW FROM d::date)::int = ANY(r.reminder_days))
-                          AND CASE WHEN r.next_day
-                              THEN (((d::date + 1) + r.reminder_time) AT TIME ZONE us.timezone)
-                              ELSE ((d::date + r.reminder_time) AT TIME ZONE us.timezone)
-                          END < now() - INTERVAL '1 minute'
+                          AND (d::date
+                               + CASE WHEN r.reminder_time >= 1440 THEN INTERVAL '1 day' ELSE INTERVAL '0' END
+                               + (r.reminder_time % 1440) * INTERVAL '1 minute'
+                              ) AT TIME ZONE us.timezone < now() - INTERVAL '1 minute'
                     ),
                     ins_events AS (
                         INSERT INTO checkins (user_id, check_date, reminder_id, habit_id, comment, checked_at)
@@ -299,7 +298,7 @@ object HabitRepository {
                         RETURNING checkin_id
                     )
                     SELECT m.reminder_id, m.habit_id, m.user_id, m.habit_name AS name,
-                           m.reminder_time, m.lang_code AS lang, m.missed_date, m.next_day
+                           m.reminder_time, m.lang_code AS lang, m.missed_date
                     FROM ins_events ie
                     JOIN missed m
                       ON m.reminder_id = ie.reminder_id

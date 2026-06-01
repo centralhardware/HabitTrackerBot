@@ -28,7 +28,7 @@ fun BehaviourContext.registerHabitsCommand() {
                 val typeLabel = Strings.habitTypeLabel(lang, habit) + if (habit.logOnly) Strings.logBadge(lang) else ""
                 val times = habit.reminders.joinToString(", ") { rem ->
                     val d = if (rem.days.isNotEmpty()) " (${Strings.formatDays(lang, rem.days)})" else ""
-                    "${rem.time.format(Keyboards.TIME_FMT)}$d"
+                    "${Strings.formatDisplayTime(rem.offsetMinutes)}$d"
                 }
                 val tail = when {
                     times.isNotEmpty() -> " — $times"
