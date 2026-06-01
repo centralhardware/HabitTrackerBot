@@ -247,7 +247,8 @@ object HabitRepository {
                                END AS fired_at,
                                us.language AS lang_code,
                                h.name AS habit_name,
-                               r.reminder_time
+                               r.reminder_time,
+                               r.next_day
                         FROM habit_reminders r
                         JOIN habits h ON h.id = r.habit_id
                         JOIN user_settings us ON us.user_id = h.user_id
@@ -298,7 +299,7 @@ object HabitRepository {
                         RETURNING checkin_id
                     )
                     SELECT m.reminder_id, m.habit_id, m.user_id, m.habit_name AS name,
-                           m.reminder_time, m.lang_code AS lang, m.missed_date, r.next_day
+                           m.reminder_time, m.lang_code AS lang, m.missed_date, m.next_day
                     FROM ins_events ie
                     JOIN missed m
                       ON m.reminder_id = ie.reminder_id
