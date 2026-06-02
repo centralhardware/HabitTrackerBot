@@ -14,7 +14,7 @@ repositories {
 }
 
 val ktgbotapiVersion = "33.1.0"
-val flywayVersion = "12.6.2"
+val flywayVersion = "12.7.0"
 val mcpSdkVersion = "0.12.0"
 val ktorVersion = "3.3.3"
 
