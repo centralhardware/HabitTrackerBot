@@ -25,7 +25,7 @@ object CheckinUpdateTool : TypedMcpTool<CheckinUpdateArgs>(CheckinUpdateArgs.ser
     override val name = "checkin_update"
     override val description =
         "Edit a quantity check-in by its checkinId (same id returned by quantity_record or listed in checkins_list). " +
-            "Only entries dated today or yesterday can be edited. Editable fields: " +
+            "Only entries dated within the last 7 days can be edited. Editable fields: " +
             "'comment' (string or omit to leave unchanged), 'clearComment' (true to remove the comment), " +
             "'values' (array of { paramId, value } — same string format as quantity_record; only listed params are updated). " +
             "At least one of 'comment'/'clearComment' or 'values' must be provided."
@@ -66,15 +66,15 @@ object CheckinUpdateTool : TypedMcpTool<CheckinUpdateArgs>(CheckinUpdateArgs.ser
             }
         }
 
-        val yesterday = LocalDate.now(tz).minusDays(1)
+        val weekAgo = LocalDate.now(tz).minusDays(6)
         val updated = when (val outcome = CheckInService.updateCheckin(
-            args.checkinId, userId, yesterday, hasComment, newComment, valuePatch
+            args.checkinId, userId, weekAgo, hasComment, newComment, valuePatch
         )) {
             is CheckInService.UpdateOutcome.Updated -> outcome.checkin
             CheckInService.UpdateOutcome.NotFound ->
                 return err("Check-in ${args.checkinId} not found, already deleted, or not a quantity entry")
             is CheckInService.UpdateOutcome.TooOld ->
-                return err("Cannot edit check-ins dated earlier than yesterday ($yesterday); ${outcome.date} is too old")
+                return err("Cannot edit check-ins older than 7 days ($weekAgo); ${outcome.date} is too old")
         }
 
         val habit = HabitService.findById(updated.habitId, userId)

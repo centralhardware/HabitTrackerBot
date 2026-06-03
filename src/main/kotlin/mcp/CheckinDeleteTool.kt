@@ -21,7 +21,7 @@ object CheckinDeleteTool : TypedMcpTool<CheckinDeleteArgs>(CheckinDeleteArgs.ser
         "Soft-delete a previously logged quantity check-in by its 'checkinId' (the id each row carries in " +
             "checkins_list). Removes the whole event at once — a multi-field quantity entry has all its values dropped " +
             "together. Only quantity entries can be deleted (not counter or scheduled reminder check-ins), and only " +
-            "those dated today or yesterday — older entries cannot be deleted. Use this to retract a mistake, e.g. " +
+            "those dated within the last 7 days — older entries cannot be deleted. Use this to retract a mistake, e.g. " +
             "a quantity logged just after midnight that belonged to the previous day: delete it, then re-record with " +
             "quantity_record passing the correct 'date'."
     override val inputSchema: ToolSchema = buildSchema()
@@ -33,13 +33,13 @@ object CheckinDeleteTool : TypedMcpTool<CheckinDeleteArgs>(CheckinDeleteArgs.ser
     )
 
     override fun handle(userId: Long, lang: Lang, tz: ZoneId, args: CheckinDeleteArgs): CallToolResult {
-        val yesterday = LocalDate.now(tz).minusDays(1)
-        val deleted = when (val outcome = CheckInService.deleteCheckin(args.checkinId, userId, yesterday)) {
+        val weekAgo = LocalDate.now(tz).minusDays(6)
+        val deleted = when (val outcome = CheckInService.deleteCheckin(args.checkinId, userId, weekAgo)) {
             is CheckInService.DeleteOutcome.Deleted -> outcome.checkin
             CheckInService.DeleteOutcome.NotFound ->
                 return err("Check-in ${args.checkinId} not found, already deleted, or not a quantity entry")
             is CheckInService.DeleteOutcome.TooOld ->
-                return err("Cannot delete check-ins dated earlier than yesterday ($yesterday); ${outcome.date} is too old")
+                return err("Cannot delete check-ins older than 7 days ($weekAgo); ${outcome.date} is too old")
         }
 
         val habit = HabitService.findById(deleted.habitId, userId)
