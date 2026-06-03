@@ -11,7 +11,7 @@ val McpJson: Json = Json {
 
 @Serializable
 data class CheckinsListArgs(
-    val habitIds: List<Long>,
+    val habitIds: List<Long> = emptyList(),
     val from: String? = null,
     val to: String? = null,
 )
