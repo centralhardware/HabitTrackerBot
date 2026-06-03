@@ -16,7 +16,7 @@ repositories {
 val ktgbotapiVersion = "33.1.0"
 val flywayVersion = "12.6.2"
 val mcpSdkVersion = "0.12.0"
-val ktorVersion = "3.3.3"
+val ktorVersion = "3.5.0"
 
 dependencies {
     implementation("dev.inmo:tgbotapi:$ktgbotapiVersion")
