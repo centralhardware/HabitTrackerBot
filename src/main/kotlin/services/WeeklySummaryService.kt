@@ -3,6 +3,7 @@ package services
 import db.CheckInRepository
 import dto.CheckinValueRow
 import dto.Direction
+import dto.HabitStatus
 import dto.HabitType
 import dto.HabitWeekStat
 import java.time.LocalDate
@@ -10,7 +11,8 @@ import java.time.LocalDate
 object WeeklySummaryService {
 
     fun weeklyStats(userId: Long, from: LocalDate, to: LocalDate): List<HabitWeekStat> {
-        val habits = HabitService.listActive(userId).filterNot { it.logOnly }
+        val habits = HabitService.listActive(userId)
+            .filter { it.status == HabitStatus.ACTIVE && !it.logOnly }
         if (habits.isEmpty()) return emptyList()
 
         return habits.flatMap { h ->

@@ -33,7 +33,8 @@ object CheckinDeleteTool : TypedMcpTool<CheckinDeleteArgs>(CheckinDeleteArgs.ser
     )
 
     override fun handle(userId: Long, lang: Lang, tz: ZoneId, args: CheckinDeleteArgs): CallToolResult {
-        val weekAgo = LocalDate.now(tz).minusDays(6)
+        // Window is "within the last 7 days": today back through today-7 inclusive.
+        val weekAgo = LocalDate.now(tz).minusDays(7)
         val deleted = when (val outcome = CheckInService.deleteCheckin(args.checkinId, userId, weekAgo)) {
             is CheckInService.DeleteOutcome.Deleted -> outcome.checkin
             CheckInService.DeleteOutcome.NotFound ->

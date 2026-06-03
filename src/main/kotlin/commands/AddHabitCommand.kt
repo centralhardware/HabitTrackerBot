@@ -22,8 +22,10 @@ import dto.HabitReminder
 import dto.HabitType
 import dto.ParamType
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.job
 import senderLang
 import senderUserId
+import kotlin.coroutines.coroutineContext
 
 fun BehaviourContext.registerAddHabitCommand() {
     onCommand("addhabit") { message ->
@@ -36,9 +38,20 @@ fun BehaviourContext.registerAddHabitCommand() {
         }
 
         val chatLong = message.chat.id.chatId.long
+        // One /addhabit dialog per chat: a second concurrent run would race for the same text/
+        // callback messages and scramble both dialogs' state. Reject the overlap until the first ends.
+        // We register this dialog's coroutine so /cancel can interrupt it from outside.
+        val dialogJob = coroutineContext.job
+        if (activeAddHabitJobs.putIfAbsent(chatLong, dialogJob) != null) {
+            sendMessage(message.chat.id, Strings.addHabitAlreadyRunning(lang))
+            return@onCommand
+        }
+        try {
+        // /cancel is routed to the separate handler below (which cancels this coroutine), so the
+        // dialog's text waiter must ignore it instead of swallowing it as an answer.
         suspend fun nextText(): String =
             waitTextMessage()
-                .first { it.chat.id.chatId.long == chatLong }
+                .first { it.chat.id.chatId.long == chatLong && !it.content.text.trim().startsWith(CANCEL_CMD) }
                 .content
                 .text
                 .trim()
@@ -97,7 +110,6 @@ fun BehaviourContext.registerAddHabitCommand() {
         val logOnly = logChoice == LOG_ON
 
         var dailyTarget: Double? = null
-        var unit: String? = null
         var direction: Direction? = null
 
         if (type == HabitType.COUNTER && !logOnly) {
@@ -166,7 +178,8 @@ fun BehaviourContext.registerAddHabitCommand() {
                         }
                         fTarget = if (isSkipped(tRaw)) null else {
                             val v = tRaw.replace(',', '.').toDoubleOrNull()
-                            if (v == null || v <= 0.0 || v.isNaN() || v.isInfinite()) {
+                            // Allow 0 (e.g. a "0 per day" goal for minimize-direction fields); reject negatives.
+                            if (v == null || v < 0.0 || v.isNaN() || v.isInfinite()) {
                                 sendMessage(message.chat.id, Strings.invalidTargetValue(lang))
                                 return@onCommand
                             }
@@ -263,7 +276,7 @@ fun BehaviourContext.registerAddHabitCommand() {
                 name = nameText,
                 type = type,
                 dailyTarget = dailyTarget,
-                unit = unit,
+                unit = null,
                 direction = direction,
                 reminders = reminders,
                 params = groupFields ?: emptyList(),
@@ -271,8 +284,32 @@ fun BehaviourContext.registerAddHabitCommand() {
             )
         )
         sendMessage(message.chat.id, Strings.habitAddedDetailed(lang, habit))
+        } finally {
+            // Only clear our own registration (a /cancel may have already removed + replaced it).
+            activeAddHabitJobs.remove(chatLong, dialogJob)
+        }
+    }
+
+    // Aborts an in-flight /addhabit dialog by cancelling its coroutine; the dialog's `finally`
+    // then releases the per-chat lock. Works at any prompt, including inline-keyboard steps.
+    onCommand("cancel") { message ->
+        message.senderUserId() ?: return@onCommand
+        val lang = message.senderLang()
+        val chatLong = message.chat.id.chatId.long
+        val job = activeAddHabitJobs.remove(chatLong)
+        if (job != null) {
+            job.cancel()
+            sendMessage(message.chat.id, Strings.cancelled(lang))
+        } else {
+            sendMessage(message.chat.id, Strings.nothingToCancel(lang))
+        }
     }
 }
+
+/** chatId → the coroutine of an in-flight /addhabit dialog: rejects overlaps and powers /cancel. */
+private val activeAddHabitJobs = java.util.concurrent.ConcurrentHashMap<Long, kotlinx.coroutines.Job>()
+
+private const val CANCEL_CMD = "/cancel"
 
 /** Outcome of a direction prompt: a chosen direction (possibly null = "no direction") or a cancel. */
 private sealed interface DirPick {

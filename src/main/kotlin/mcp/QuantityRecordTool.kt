@@ -65,11 +65,11 @@ object QuantityRecordTool : TypedMcpTool<QuantityRecordArgs>(QuantityRecordArgs.
             parsed[fv.paramId] = fv.parse(paramType)
                 ?: return err(
                     if (paramType == ParamType.TEXT) "values[paramId=${fv.paramId}].value must be non-blank text"
-                    else "values[paramId=${fv.paramId}].value must be a number > 0"
+                    else "values[paramId=${fv.paramId}].value must be a number"
                 )
         }
-        parsed.values.filterIsInstance<FieldValue.Numeric>().firstOrNull { it.v <= 0 || it.v.isNaN() || it.v.isInfinite() }
-            ?.let { return err("Numeric values must be > 0") }
+        parsed.values.filterIsInstance<FieldValue.Numeric>().firstOrNull { it.v < 0 || it.v.isNaN() || it.v.isInfinite() }
+            ?.let { return err("Numeric values must be ≥ 0 and finite") }
 
         val numericMap = parsed.filterValues { it is FieldValue.Numeric }.mapValues { (it.value as FieldValue.Numeric).v }
         val textMap = parsed.filterValues { it is FieldValue.Text }.mapValues { (it.value as FieldValue.Text).v }

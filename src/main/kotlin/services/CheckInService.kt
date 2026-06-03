@@ -12,7 +12,9 @@ import dto.Direction
 import dto.Habit
 import dto.HabitParam
 import dto.HabitStat
+import dto.HabitStatus
 import dto.HabitType
+import dto.ParamType
 import dto.QuantityTrend
 import org.apache.commons.math3.stat.descriptive.moment.Mean
 import java.time.Duration
@@ -76,8 +78,9 @@ object CheckInService {
 
     /**
      * Soft-deletes a quantity check-in event (and, with it, all of its values at once), scoped to
-     * [userId]. Only events dated on or after [notBefore] may be deleted — typically yesterday, so
-     * mistakes from today or yesterday can be retracted while older history stays protected.
+     * [userId]. Only events dated on or after [notBefore] may be deleted; callers pass the start of
+     * the editable window (currently the last 7 days) so recent mistakes can be retracted while
+     * older history stays protected.
      */
     fun deleteCheckin(checkinId: Long, userId: Long, notBefore: LocalDate): DeleteOutcome {
         val event = CheckInRepository.loadEventForDelete(checkinId, userId) ?: return DeleteOutcome.NotFound
@@ -135,7 +138,10 @@ object CheckInService {
 
     fun userStats(userId: Long, today: LocalDate): List<HabitStat> {
         // Log-only habits are pure journals — no streaks/completion/trends — so they're omitted here.
-        return HabitService.listActive(userId).filterNot { it.logOnly }.map { habitStat(it, today) }
+        // Paused habits are excluded too: listActive() really returns all non-deleted habits.
+        return HabitService.listActive(userId)
+            .filter { it.status == HabitStatus.ACTIVE && !it.logOnly }
+            .map { habitStat(it, today) }
     }
 
     private fun habitStat(h: Habit, today: LocalDate): HabitStat {
@@ -165,7 +171,8 @@ object CheckInService {
             streak = streak(loggedDates, skipDates, today),
             loggedDays = loggedDates.count { it < today },
             totalDays = pastDaysSince(rows, today),
-            trend = quantityTrend(p.unit, p.direction, rows, today),
+            // Text params have no quantity — a numeric trend over them is meaningless (always 0/0/0).
+            trend = if (p.paramType == ParamType.NUMBER) quantityTrend(p.unit, p.direction, rows, today) else null,
         )
     }
 

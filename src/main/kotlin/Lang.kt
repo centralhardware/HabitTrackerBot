@@ -37,6 +37,7 @@ object Strings {
 
             Commands:
             /addhabit — add a habit (interactive)
+            /cancel — cancel the current /addhabit dialog
             /habits — list active habits
             /removehabit — remove a habit
             /pause — pause reminders for a habit
@@ -51,6 +52,7 @@ object Strings {
 
             Команды:
             /addhabit — добавить привычку (интерактивно)
+            /cancel — отменить текущий диалог /addhabit
             /habits — список активных привычек
             /removehabit — удалить привычку
             /pause — поставить напоминания на паузу
@@ -75,6 +77,14 @@ object Strings {
         "Отправьте название привычки:")
 
     fun cancelled(l: Lang) = pick(l, "Cancelled.", "Отменено.")
+
+    fun addHabitAlreadyRunning(l: Lang) = pick(l,
+        "You're already adding a habit in this chat. Send /cancel to abort it.",
+        "Вы уже добавляете привычку в этом чате. Отправьте /cancel, чтобы прервать.")
+
+    fun nothingToCancel(l: Lang) = pick(l,
+        "Nothing to cancel.",
+        "Нечего отменять.")
 
     fun pickHabitType(l: Lang) = pick(l,
         "Pick a habit type:\n• scheduled — fixed reminder times, done/skip\n• counter — count check-ins (optional daily target, optional direction)\n• quantity — log decimal amounts (optional target, unit, direction)",
@@ -152,8 +162,15 @@ object Strings {
         return days.filter { it in 1..7 }.sorted().joinToString(",") { names[it - 1] }
     }
 
-    fun formatDisplayTime(offsetMinutes: Int): String =
-        "%02d:%02d".format(offsetMinutes / 60, offsetMinutes % 60)
+    /**
+     * Formats a reminder offset (minutes since midnight, 0–2879) as HH:MM, keeping the raw hour
+     * (e.g. 25:00). Offsets ≥ 24:00 fire on the next calendar day, so a short "+1д" marker is
+     * appended (25:00 → "25:00 +1д") to flag the next-day jump instead of a silent 25:00.
+     */
+    fun formatDisplayTime(offsetMinutes: Int): String {
+        val clock = "%02d:%02d".format(offsetMinutes / 60, offsetMinutes % 60)
+        return if (offsetMinutes >= 1440) "$clock +1д" else clock
+    }
 
     fun logBadge(l: Lang): String = pick(l, " · 📒 log", " · 📒 журнал")
 
@@ -565,6 +582,7 @@ object BotCommandsI18n {
             "stats" to "statistics",
             "habits" to "list habits",
             "addhabit" to "add a habit (interactive)",
+            "cancel" to "cancel the current /addhabit dialog",
             "pause" to "pause a habit",
             "resume" to "resume a paused habit",
             "removehabit" to "remove a habit",
@@ -579,6 +597,7 @@ object BotCommandsI18n {
             "stats" to "статистика",
             "habits" to "список привычек",
             "addhabit" to "добавить привычку (интерактивно)",
+            "cancel" to "отменить текущий диалог /addhabit",
             "pause" to "поставить привычку на паузу",
             "resume" to "возобновить привычку",
             "removehabit" to "удалить привычку",

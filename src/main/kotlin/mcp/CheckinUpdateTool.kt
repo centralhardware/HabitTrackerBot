@@ -53,8 +53,8 @@ object CheckinUpdateTool : TypedMcpTool<CheckinUpdateArgs>(CheckinUpdateArgs.ser
                 val paramType = paramById[fv.paramId]?.paramType ?: ParamType.NUMBER
                 when (val parsed = fv.parse(paramType)) {
                     is FieldValue.Numeric -> {
-                        if (parsed.v <= 0 || parsed.v.isNaN() || parsed.v.isInfinite())
-                            return err("values[$i].value must be > 0 for number param ${fv.paramId}")
+                        if (parsed.v < 0 || parsed.v.isNaN() || parsed.v.isInfinite())
+                            return err("values[$i].value must be ≥ 0 and finite for number param ${fv.paramId}")
                         valuePatch[fv.paramId] = parsed.v.toString()
                     }
                     is FieldValue.Text -> valuePatch[fv.paramId] = parsed.v
@@ -66,7 +66,8 @@ object CheckinUpdateTool : TypedMcpTool<CheckinUpdateArgs>(CheckinUpdateArgs.ser
             }
         }
 
-        val weekAgo = LocalDate.now(tz).minusDays(6)
+        // Window is "within the last 7 days": today back through today-7 inclusive.
+        val weekAgo = LocalDate.now(tz).minusDays(7)
         val updated = when (val outcome = CheckInService.updateCheckin(
             args.checkinId, userId, weekAgo, hasComment, newComment, valuePatch
         )) {
