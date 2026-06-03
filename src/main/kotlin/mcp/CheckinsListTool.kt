@@ -1,6 +1,7 @@
 package mcp
 
 import services.CheckInService
+import services.HabitService
 import Lang
 import dto.CheckinsListArgs
 import dto.CheckinsListResult
@@ -21,7 +22,8 @@ object CheckinsListTool : TypedMcpTool<CheckinsListArgs>(CheckinsListArgs.serial
     override val name = "checkins_list"
     override val description =
         "List past check-ins for one or more habits between two dates (inclusive). 'habitIds' is an array of habit ids " +
-            "(batch query). The response is { from, to, habits[] } where from/to echo the resolved window and habits[] " +
+            "(batch query); omit it or pass an empty array to fetch all of the user's active habits. The response is " +
+            "{ from, to, habits[] } where from/to echo the resolved window and habits[] " +
             "has one entry per id. Defaults: from = today - 30 days, to = today (in the user's " +
             "timezone). Maximum range 366 days. Each check-in row has checkinId (pass it to checkin_delete to remove the " +
             "entry), paramId (which field of a multi-field habit it belongs to; see habits_list params), date, status " +
@@ -31,7 +33,6 @@ object CheckinsListTool : TypedMcpTool<CheckinsListArgs>(CheckinsListArgs.serial
     override val annotations = ToolAnnotations(readOnlyHint = true, openWorldHint = false)
 
     override fun handle(userId: Long, lang: Lang, tz: ZoneId, args: CheckinsListArgs): CallToolResult {
-        if (args.habitIds.isEmpty()) return err("'habitIds' must be non-empty")
         val today = LocalDate.now(tz)
         val to = args.to?.let {
             try { LocalDate.parse(it) } catch (_: DateTimeParseException) {
@@ -47,7 +48,8 @@ object CheckinsListTool : TypedMcpTool<CheckinsListArgs>(CheckinsListArgs.serial
         if (ChronoUnit.DAYS.between(from, to) > 366) {
             return err("Range too large; max 366 days")
         }
-        val habits = args.habitIds.distinct().map { habitId ->
+        val habitIds = args.habitIds.ifEmpty { HabitService.listActive(userId).map { it.id } }
+        val habits = habitIds.distinct().map { habitId ->
             val rows = CheckInService.listInRange(habitId, userId, from, to)
             HabitCheckins(habitId = habitId, found = rows != null, checkins = rows ?: emptyList())
         }
@@ -59,7 +61,7 @@ object CheckinsListTool : TypedMcpTool<CheckinsListArgs>(CheckinsListArgs.serial
         val props = buildJsonObject {
             putJsonObject("habitIds") {
                 put("type", "array")
-                put("description", "Habit ids to fetch (from habits_list); one result entry per id.")
+                put("description", "Habit ids to fetch (from habits_list); one result entry per id. Omit or leave empty to fetch all active habits.")
                 putJsonObject("items") { put("type", "integer") }
             }
             putJsonObject("from") {
@@ -75,6 +77,6 @@ object CheckinsListTool : TypedMcpTool<CheckinsListArgs>(CheckinsListArgs.serial
                 put("description", "End date, inclusive (YYYY-MM-DD). Default: today in the user's timezone.")
             }
         }
-        return ToolSchema(properties = props, required = listOf("habitIds"))
+        return ToolSchema(properties = props, required = emptyList())
     }
 }
