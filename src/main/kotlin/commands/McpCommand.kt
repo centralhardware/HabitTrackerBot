@@ -19,13 +19,6 @@ fun BehaviourContext.registerMcpCommands() {
         val label = commandArgs(message.content.text).take(64).ifBlank { "default" }
 
         val issued = McpTokenService.issue(data.userId, label)
-        if (issued == null) {
-            sendMessage(
-                message.chat.id,
-                Strings.mcpTokenLimitReached(data.lang, McpTokenService.MAX_ACTIVE_TOKENS_PER_USER)
-            )
-            return@onCommand
-        }
 
         sendMessage(
             message.chat.id,

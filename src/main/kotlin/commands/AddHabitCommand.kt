@@ -49,8 +49,6 @@ fun BehaviourContext.registerAddHabitCommand() {
             return query.data.removePrefix("$prefix|").takeIf { it.isNotEmpty() }
         }
 
-        // Direction prompt is asked from three places (counter, single quantity, grouped field);
-        // keep the keyboard + parse + validate in one spot. Returns null when the user cancelled.
         suspend fun pickDirection(): DirPick {
             val choice = pickFromKeyboard(Strings.sendDirection(data.lang), directionKeyboard(data.lang), DIR_PREFIX)
                 ?: return DirPick.Cancelled
@@ -80,8 +78,6 @@ fun BehaviourContext.registerAddHabitCommand() {
             return@onCommand
         }
 
-        // Log mode: a pure journal with no targets/streaks/trends, hidden from /stats.
-        // In this mode we skip every metric-related prompt (target, direction).
         val logChoice = pickFromKeyboard(
             Strings.pickLogMode(data.lang),
             logModeKeyboard(data.lang),
@@ -197,10 +193,6 @@ fun BehaviourContext.registerAddHabitCommand() {
             groupFields = fields
         }
 
-        // Collect reminders one at a time: each reminder gets its own time and its own
-        // arbitrary weekdays. Scheduled habits need at least one; for other types reminders
-        // are optional. Asking time then days per reminder lets the same habit fire on
-        // different days at different times.
         val timesRequired = type == HabitType.SCHEDULED
         val reminders = mutableListOf<HabitReminder>()
         while (true) {
@@ -216,7 +208,6 @@ fun BehaviourContext.registerAddHabitCommand() {
                 sendMessage(message.chat.id, Strings.cancelled(data.lang))
                 return@onCommand
             }
-            // "done"/"готово"/"-" finishes the list; for an optional first reminder it means "none".
             if (!firstOne && isDone(timeText)) break
             if (firstOne && !timesRequired && isSkipped(timeText)) break
 
@@ -251,8 +242,6 @@ fun BehaviourContext.registerAddHabitCommand() {
             reminders += HabitReminder(offsetMinutes = offsetMinutes, days = days)
         }
 
-        // Group quantity habits carry their metadata on params[]; everything else leaves params empty
-        // and the repository injects a single service param. type is already QUANTITY whenever grouped.
         val habit = HabitService.addHabit(
             Habit(
                 userId = data.userId,

@@ -6,8 +6,6 @@ import java.time.format.DateTimeFormatter
 
 object Keyboards {
 
-    val TIME_FMT: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm")
-
     fun checkIn(reminderId: Long, date: LocalDate, lang: Lang): InlineKeyboardMarkup {
         return InlineKeyboardMarkup(
             listOf(

@@ -78,14 +78,6 @@ object Strings {
 
     fun cancelled(l: Lang) = pick(l, "Cancelled.", "Отменено.")
 
-    fun addHabitAlreadyRunning(l: Lang) = pick(l,
-        "You're already adding a habit in this chat. Send /cancel to abort it.",
-        "Вы уже добавляете привычку в этом чате. Отправьте /cancel, чтобы прервать.")
-
-    fun nothingToCancel(l: Lang) = pick(l,
-        "Nothing to cancel.",
-        "Нечего отменять.")
-
     fun pickHabitType(l: Lang) = pick(l,
         "Pick a habit type:\n• scheduled — fixed reminder times, done/skip\n• counter — count check-ins (optional daily target, optional direction)\n• quantity — log decimal amounts (optional target, unit, direction)",
         "Выберите тип привычки:\n• расписание — фиксированные напоминания, готово/пропуск\n• счётчик — считать чек-ины (опциональные цель и направление)\n• количество — вводить вещественные значения (опциональные цель, единица, направление)")

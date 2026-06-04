@@ -43,11 +43,6 @@ object CheckInService {
         ) > 0
     }
 
-    /**
-     * Записывает событие чекина quantity-привычки. Принимает числовые значения ([numericValues],
-     * paramId → Double) и текстовые ([textValues], paramId → String) отдельно.
-     * Возвращает id созданного события (`checkins.id`), либо 0, если записать нечего.
-     */
     fun recordQuantity(
         habitId: Long,
         userId: Long,
@@ -76,12 +71,6 @@ object CheckInService {
         )
     }
 
-    /**
-     * Soft-deletes a quantity check-in event (and, with it, all of its values at once), scoped to
-     * [userId]. Only events dated on or after [notBefore] may be deleted; callers pass the start of
-     * the editable window (currently the last 7 days) so recent mistakes can be retracted while
-     * older history stays protected.
-     */
     fun deleteCheckin(checkinId: Long, userId: Long, notBefore: LocalDate): DeleteOutcome {
         val event = CheckInRepository.loadEventForDelete(checkinId, userId) ?: return DeleteOutcome.NotFound
         if (event.date.isBefore(notBefore)) return DeleteOutcome.TooOld(event.date)

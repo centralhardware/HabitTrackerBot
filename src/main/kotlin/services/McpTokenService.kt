@@ -8,7 +8,6 @@ import java.util.Base64
 
 object McpTokenService {
 
-    const val MAX_ACTIVE_TOKENS_PER_USER = 10
     private const val TOKEN_PREFIX = "mcp_"
     private const val RAW_BYTES = 32
 
@@ -17,8 +16,7 @@ object McpTokenService {
 
     data class Issued(val token: McpToken, val plaintext: String)
 
-    fun issue(userId: Long, label: String): Issued? {
-        if (McpTokenRepository.listActive(userId).size >= MAX_ACTIVE_TOKENS_PER_USER) return null
+    fun issue(userId: Long, label: String): Issued {
         val bytes = ByteArray(RAW_BYTES).also(random::nextBytes)
         val plaintext = TOKEN_PREFIX + encoder.encodeToString(bytes)
         val hash = sha256(plaintext.toByteArray(Charsets.UTF_8))

@@ -42,7 +42,6 @@ fun BehaviourContext.registerCheckInCommand() {
                 text = text,
                 replyMarkup = Keyboards.checkIn(item.reminderId, item.date, data.lang)
             )
-            // Track this message too, so resolving the check-in settles it like a scheduled reminder.
             ReminderMessageService.remember(data.userId, sent.messageId.long, item.reminderId, item.date, text)
         }
 
