@@ -6,6 +6,7 @@ import dto.CheckinStatus
 import dto.CheckinValue
 import dto.CheckinValueRow
 import dto.DeletableCheckin
+import dto.FieldValue
 import dto.ParamType
 import dto.PendingCheckIn
 import dto.toCheckinValueRow
@@ -72,7 +73,7 @@ object CheckInRepository {
         val valuesSql = values.joinToString(", ") { "(?, ?::checkin_status, ?)" }
         val params = buildList<Any?> {
             add(event.userId); add(event.checkDate); add(event.habitId); add(event.comment)
-            values.forEach { add(it.paramId); add(it.status?.value); add(it.dbValue) }
+            values.forEach { add(it.paramId); add(it.status?.value); add(it.value?.asString) }
         }
         return using(sessionOf(DatabaseService.dataSource)) { session ->
             session.run(
@@ -195,8 +196,8 @@ object CheckInRepository {
                             paramId = row.long("param_id"),
                             status = row.stringOrNull("status")
                                 ?.let { s -> CheckinStatus.entries.firstOrNull { it.value == s } },
-                            quantity = if (pt == ParamType.NUMBER) rawValue?.toDoubleOrNull() else null,
-                            textValue = if (pt == ParamType.TEXT) rawValue else null,
+                            value = if (pt == ParamType.NUMBER) rawValue?.toDoubleOrNull()?.let { FieldValue.Numeric(it) }
+                            else rawValue?.let { FieldValue.Text(it) },
                         )
                     )
                 }.asList

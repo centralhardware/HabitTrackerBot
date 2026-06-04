@@ -9,6 +9,7 @@ import dto.CheckinValue
 import dto.CheckinValueRow
 import dto.DeletableCheckin
 import dto.Direction
+import dto.FieldValue
 import dto.Habit
 import dto.HabitParam
 import dto.HabitStat
@@ -29,7 +30,7 @@ object CheckInService {
         val paramId = HabitRepository.firstParamId(habitId, userId) ?: return false
         return CheckInRepository.upsertScheduledValue(
             CheckinEvent(userId, date, reminderId, habitId, comment = null),
-            CheckinValue(paramId, status, quantity = null),
+            CheckinValue(paramId, status),
         )
     }
 
@@ -39,7 +40,7 @@ object CheckInService {
         val paramId = habit.params.firstOrNull()?.id ?: return false
         return CheckInRepository.insertEventWithValues(
             CheckinEvent(userId, date, reminderId = null, habitId = habitId, comment = comment?.trim()?.ifEmpty { null }),
-            listOf(CheckinValue(paramId, CheckinStatus.DONE, quantity = null)),
+            listOf(CheckinValue(paramId, CheckinStatus.DONE)),
         ) > 0
     }
 
@@ -58,9 +59,9 @@ object CheckInService {
         val valueRows = habit.params.mapNotNull { p ->
             when {
                 p.id in numericValues && p.id in allowedIds ->
-                    CheckinValue(p.id, CheckinStatus.DONE, quantity = numericValues[p.id]!!)
+                    CheckinValue(p.id, CheckinStatus.DONE, FieldValue.Numeric(numericValues[p.id]!!))
                 p.id in textValues && p.id in allowedIds ->
-                    CheckinValue(p.id, CheckinStatus.DONE, quantity = null, textValue = textValues[p.id])
+                    CheckinValue(p.id, CheckinStatus.DONE, FieldValue.Text(textValues[p.id]!!))
                 else -> null
             }
         }
@@ -210,7 +211,7 @@ object CheckInService {
         val paramId = HabitRepository.firstParamId(habitId, userId) ?: return
         CheckInRepository.upsertScheduledValue(
             CheckinEvent(userId, date, reminderId, habitId, comment = null),
-            CheckinValue(paramId, status = null, quantity = null),
+            CheckinValue(paramId, status = null),
         )
     }
 }

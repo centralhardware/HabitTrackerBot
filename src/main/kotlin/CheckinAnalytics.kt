@@ -1,6 +1,7 @@
 import dto.CheckinRecord
 import dto.CheckinStatus
 import dto.CheckinValueRow
+import dto.FieldValue
 import dto.WeekTotals
 import java.time.LocalDate
 
@@ -43,7 +44,10 @@ object CheckinAnalytics {
     fun inRange(rows: List<CheckinValueRow>, from: LocalDate, to: LocalDate): List<CheckinRecord> =
         rows.filter { it.date in from..to }
             // status is meaningful only for scheduled habits; never surface it for quantity/counter rows.
-            .map { CheckinRecord(it.checkinId, it.paramId, it.date, it.status.takeIf { _ -> it.isScheduled }, it.quantity, it.offsetMinutes, it.comment, it.textValue) }
+            .map { row ->
+                val value = row.quantity?.let { FieldValue.Numeric(it) } ?: row.textValue?.let { FieldValue.Text(it) }
+                CheckinRecord(row.checkinId, row.paramId, row.date, row.status.takeIf { row.isScheduled }, value, row.offsetMinutes, row.comment)
+            }
 
     /** Weekly totals over [from]..[to] (old `WeeklySummaryRepository.weeklyTotals`). */
     fun weekTotals(rows: List<CheckinValueRow>, from: LocalDate, to: LocalDate): WeekTotals {

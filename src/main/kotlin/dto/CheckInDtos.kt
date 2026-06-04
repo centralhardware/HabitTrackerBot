@@ -25,12 +25,8 @@ data class CheckinEvent(
 data class CheckinValue(
     val paramId: Long,
     val status: CheckinStatus?,
-    val quantity: Double?,
-    val textValue: String? = null,
-) {
-    /** Unified string written to `checkin_values.value`. */
-    val dbValue: String? get() = quantity?.toString() ?: textValue
-}
+    val value: FieldValue? = null,
+)
 
 /** A manual check-in event resolved for soft-deletion or editing: the event id, its habit, date, comment and values. */
 data class DeletableCheckin(
@@ -67,10 +63,10 @@ data class CheckinRecord(
     val paramId: Long,
     @Serializable(LocalDateSerializer::class) val date: LocalDate,
     @EncodeDefault(EncodeDefault.Mode.NEVER) val status: CheckinStatus? = null,
-    @EncodeDefault(EncodeDefault.Mode.NEVER) val quantity: Double? = null,
+    // One value per param: a JSON number for numeric params, a JSON string for text params.
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val value: FieldValue? = null,
     @EncodeDefault(EncodeDefault.Mode.NEVER) val offsetMinutes: Int? = null,
     @EncodeDefault(EncodeDefault.Mode.NEVER) val comment: String? = null,
-    @EncodeDefault(EncodeDefault.Mode.NEVER) val textValue: String? = null,
 )
 
 /**

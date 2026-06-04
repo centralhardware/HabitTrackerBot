@@ -6,6 +6,7 @@ import services.HabitService
 import Lang
 import Strings
 import dto.CheckinDeleteArgs
+import dto.FieldValue
 import io.modelcontextprotocol.kotlin.sdk.types.CallToolResult
 import io.modelcontextprotocol.kotlin.sdk.types.ToolAnnotations
 import io.modelcontextprotocol.kotlin.sdk.types.ToolSchema
@@ -48,13 +49,13 @@ object CheckinDeleteTool : TypedMcpTool<CheckinDeleteArgs>(CheckinDeleteArgs.ser
             val param = habit?.params?.firstOrNull { it.id == v.paramId }
             val name = param?.name ?: habit?.name ?: "#${v.paramId}"
             val unitSrc = param?.unit ?: habit?.unit
-            val detail = when {
-                v.quantity != null -> {
+            val detail = when (val fv = v.value) {
+                is FieldValue.Numeric -> {
                     val unit = unitSrc?.let { " $it" } ?: ""
-                    "${Strings.formatAmount(v.quantity)}$unit"
+                    "${Strings.formatAmount(fv.v)}$unit"
                 }
-                v.status != null -> v.status.value
-                else -> "—"
+                is FieldValue.Text -> fv.v
+                null -> v.status?.value ?: "—"
             }
             "$name: $detail"
         }

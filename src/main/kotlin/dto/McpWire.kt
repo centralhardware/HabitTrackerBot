@@ -1,6 +1,11 @@
 package dto
 
+import kotlinx.serialization.KSerializer
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.descriptors.PrimitiveKind
+import kotlinx.serialization.descriptors.PrimitiveSerialDescriptor
+import kotlinx.serialization.encoding.Decoder
+import kotlinx.serialization.encoding.Encoder
 import kotlinx.serialization.json.Json
 
 val McpJson: Json = Json {
@@ -47,10 +52,34 @@ data class FieldValueArg(
     val value: String,
 )
 
-/** Parsed form of [FieldValueArg] after type dispatch against [dto.ParamType]. */
+/**
+ * Parsed form of [FieldValueArg] after type dispatch against [dto.ParamType].
+ * Serializes as a bare JSON value — a number for [Numeric], a string for [Text].
+ */
+@Serializable(with = FieldValueSerializer::class)
 sealed interface FieldValue {
-    data class Numeric(val v: Double) : FieldValue
-    data class Text(val v: String) : FieldValue
+    /** This value rendered as a string — e.g. for the unified `checkin_values.value` column. */
+    val asString: String
+
+    data class Numeric(val v: Double) : FieldValue {
+        override val asString get() = v.toString()
+    }
+
+    data class Text(val v: String) : FieldValue {
+        override val asString get() = v
+    }
+}
+
+object FieldValueSerializer : KSerializer<FieldValue> {
+    override val descriptor = PrimitiveSerialDescriptor("dto.FieldValue", PrimitiveKind.STRING)
+
+    override fun serialize(encoder: Encoder, value: FieldValue) = when (value) {
+        is FieldValue.Numeric -> encoder.encodeDouble(value.v)
+        is FieldValue.Text -> encoder.encodeString(value.v)
+    }
+
+    // Output-only: CheckinRecord is never decoded, so a plain string read is enough.
+    override fun deserialize(decoder: Decoder): FieldValue = FieldValue.Text(decoder.decodeString())
 }
 
 fun FieldValueArg.parse(paramType: ParamType): FieldValue? = when (paramType) {
