@@ -113,8 +113,14 @@ object HabitRepository {
                 }
 
                 val params = habit.params.ifEmpty {
-                    val defaultType = if (habit.type == HabitType.QUANTITY) dto.ParamType.NUMBER else null
-                    listOf(HabitParam(id = 0, paramType = defaultType))
+                    when (habit.type) {
+                        // Quantity habits get a numeric service param; scheduled get an untyped
+                        // service param (its checkin_values rows carry done/skip status).
+                        HabitType.QUANTITY -> listOf(HabitParam(id = 0, paramType = dto.ParamType.NUMBER))
+                        // Counter events are bare checkins rows — no param needed.
+                        HabitType.COUNTER -> emptyList()
+                        HabitType.SCHEDULED -> listOf(HabitParam(id = 0, paramType = null))
+                    }
                 }
                 val savedParams = params.mapIndexed { i, p ->
                     val pid = tx.updateAndReturnGeneratedKey(

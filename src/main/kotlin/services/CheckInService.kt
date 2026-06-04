@@ -37,10 +37,9 @@ object CheckInService {
     fun checkInCounter(habitId: Long, userId: Long, date: LocalDate, comment: String? = null): Boolean {
         val habit = HabitService.findById(habitId, userId) ?: return false
         if (habit.type != HabitType.COUNTER) return false
-        val paramId = habit.params.firstOrNull()?.id ?: return false
-        return CheckInRepository.insertEventWithValues(
+        // A counter event is just a bare checkins row — no param, status or value to store.
+        return CheckInRepository.insertEvent(
             CheckinEvent(userId, date, reminderId = null, habitId = habitId, comment = comment?.trim()?.ifEmpty { null }),
-            listOf(CheckinValue(paramId, CheckinStatus.DONE)),
         ) > 0
     }
 

@@ -60,7 +60,8 @@ data class ResolvedCheckin(
 @Serializable
 data class CheckinRecord(
     val checkinId: Long,
-    val paramId: Long,
+    // Null for counter events, which have no param (just a bare checkins row).
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val paramId: Long? = null,
     @Serializable(LocalDateSerializer::class) val date: LocalDate,
     @EncodeDefault(EncodeDefault.Mode.NEVER) val status: CheckinStatus? = null,
     // One value per param: a JSON number for numeric params, a JSON string for text params.
@@ -76,7 +77,8 @@ data class CheckinRecord(
  */
 data class CheckinValueRow(
     val checkinId: Long,
-    val paramId: Long,
+    // Null for counter events, which have no checkin_values row.
+    val paramId: Long?,
     val date: LocalDate,
     val isScheduled: Boolean,
     val status: CheckinStatus?,
@@ -91,7 +93,7 @@ fun Row.toCheckinValueRow(): CheckinValueRow {
     val rawValue = stringOrNull("value")
     return CheckinValueRow(
         checkinId = long("checkin_id"),
-        paramId = long("param_id"),
+        paramId = longOrNull("param_id"),
         date = localDate("check_date"),
         isScheduled = longOrNull("reminder_id") != null,
         status = stringOrNull("status")?.let { v -> CheckinStatus.entries.firstOrNull { it.value == v } },
