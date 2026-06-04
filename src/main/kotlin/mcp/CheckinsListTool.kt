@@ -26,7 +26,7 @@ object CheckinsListTool : TypedMcpTool<CheckinsListArgs>(CheckinsListArgs.serial
             "{ from, to, habits[] } where from/to echo the resolved window and habits[] " +
             "has one entry per id. Defaults: from = today - 30 days, to = today (in the user's " +
             "timezone). Maximum range 366 days. Each check-in row has checkinId (pass it to checkin_delete to remove the " +
-            "entry), paramId (which field of a multi-field habit it belongs to; see habits_list params), date, status " +
+            "entry), paramId (which field of a multi-field habit it belongs to; see habits_list params; omitted for counter events), date, status " +
             "(done/skip/null for pending), quantity (for quantity habits), reminderTime (for scheduled habits), and " +
             "comment (when set). Unknown habit ids are returned with found=false."
     override val inputSchema: ToolSchema = buildSchema()
