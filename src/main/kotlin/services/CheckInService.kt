@@ -47,22 +47,14 @@ object CheckInService {
         habitId: Long,
         userId: Long,
         date: LocalDate,
-        numericValues: Map<Long, Double> = emptyMap(),
-        textValues: Map<Long, String> = emptyMap(),
+        values: Map<Long, FieldValue> = emptyMap(),
         comment: String? = null
     ): Long {
-        if (numericValues.isEmpty() && textValues.isEmpty()) return 0
+        if (values.isEmpty()) return 0
         val habit = HabitService.findById(habitId, userId) ?: return 0
         if (habit.type != HabitType.QUANTITY) return 0
-        val allowedIds = habit.params.map { it.id }.toSet()
         val valueRows = habit.params.mapNotNull { p ->
-            when {
-                p.id in numericValues && p.id in allowedIds ->
-                    CheckinValue(p.id, CheckinStatus.DONE, FieldValue.Numeric(numericValues[p.id]!!))
-                p.id in textValues && p.id in allowedIds ->
-                    CheckinValue(p.id, CheckinStatus.DONE, FieldValue.Text(textValues[p.id]!!))
-                else -> null
-            }
+            values[p.id]?.let { CheckinValue(p.id, CheckinStatus.DONE, it) }
         }
         if (valueRows.isEmpty()) return 0
         return CheckInRepository.insertEventWithValues(

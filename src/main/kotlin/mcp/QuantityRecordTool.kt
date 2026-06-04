@@ -74,7 +74,7 @@ object QuantityRecordTool : TypedMcpTool<QuantityRecordArgs>(QuantityRecordArgs.
         val numericMap = parsed.filterValues { it is FieldValue.Numeric }.mapValues { (it.value as FieldValue.Numeric).v }
         val textMap = parsed.filterValues { it is FieldValue.Text }.mapValues { (it.value as FieldValue.Text).v }
         val comment = args.comment?.trim()?.ifEmpty { null }
-        val checkinId = CheckInService.recordQuantity(args.habitId, userId, date, numericMap, textMap, comment)
+        val checkinId = CheckInService.recordQuantity(args.habitId, userId, date, parsed, comment)
         if (checkinId <= 0) return err("Failed to record check-in for habit ${args.habitId}")
 
         val note = when {
