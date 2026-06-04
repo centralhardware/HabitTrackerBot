@@ -6,21 +6,19 @@ import Strings
 import dev.inmo.tgbotapi.extensions.api.send.sendMessage
 import dev.inmo.tgbotapi.extensions.behaviour_builder.BehaviourContext
 import dev.inmo.tgbotapi.extensions.behaviour_builder.triggers_handling.onCommand
-import senderLang
-import senderUserId
+import lang
+import userId
 
 fun BehaviourContext.registerRemoveHabitCommand() {
     onCommand("removehabit") { message ->
-        val userId = message.senderUserId() ?: return@onCommand
-        val lang = message.senderLang()
-        val habits = HabitService.listActive(userId)
+        val habits = HabitService.listActive(data.userId)
         if (habits.isEmpty()) {
-            sendMessage(message.chat.id, Strings.nothingToRemove(lang))
+            sendMessage(message.chat.id, Strings.nothingToRemove(data.lang))
             return@onCommand
         }
         sendMessage(
             chatId = message.chat.id,
-            text = Strings.pickHabitToRemove(lang),
+            text = Strings.pickHabitToRemove(data.lang),
             replyMarkup = Keyboards.pickHabit("rm", habits, "🗑")
         )
     }

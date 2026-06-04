@@ -8,33 +8,31 @@ import dev.inmo.tgbotapi.extensions.behaviour_builder.BehaviourContext
 import dev.inmo.tgbotapi.extensions.behaviour_builder.triggers_handling.onCommand
 import dto.HabitStatus
 import dto.HabitType
-import senderLang
-import senderUserId
+import lang
+import userId
 
 fun BehaviourContext.registerHabitsCommand() {
     onCommand("habits") { message ->
-        val userId = message.senderUserId() ?: return@onCommand
-        val lang = message.senderLang()
-        val habits = HabitService.listActive(userId)
+        val habits = HabitService.listActive(data.userId)
         if (habits.isEmpty()) {
-            sendMessage(message.chat.id, Strings.noHabits(lang))
+            sendMessage(message.chat.id, Strings.noHabits(data.lang))
             return@onCommand
         }
 
         val text = buildString {
-            appendLine(Strings.yourHabits(lang))
+            appendLine(Strings.yourHabits(data.lang))
             habits.forEach { habit ->
                 val flag = if (habit.status == HabitStatus.PAUSED) " ⏸" else ""
-                val typeLabel = Strings.habitTypeLabel(lang, habit) + if (habit.logOnly) Strings.logBadge(lang) else ""
+                val typeLabel = Strings.habitTypeLabel(data.lang, habit) + if (habit.logOnly) Strings.logBadge(data.lang) else ""
                 val times = habit.reminders.joinToString(", ") { rem ->
-                    val d = if (rem.days.isNotEmpty()) " (${Strings.formatDays(lang, rem.days)})" else ""
+                    val d = if (rem.days.isNotEmpty()) " (${Strings.formatDays(data.lang, rem.days)})" else ""
                     "${Strings.formatDisplayTime(rem.offsetMinutes)}$d"
                 }
                 val tail = when {
                     times.isNotEmpty() -> " — $times"
                     habit.type == HabitType.SCHEDULED -> ""
                     habit.multiField -> ""
-                    else -> " — ${Strings.noReminders(lang)}"
+                    else -> " — ${Strings.noReminders(data.lang)}"
                 }
                 appendLine("• ${habit.name}$flag [$typeLabel]$tail")
                 if (habit.multiField) {

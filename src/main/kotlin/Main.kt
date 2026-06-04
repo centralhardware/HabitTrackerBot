@@ -31,7 +31,7 @@ suspend fun main() {
 
     if (Config.MCP_ENABLED) McpServer.start()
 
-    longPolling("HabitTrackerBot") {
+    longPolling("HabitTrackerBot", subcontextInitialAction = populateUserContext) {
         BotNotifier.bind(this)
         Lang.entries.forEach { lang ->
             val code = if (lang == Lang.RU) "ru" else "en"

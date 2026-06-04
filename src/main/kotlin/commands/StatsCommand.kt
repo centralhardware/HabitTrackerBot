@@ -2,32 +2,29 @@ package commands
 
 import services.CheckInService
 import Strings
-import services.UserSettingsService
+import lang
+import tz
+import userId
 import dev.inmo.tgbotapi.extensions.api.send.sendMessage
 import dev.inmo.tgbotapi.extensions.behaviour_builder.BehaviourContext
 import dev.inmo.tgbotapi.extensions.behaviour_builder.triggers_handling.onCommand
-import senderLang
-import senderUserId
 import java.time.LocalDate
 import java.time.ZoneOffset
 
 fun BehaviourContext.registerStatsCommand() {
     onCommand("stats") { message ->
-        val userId = message.senderUserId() ?: return@onCommand
-        val lang = message.senderLang()
-        val tz = UserSettingsService.getTimezone(userId) ?: ZoneOffset.UTC
-        val today = LocalDate.now(tz)
-        val stats = CheckInService.userStats(userId, today)
+        val today = LocalDate.now(data.tz ?: ZoneOffset.UTC)
+        val stats = CheckInService.userStats(data.userId, today)
         if (stats.isEmpty()) {
-            sendMessage(message.chat.id, Strings.noStats(lang))
+            sendMessage(message.chat.id, Strings.noStats(data.lang))
             return@onCommand
         }
 
         val text = buildString {
-            appendLine(Strings.statsHeader(lang))
+            appendLine(Strings.statsHeader(data.lang))
             stats.forEach { s ->
                 appendLine("• ${s.name}")
-                Strings.statsLines(lang, s).forEach { appendLine("    $it") }
+                Strings.statsLines(data.lang, s).forEach { appendLine("    $it") }
             }
         }
         sendMessage(message.chat.id, text)

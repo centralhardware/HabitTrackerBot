@@ -7,21 +7,19 @@ import dev.inmo.tgbotapi.extensions.api.send.sendMessage
 import dev.inmo.tgbotapi.extensions.behaviour_builder.BehaviourContext
 import dev.inmo.tgbotapi.extensions.behaviour_builder.triggers_handling.onCommand
 import dto.HabitStatus
-import senderLang
-import senderUserId
+import lang
+import userId
 
 fun BehaviourContext.registerPauseCommand() {
     onCommand("pause") { message ->
-        val userId = message.senderUserId() ?: return@onCommand
-        val lang = message.senderLang()
-        val active = HabitService.listActive(userId).filter { it.status == HabitStatus.ACTIVE }
+        val active = HabitService.listActive(data.userId).filter { it.status == HabitStatus.ACTIVE }
         if (active.isEmpty()) {
-            sendMessage(message.chat.id, Strings.noActiveToPause(lang))
+            sendMessage(message.chat.id, Strings.noActiveToPause(data.lang))
             return@onCommand
         }
         sendMessage(
             chatId = message.chat.id,
-            text = Strings.pickHabitToPause(lang),
+            text = Strings.pickHabitToPause(data.lang),
             replyMarkup = Keyboards.pickHabit("ps", active, "⏸")
         )
     }
@@ -29,16 +27,14 @@ fun BehaviourContext.registerPauseCommand() {
 
 fun BehaviourContext.registerResumeCommand() {
     onCommand("resume") { message ->
-        val userId = message.senderUserId() ?: return@onCommand
-        val lang = message.senderLang()
-        val paused = HabitService.listActive(userId).filter { it.status == HabitStatus.PAUSED }
+        val paused = HabitService.listActive(data.userId).filter { it.status == HabitStatus.PAUSED }
         if (paused.isEmpty()) {
-            sendMessage(message.chat.id, Strings.noPaused(lang))
+            sendMessage(message.chat.id, Strings.noPaused(data.lang))
             return@onCommand
         }
         sendMessage(
             chatId = message.chat.id,
-            text = Strings.pickHabitToResume(lang),
+            text = Strings.pickHabitToResume(data.lang),
             replyMarkup = Keyboards.pickHabit("rs", paused, "▶️")
         )
     }

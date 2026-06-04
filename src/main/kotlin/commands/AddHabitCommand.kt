@@ -4,7 +4,6 @@ import services.HabitService
 import Keyboards
 import Lang
 import Strings
-import services.UserSettingsService
 import dev.inmo.tgbotapi.extensions.api.answers.answerCallbackQuery
 import dev.inmo.tgbotapi.extensions.api.edit.reply_markup.editMessageReplyMarkup
 import dev.inmo.tgbotapi.extensions.api.send.sendMessage
@@ -22,23 +21,20 @@ import dto.HabitReminder
 import dto.HabitType
 import dto.ParamType
 import kotlinx.coroutines.flow.first
-import senderLang
-import senderUserId
+import lang
+import tz
+import userId
 
 fun BehaviourContext.registerAddHabitCommand() {
     onCommand("addhabit") { message ->
-        val userId = message.senderUserId() ?: return@onCommand
-        val lang = message.senderLang()
-
-        if (UserSettingsService.getTimezone(userId) == null) {
-            sendMessage(message.chat.id, Strings.tzRequiredAddHabit(lang))
+        if (data.tz == null) {
+            sendMessage(message.chat.id, Strings.tzRequiredAddHabit(data.lang))
             return@onCommand
         }
 
-        val chatLong = message.chat.id.chatId.long
         suspend fun nextText(): String =
             waitTextMessage()
-                .first { it.chat.id.chatId.long == chatLong }
+                .first { it.chat.id.chatId.long == data.userId }
                 .content
                 .text
                 .trim()
@@ -56,42 +52,42 @@ fun BehaviourContext.registerAddHabitCommand() {
         // Direction prompt is asked from three places (counter, single quantity, grouped field);
         // keep the keyboard + parse + validate in one spot. Returns null when the user cancelled.
         suspend fun pickDirection(): DirPick {
-            val choice = pickFromKeyboard(Strings.sendDirection(lang), directionKeyboard(lang), DIR_PREFIX)
+            val choice = pickFromKeyboard(Strings.sendDirection(data.lang), directionKeyboard(data.lang), DIR_PREFIX)
                 ?: return DirPick.Cancelled
             val dir = if (choice == DIR_NONE) null else Direction.entries.firstOrNull { it.value == choice }
             if (dir == null && choice != DIR_NONE) return DirPick.Cancelled
             return DirPick.Picked(dir)
         }
 
-        sendMessage(message.chat.id, Strings.sendHabitName(lang))
+        sendMessage(message.chat.id, Strings.sendHabitName(data.lang))
         val nameText = nextText()
         if (nameText.isBlank() || nameText.startsWith("/")) {
-            sendMessage(message.chat.id, Strings.cancelled(lang))
+            sendMessage(message.chat.id, Strings.cancelled(data.lang))
             return@onCommand
         }
 
         val typeChoice = pickFromKeyboard(
-            Strings.pickHabitType(lang),
-            typeKeyboard(lang),
+            Strings.pickHabitType(data.lang),
+            typeKeyboard(data.lang),
             TYPE_PREFIX
         ) ?: run {
-            sendMessage(message.chat.id, Strings.cancelled(lang))
+            sendMessage(message.chat.id, Strings.cancelled(data.lang))
             return@onCommand
         }
         val type = HabitType.entries.firstOrNull { it.value == typeChoice }
         if (type == null) {
-            sendMessage(message.chat.id, Strings.cancelled(lang))
+            sendMessage(message.chat.id, Strings.cancelled(data.lang))
             return@onCommand
         }
 
         // Log mode: a pure journal with no targets/streaks/trends, hidden from /stats.
         // In this mode we skip every metric-related prompt (target, direction).
         val logChoice = pickFromKeyboard(
-            Strings.pickLogMode(lang),
-            logModeKeyboard(lang),
+            Strings.pickLogMode(data.lang),
+            logModeKeyboard(data.lang),
             LOG_PREFIX
         ) ?: run {
-            sendMessage(message.chat.id, Strings.cancelled(lang))
+            sendMessage(message.chat.id, Strings.cancelled(data.lang))
             return@onCommand
         }
         val logOnly = logChoice == LOG_ON
@@ -101,16 +97,16 @@ fun BehaviourContext.registerAddHabitCommand() {
         var direction: Direction? = null
 
         if (type == HabitType.COUNTER && !logOnly) {
-            sendMessage(message.chat.id, Strings.sendDailyTarget(lang))
+            sendMessage(message.chat.id, Strings.sendDailyTarget(data.lang))
             val raw = nextText()
             if (raw.startsWith("/")) {
-                sendMessage(message.chat.id, Strings.cancelled(lang))
+                sendMessage(message.chat.id, Strings.cancelled(data.lang))
                 return@onCommand
             }
             if (!isSkipped(raw)) {
                 val n = raw.toIntOrNull()
                 if (n == null || n <= 0) {
-                    sendMessage(message.chat.id, Strings.invalidTarget(lang))
+                    sendMessage(message.chat.id, Strings.invalidTarget(data.lang))
                     return@onCommand
                 }
                 dailyTarget = n.toDouble()
@@ -118,7 +114,7 @@ fun BehaviourContext.registerAddHabitCommand() {
 
             direction = when (val d = pickDirection()) {
                 is DirPick.Picked -> d.direction
-                DirPick.Cancelled -> { sendMessage(message.chat.id, Strings.cancelled(lang)); return@onCommand }
+                DirPick.Cancelled -> { sendMessage(message.chat.id, Strings.cancelled(data.lang)); return@onCommand }
             }
         }
 
@@ -127,28 +123,28 @@ fun BehaviourContext.registerAddHabitCommand() {
         if (type == HabitType.QUANTITY) {
             val fields = mutableListOf<HabitParam>()
             while (true) {
-                val nextLabel = if (fields.isEmpty()) Strings.sendFirstFieldName(lang)
-                                else Strings.sendNextFieldNameOrDone(lang)
+                val nextLabel = if (fields.isEmpty()) Strings.sendFirstFieldName(data.lang)
+                                else Strings.sendNextFieldNameOrDone(data.lang)
                 sendMessage(message.chat.id, nextLabel)
                 val fname = nextText()
                 if (fname.startsWith("/")) {
-                    sendMessage(message.chat.id, Strings.cancelled(lang))
+                    sendMessage(message.chat.id, Strings.cancelled(data.lang))
                     return@onCommand
                 }
                 if (fields.isNotEmpty() && (fname.equals("done", ignoreCase = true) ||
                                             fname.equals("готово", ignoreCase = true) ||
                                             fname == "-")) break
                 if (fname.isBlank()) {
-                    sendMessage(message.chat.id, Strings.cancelled(lang))
+                    sendMessage(message.chat.id, Strings.cancelled(data.lang))
                     return@onCommand
                 }
 
                 val ptypeChoice = pickFromKeyboard(
-                    Strings.pickParamType(lang),
-                    paramTypeKeyboard(lang),
+                    Strings.pickParamType(data.lang),
+                    paramTypeKeyboard(data.lang),
                     PTYPE_PREFIX
                 ) ?: run {
-                    sendMessage(message.chat.id, Strings.cancelled(lang))
+                    sendMessage(message.chat.id, Strings.cancelled(data.lang))
                     return@onCommand
                 }
                 val isText = ptypeChoice == PTYPE_TEXT
@@ -158,26 +154,26 @@ fun BehaviourContext.registerAddHabitCommand() {
                 } else {
                     var fTarget: Double? = null
                     if (!logOnly) {
-                        sendMessage(message.chat.id, Strings.sendDailyTargetValue(lang))
+                        sendMessage(message.chat.id, Strings.sendDailyTargetValue(data.lang))
                         val tRaw = nextText()
                         if (tRaw.startsWith("/")) {
-                            sendMessage(message.chat.id, Strings.cancelled(lang))
+                            sendMessage(message.chat.id, Strings.cancelled(data.lang))
                             return@onCommand
                         }
                         fTarget = if (isSkipped(tRaw)) null else {
                             val v = tRaw.replace(',', '.').toDoubleOrNull()
                             if (v == null || v <= 0.0 || v.isNaN() || v.isInfinite()) {
-                                sendMessage(message.chat.id, Strings.invalidTargetValue(lang))
+                                sendMessage(message.chat.id, Strings.invalidTargetValue(data.lang))
                                 return@onCommand
                             }
                             v
                         }
                     }
 
-                    sendMessage(message.chat.id, Strings.sendUnit(lang))
+                    sendMessage(message.chat.id, Strings.sendUnit(data.lang))
                     val uRaw = nextText()
                     if (uRaw.startsWith("/")) {
-                        sendMessage(message.chat.id, Strings.cancelled(lang))
+                        sendMessage(message.chat.id, Strings.cancelled(data.lang))
                         return@onCommand
                     }
                     val fUnit = if (isSkipped(uRaw)) null else uRaw.take(16)
@@ -186,7 +182,7 @@ fun BehaviourContext.registerAddHabitCommand() {
                     if (!logOnly) {
                         fDir = when (val d = pickDirection()) {
                             is DirPick.Picked -> d.direction
-                            DirPick.Cancelled -> { sendMessage(message.chat.id, Strings.cancelled(lang)); return@onCommand }
+                            DirPick.Cancelled -> { sendMessage(message.chat.id, Strings.cancelled(data.lang)); return@onCommand }
                         }
                     }
 
@@ -195,7 +191,7 @@ fun BehaviourContext.registerAddHabitCommand() {
             }
 
             if (fields.isEmpty()) {
-                sendMessage(message.chat.id, Strings.cancelled(lang))
+                sendMessage(message.chat.id, Strings.cancelled(data.lang))
                 return@onCommand
             }
             groupFields = fields
@@ -210,14 +206,14 @@ fun BehaviourContext.registerAddHabitCommand() {
         while (true) {
             val firstOne = reminders.isEmpty()
             val prompt = when {
-                !firstOne -> Strings.sendNextReminderTimeOrDone(lang)
-                timesRequired -> Strings.sendFirstReminderTime(lang)
-                else -> Strings.sendFirstReminderTimeOptional(lang)
+                !firstOne -> Strings.sendNextReminderTimeOrDone(data.lang)
+                timesRequired -> Strings.sendFirstReminderTime(data.lang)
+                else -> Strings.sendFirstReminderTimeOptional(data.lang)
             }
             sendMessage(message.chat.id, prompt)
             val timeText = nextText()
             if (timeText.startsWith("/")) {
-                sendMessage(message.chat.id, Strings.cancelled(lang))
+                sendMessage(message.chat.id, Strings.cancelled(data.lang))
                 return@onCommand
             }
             // "done"/"готово"/"-" finishes the list; for an optional first reminder it means "none".
@@ -226,19 +222,19 @@ fun BehaviourContext.registerAddHabitCommand() {
 
             val offsetMinutes = parseTime(timeText)
             if (offsetMinutes == null) {
-                sendMessage(message.chat.id, Strings.invalidTime(lang))
+                sendMessage(message.chat.id, Strings.invalidTime(data.lang))
                 return@onCommand
             }
             if (reminders.any { it.offsetMinutes == offsetMinutes }) {
-                sendMessage(message.chat.id, Strings.duplicateTime(lang))
+                sendMessage(message.chat.id, Strings.duplicateTime(data.lang))
                 continue
             }
 
             val displayTime = Strings.formatDisplayTime(offsetMinutes)
-            sendMessage(message.chat.id, Strings.sendReminderDaysFor(lang, displayTime))
+            sendMessage(message.chat.id, Strings.sendReminderDaysFor(data.lang, displayTime))
             val daysText = nextText()
             if (daysText.startsWith("/")) {
-                sendMessage(message.chat.id, Strings.cancelled(lang))
+                sendMessage(message.chat.id, Strings.cancelled(data.lang))
                 return@onCommand
             }
             val days = if (isSkipped(daysText)) {
@@ -246,7 +242,7 @@ fun BehaviourContext.registerAddHabitCommand() {
             } else {
                 val parsed2 = parseDays(daysText)
                 if (parsed2 == null) {
-                    sendMessage(message.chat.id, Strings.invalidDays(lang))
+                    sendMessage(message.chat.id, Strings.invalidDays(data.lang))
                     return@onCommand
                 }
                 parsed2
@@ -259,7 +255,7 @@ fun BehaviourContext.registerAddHabitCommand() {
         // and the repository injects a single service param. type is already QUANTITY whenever grouped.
         val habit = HabitService.addHabit(
             Habit(
-                userId = userId,
+                userId = data.userId,
                 name = nameText,
                 type = type,
                 dailyTarget = dailyTarget,
@@ -270,7 +266,7 @@ fun BehaviourContext.registerAddHabitCommand() {
                 logOnly = logOnly,
             )
         )
-        sendMessage(message.chat.id, Strings.habitAddedDetailed(lang, habit))
+        sendMessage(message.chat.id, Strings.habitAddedDetailed(data.lang, habit))
     }
 }
 
