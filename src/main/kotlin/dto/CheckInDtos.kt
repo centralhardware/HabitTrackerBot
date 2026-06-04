@@ -66,7 +66,7 @@ data class CheckinRecord(
     val checkinId: Long,
     val paramId: Long,
     @Serializable(LocalDateSerializer::class) val date: LocalDate,
-    val status: CheckinStatus?,
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val status: CheckinStatus? = null,
     @EncodeDefault(EncodeDefault.Mode.NEVER) val quantity: Double? = null,
     @EncodeDefault(EncodeDefault.Mode.NEVER) val offsetMinutes: Int? = null,
     @EncodeDefault(EncodeDefault.Mode.NEVER) val comment: String? = null,
