@@ -42,7 +42,8 @@ object CheckinAnalytics {
     /** Rows in [from]..[to] mapped to the public [CheckinRecord] shape (old `findInRange`). */
     fun inRange(rows: List<CheckinValueRow>, from: LocalDate, to: LocalDate): List<CheckinRecord> =
         rows.filter { it.date in from..to }
-            .map { CheckinRecord(it.checkinId, it.paramId, it.date, it.status, it.quantity, it.offsetMinutes, it.comment, it.textValue) }
+            // status is meaningful only for scheduled habits; never surface it for quantity/counter rows.
+            .map { CheckinRecord(it.checkinId, it.paramId, it.date, it.status.takeIf { _ -> it.isScheduled }, it.quantity, it.offsetMinutes, it.comment, it.textValue) }
 
     /** Weekly totals over [from]..[to] (old `WeeklySummaryRepository.weeklyTotals`). */
     fun weekTotals(rows: List<CheckinValueRow>, from: LocalDate, to: LocalDate): WeekTotals {
