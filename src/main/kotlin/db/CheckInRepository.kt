@@ -98,6 +98,26 @@ object CheckInRepository {
     }
 
     /**
+     * Insert a non-scheduled event with no per-param values — used by counter habits, where the
+     * event row itself is the unit being counted (see [loadForHabit]'s LEFT JOIN). Each call
+     * creates a fresh event row; there is no per-day uniqueness. Returns the new `checkins.id`.
+     */
+    fun insertEvent(event: CheckinEvent): Long {
+        return using(sessionOf(DatabaseService.dataSource)) { session ->
+            session.run(
+                queryOf(
+                    """
+                    INSERT INTO checkins (user_id, check_date, reminder_id, habit_id, comment, checked_at)
+                    VALUES (?, ?, NULL, ?, ?, now())
+                    RETURNING id
+                    """.trimIndent(),
+                    event.userId, event.checkDate, event.habitId, event.comment
+                ).map { it.long("id") }.asSingle
+            ) ?: 0L
+        }
+    }
+
+    /**
      * Skips pending scheduled values whose slot fired before [threshold], returning the
      * (reminder, date) of each flipped row. The overdue test uses the slot's firing moment
      * (`check_date + reminder_time` in the user's timezone), since pending rows no longer
@@ -150,7 +170,9 @@ object CheckInRepository {
                     SELECT e.id AS checkin_id, v.param_id, p.param_type, e.check_date, e.reminder_id,
                            v.status, v.value, e.comment, r.reminder_time
                     FROM checkins e
-                    JOIN checkin_values v ON v.checkin_id = e.id
+                    -- LEFT JOIN: counter events carry no checkin_values row (the event is the count),
+                    -- so they'd be dropped by an inner join. param_id/status/value are NULL for them.
+                    LEFT JOIN checkin_values v ON v.checkin_id = e.id
                     LEFT JOIN habit_params p ON p.id = v.param_id
                     LEFT JOIN habit_reminders r ON r.id = e.reminder_id
                     WHERE e.habit_id = ?

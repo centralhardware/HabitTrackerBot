@@ -34,10 +34,10 @@ object CheckInService {
     fun checkInCounter(habitId: Long, userId: Long, date: LocalDate, comment: String? = null): Boolean {
         val habit = HabitService.findById(habitId, userId) ?: return false
         if (habit.type != HabitType.COUNTER) return false
-        val paramId = habit.params.firstOrNull()?.id ?: return false
-        return CheckInRepository.insertEventWithValues(
+        // A counter event carries no per-param value — the event row itself is the count.
+        // We write just the `checkins` row; analytics count events, not value rows.
+        return CheckInRepository.insertEvent(
             CheckinEvent(userId, date, reminderId = null, habitId = habitId, comment = comment?.trim()?.ifEmpty { null }),
-            listOf(CheckinValue(paramId, CheckinStatus.DONE, quantity = null)),
         ) > 0
     }
 

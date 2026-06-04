@@ -95,7 +95,9 @@ fun Row.toCheckinValueRow(): CheckinValueRow {
     val rawValue = stringOrNull("value")
     return CheckinValueRow(
         checkinId = long("checkin_id"),
-        paramId = long("param_id"),
+        // Counter events have no checkin_values row, so param_id is NULL (0 stands in — counter
+        // habits are single-param, so the value is never used to distinguish fields).
+        paramId = longOrNull("param_id") ?: 0L,
         date = localDate("check_date"),
         isScheduled = longOrNull("reminder_id") != null,
         status = stringOrNull("status")?.let { v -> CheckinStatus.entries.firstOrNull { it.value == v } },
