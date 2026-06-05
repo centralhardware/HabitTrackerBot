@@ -5,9 +5,12 @@ import dto.DueReminder
 import dto.Habit
 import dto.HabitStatus
 import dto.HabitType
+import dto.ResumedHabit
 import java.time.Instant
 import java.time.LocalTime
+import java.time.OffsetDateTime
 import java.time.ZoneId
+import java.time.ZoneOffset
 
 object HabitService {
 
@@ -25,11 +28,22 @@ object HabitService {
 
     fun softDelete(habitId: Long, userId: Long): Boolean = transition(habitId, userId, HabitStatus.DELETED)
 
-    fun pause(habitId: Long, userId: Long): Boolean =
-        transition(habitId, userId, HabitStatus.PAUSED) { it.status == HabitStatus.ACTIVE }
+    /**
+     * Pauses a habit for [durationDays] (0 = indefinitely, until a manual /resume). A finite
+     * duration sets an auto-resume deadline that [autoResumeExpired] later lifts.
+     */
+    fun pause(habitId: Long, userId: Long, durationDays: Int): Boolean {
+        val until = if (durationDays > 0)
+            OffsetDateTime.now(ZoneOffset.UTC).plusDays(durationDays.toLong())
+        else null
+        return HabitRepository.pauseHabit(habitId, userId, until)
+    }
 
     fun resume(habitId: Long, userId: Long): Boolean =
         transition(habitId, userId, HabitStatus.ACTIVE) { it.status == HabitStatus.PAUSED }
+
+    /** Resumes every paused habit whose deadline has passed, returning them so owners can be notified. */
+    fun autoResumeExpired(): List<ResumedHabit> = HabitRepository.autoResumeExpired()
 
     private fun transition(
         habitId: Long,

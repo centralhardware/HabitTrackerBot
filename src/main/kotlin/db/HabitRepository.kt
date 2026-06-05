@@ -6,6 +6,7 @@ import dto.HabitParam
 import dto.HabitType
 import dto.RawDue
 import dto.RawMissed
+import dto.ResumedHabit
 import dto.toHabit
 import dto.toHabitParam
 import dto.toHabitReminder
@@ -14,6 +15,7 @@ import dto.toRawMissed
 import kotliquery.queryOf
 import kotliquery.sessionOf
 import kotliquery.using
+import java.time.OffsetDateTime
 
 object HabitRepository {
 
@@ -114,12 +116,11 @@ object HabitRepository {
 
                 val params = habit.params.ifEmpty {
                     when (habit.type) {
-                        // Quantity habits get a numeric service param; scheduled get an untyped
-                        // service param (its checkin_values rows carry done/skip status).
+                        // Quantity habits get a numeric service param.
                         HabitType.QUANTITY -> listOf(HabitParam(id = 0, paramType = dto.ParamType.NUMBER))
-                        // Counter events are bare checkins rows — no param needed.
-                        HabitType.COUNTER -> emptyList()
-                        HabitType.SCHEDULED -> listOf(HabitParam(id = 0, paramType = null))
+                        // Counter events are bare checkins rows; scheduled events keep their
+                        // done/skip status on the checkins row — neither needs a param.
+                        HabitType.COUNTER, HabitType.SCHEDULED -> emptyList()
                     }
                 }
                 val savedParams = params.mapIndexed { i, p ->
@@ -129,7 +130,7 @@ object HabitRepository {
                             INSERT INTO habit_params (habit_id, name, unit, direction, daily_target, position, param_type)
                             VALUES (?, ?, ?, ?::habit_direction, ?, ?, ?::param_type)
                             """.trimIndent(),
-                            id, p.name, p.unit, p.direction?.value, p.dailyTarget, i, p.paramType?.value
+                            id, p.name, p.unit, p.direction?.value, p.dailyTarget, i, p.paramType.value
                         )
                     ) ?: error("Failed to insert habit param")
                     p.copy(id = pid, habitId = id, position = i)
@@ -154,12 +155,13 @@ object HabitRepository {
                         status       = ?::habit_status,
                         log_only     = ?,
                         paused_at    = CASE WHEN ?::habit_status = 'paused'  AND status <> 'paused'  THEN now() ELSE paused_at  END,
-                        deleted_at   = CASE WHEN ?::habit_status = 'deleted' AND status <> 'deleted' THEN now() ELSE deleted_at END
+                        deleted_at   = CASE WHEN ?::habit_status = 'deleted' AND status <> 'deleted' THEN now() ELSE deleted_at END,
+                        paused_until = CASE WHEN ?::habit_status <> 'paused' THEN NULL ELSE paused_until END
                     WHERE id = ? AND user_id = ?
                     """.trimIndent(),
                     habit.name, habit.type.value, habit.dailyTarget, habit.unit, habit.direction?.value,
                     habit.status.value, habit.logOnly,
-                    habit.status.value, habit.status.value,
+                    habit.status.value, habit.status.value, habit.status.value,
                     habit.id, habit.userId
                 )
             )
@@ -167,24 +169,43 @@ object HabitRepository {
         return habit
     }
 
-    /** The first (lowest-position) param id of a habit — used to write status/quantity rows. */
-    fun firstParamId(habitId: Long, userId: Long): Long? {
-        return sessionOf(DatabaseService.dataSource).use { session ->
+    /**
+     * Pauses an active habit. [until] is the auto-resume moment, or null for an indefinite pause.
+     * No-op (returns false) if the habit isn't currently active.
+     */
+    fun pauseHabit(habitId: Long, userId: Long, until: OffsetDateTime?): Boolean =
+        sessionOf(DatabaseService.dataSource).use { session ->
+            session.update(
+                queryOf(
+                    """
+                    UPDATE habits
+                    SET status = 'paused', paused_at = now(), paused_until = ?
+                    WHERE id = ? AND user_id = ? AND status = 'active'
+                    """.trimIndent(),
+                    until, habitId, userId
+                )
+            ) > 0
+        }
+
+    /** Flips every paused habit whose deadline has passed back to active, returning the ones resumed. */
+    fun autoResumeExpired(): List<ResumedHabit> =
+        sessionOf(DatabaseService.dataSource).use { session ->
             session.run(
                 queryOf(
                     """
-                    SELECT p.id
-                    FROM habit_params p
-                    JOIN habits h ON h.id = p.habit_id
-                    WHERE p.habit_id = ? AND h.user_id = ? AND h.status <> 'deleted'
-                    ORDER BY p.position, p.id
-                    LIMIT 1
-                    """.trimIndent(),
-                    habitId, userId
-                ).map { it.long("id") }.asSingle
+                    WITH resumed AS (
+                        UPDATE habits
+                        SET status = 'active', paused_until = NULL
+                        WHERE status = 'paused' AND paused_until IS NOT NULL AND paused_until <= now()
+                        RETURNING user_id, name
+                    )
+                    SELECT r.user_id, r.name, us.language AS lang
+                    FROM resumed r
+                    LEFT JOIN user_settings us ON us.user_id = r.user_id
+                    """.trimIndent()
+                ).map { ResumedHabit(it.long("user_id"), it.string("name"), it.stringOrNull("lang")) }.asList
             )
         }
-    }
 
     fun findHabitIdByReminder(reminderId: Long, userId: Long): Long? {
         return sessionOf(DatabaseService.dataSource).use { session ->
@@ -232,7 +253,7 @@ object HabitRepository {
      * Backfills checkin rows for every scheduled reminder slot that has fired
      * but has no checkin yet (going back to habit creation). Slots whose firing
      * moment is older than 24h are inserted as `skip` immediately; recent slots
-     * are inserted as `pending` (status NULL) and returned so the caller can
+     * are inserted as `pending` and returned so the caller can
      * send a catch-up notification.
      *
      * Recent (pending) rows keep `checked_at` NULL — there's no check-in yet; the
@@ -292,14 +313,13 @@ object HabitRepository {
                         RETURNING id, reminder_id, check_date
                     ),
                     ins_values AS (
+                        -- Scheduled habits have no param: the status row carries a NULL param_id.
                         INSERT INTO checkin_values (checkin_id, param_id, status, value)
                         SELECT ie.id,
-                               (SELECT hp.id FROM habit_params hp
-                                WHERE hp.habit_id = m.habit_id
-                                ORDER BY hp.position, hp.id LIMIT 1),
+                               NULL,
                                CASE WHEN now() - m.fired_at > INTERVAL '24 hours'
                                     THEN 'skip'::checkin_status
-                                    ELSE NULL END,
+                                    ELSE 'pending'::checkin_status END,
                                NULL
                         FROM ins_events ie
                         JOIN missed m

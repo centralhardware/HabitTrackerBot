@@ -23,6 +23,7 @@ import dev.inmo.tgbotapi.types.commands.BotCommandScope.Companion.Default
 import kotlinx.coroutines.launch
 import mcp.McpServer
 import services.DatabaseService
+import services.HabitService
 
 @OptIn(Warning::class)
 suspend fun main() {
@@ -58,6 +59,12 @@ suspend fun main() {
 
         launch {
             doInfinity("0 /1 * * *") {
+                runCatching {
+                    HabitService.autoResumeExpired().forEach { resumed ->
+                        val lang = resumed.langCode?.let { runCatching { Lang.valueOf(it) }.getOrNull() } ?: Lang.EN
+                        BotNotifier.notify(resumed.userId, Strings.autoResumed(lang, resumed.name))
+                    }
+                }.onFailure { KSLog.error("autoResumeExpired failed", it) }
                 runCatching { sendDueReminders() }
                     .onFailure { KSLog.error("sendDueReminders failed", it) }
                 runCatching { sendWeeklySummaries() }

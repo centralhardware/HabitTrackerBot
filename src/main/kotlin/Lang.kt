@@ -228,6 +228,28 @@ object Strings {
 
     fun pickHabitToPause(l: Lang) = pick(l, "Pick a habit to pause:", "Выберите привычку для паузы:")
 
+    fun pickPauseDuration(l: Lang) = pick(l, "For how long?", "На сколько?")
+
+    fun btnPauseDay(l: Lang) = pick(l, "1 day", "1 день")
+    fun btnPause3Days(l: Lang) = pick(l, "3 days", "3 дня")
+    fun btnPauseWeek(l: Lang) = pick(l, "1 week", "1 неделя")
+    fun btnPauseMonth(l: Lang) = pick(l, "1 month", "1 месяц")
+    fun btnPauseForever(l: Lang) = pick(l, "Until I resume", "Пока не возобновлю")
+    fun btnPauseCustom(l: Lang) = pick(l, "Other…", "Другое…")
+
+    fun askPauseDuration(l: Lang) = pick(
+        l,
+        "Send the duration: a number of days, or like 2w / 1m.",
+        "Пришлите длительность: число дней, либо вида 2w / 1m.",
+    )
+    fun cbBadDuration(l: Lang) = pick(l, "Couldn't read that duration.", "Не понял длительность.")
+
+    fun autoResumed(l: Lang, name: String) = pick(
+        l,
+        "▶️ \"$name\" is active again — the pause has ended.",
+        "▶️ «$name» снова активна — пауза закончилась.",
+    )
+
     fun noPaused(l: Lang) = pick(l, "No paused habits.", "Нет привычек на паузе.")
 
     fun pickHabitToResume(l: Lang) = pick(l, "Pick a habit to resume:", "Выберите привычку для возобновления:")
@@ -534,10 +556,28 @@ object Strings {
     fun cbRemovedFull(l: Lang) = pick(l, "Habit removed.", "Привычка удалена.")
     fun cbPausedShort(l: Lang) = pick(l, "Paused", "На паузе")
     fun cbPausedFull(l: Lang) = pick(l, "Habit paused.", "Привычка на паузе.")
+    fun cbPausedForDays(l: Lang, days: Int) = pick(
+        l,
+        "Paused for $days ${if (days == 1) "day" else "days"} — it'll resume on its own.",
+        "На паузе на $days ${plural(days, "день", "дня", "дней")} — возобновится сама.",
+    )
+    fun cbPausedForever(l: Lang) = pick(l, "Paused until you resume it.", "На паузе, пока не возобновите.")
     fun cbResumedShort(l: Lang) = pick(l, "Resumed", "Возобновлено")
     fun cbResumedFull(l: Lang) = pick(l, "Habit resumed.", "Привычка возобновлена.")
 
     private fun pick(l: Lang, en: String, ru: String): String = if (l == Lang.RU) ru else en
+
+    /** Russian numeric plural: picks one / few / many by the standard 1, 2-4, 0/5+ rules. */
+    private fun plural(n: Int, one: String, few: String, many: String): String {
+        val mod100 = n % 100
+        val mod10 = n % 10
+        return when {
+            mod100 in 11..14 -> many
+            mod10 == 1 -> one
+            mod10 in 2..4 -> few
+            else -> many
+        }
+    }
 }
 
 /** Bot name/description/short-description texts, wired up via the (currently commented) profile setup in Main.kt. */

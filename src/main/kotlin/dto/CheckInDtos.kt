@@ -10,6 +10,8 @@ import java.time.LocalDate
 enum class CheckinStatus(val value: String) {
     @SerialName("done") DONE("done"),
     @SerialName("skip") SKIP("skip"),
+    // A scheduled slot that's been sent but not yet answered (done/skip).
+    @SerialName("pending") PENDING("pending"),
 }
 
 /** A check-in event: one row in `checkins`, owned by a single habit. */
@@ -77,7 +79,8 @@ data class CheckinRecord(
  */
 data class CheckinValueRow(
     val checkinId: Long,
-    // Null for counter events, which have no checkin_values row.
+    // Null for counter events (no checkin_values row) and scheduled events (a row, but no param —
+    // it only carries done/skip status). Non-null only for quantity/text param values.
     val paramId: Long?,
     val date: LocalDate,
     val isScheduled: Boolean,

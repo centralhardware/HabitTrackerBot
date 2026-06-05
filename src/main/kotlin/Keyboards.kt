@@ -29,6 +29,26 @@ object Keyboards {
         )
     }
 
+    /** Duration choices shown after a habit is picked for pausing. Payload: `pd|<habitId>|<days>` (0 = indefinite). */
+    fun pauseDurations(habitId: Long, lang: Lang): InlineKeyboardMarkup {
+        return InlineKeyboardMarkup(
+            listOf(
+                listOf(
+                    CallbackDataInlineKeyboardButton(Strings.btnPauseDay(lang), "pd|$habitId|1"),
+                    CallbackDataInlineKeyboardButton(Strings.btnPause3Days(lang), "pd|$habitId|3"),
+                    CallbackDataInlineKeyboardButton(Strings.btnPauseWeek(lang), "pd|$habitId|7"),
+                ),
+                listOf(
+                    CallbackDataInlineKeyboardButton(Strings.btnPauseMonth(lang), "pd|$habitId|30"),
+                    CallbackDataInlineKeyboardButton(Strings.btnPauseForever(lang), "pd|$habitId|0"),
+                ),
+                listOf(
+                    CallbackDataInlineKeyboardButton(Strings.btnPauseCustom(lang), "pc|$habitId"),
+                ),
+            )
+        )
+    }
+
     fun pickHabit(prefix: String, habits: List<Habit>, icon: String): InlineKeyboardMarkup {
         return InlineKeyboardMarkup(
             habits.map { habit ->

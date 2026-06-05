@@ -28,11 +28,11 @@ object CheckInRepository {
      * explicit `RETURNING` + `asSingle` combo that crashes PG JDBC 42.7.4
      * with "No results were returned by the query."
      */
-    fun upsertScheduledValue(event: CheckinEvent, value: CheckinValue): Boolean {
+    fun upsertScheduledValue(event: CheckinEvent, status: CheckinStatus): Boolean {
         require(event.reminderId != null) { "scheduled upsert requires reminderId" }
-        // A pending row (status == null) has no check-in yet, so checked_at stays NULL;
+        // A pending row has no check-in yet, so checked_at stays NULL;
         // it's stamped only when the slot is actually resolved (done / skip).
-        val checkedAt = value.status?.let { Instant.now() }
+        val checkedAt = if (status == CheckinStatus.PENDING) null else Instant.now()
         return using(sessionOf(DatabaseService.dataSource)) { session ->
             val written = session.update(
                 queryOf(
@@ -45,14 +45,16 @@ object CheckInRepository {
                         DO UPDATE SET checked_at = COALESCE(EXCLUDED.checked_at, checkins.checked_at)
                         RETURNING id
                     )
+                    -- Scheduled habits have no param, so the status row carries a NULL param_id
+                    -- (deduped one-per-event by checkin_values_noparam_uniq).
                     INSERT INTO checkin_values (checkin_id, param_id, status, value)
-                    SELECT id, ?, ?::checkin_status, NULL
+                    SELECT id, NULL, ?::checkin_status, NULL
                     FROM upsert_event
-                    ON CONFLICT (checkin_id, param_id)
+                    ON CONFLICT (checkin_id) WHERE param_id IS NULL
                     DO UPDATE SET status = EXCLUDED.status
                     """.trimIndent(),
                     event.userId, event.checkDate, event.reminderId, event.habitId, checkedAt,
-                    value.paramId, value.status?.value
+                    status.value
                 )
             )
             written > 0
@@ -139,7 +141,7 @@ object CheckInRepository {
                         JOIN habit_reminders r ON r.id = e.reminder_id
                         JOIN user_settings us ON us.user_id = e.user_id
                         WHERE v.checkin_id = e.id
-                          AND v.status IS NULL
+                          AND v.status = 'pending'
                           AND e.reminder_id IS NOT NULL
                           AND e.deleted = false
                           AND us.timezone IS NOT NULL
@@ -310,7 +312,7 @@ object CheckInRepository {
                     JOIN checkin_values v ON v.checkin_id = e.id
                     WHERE h.user_id = ?
                       AND h.status = 'active'
-                      AND v.status IS NULL
+                      AND v.status = 'pending'
                       AND e.deleted = false
                       AND e.check_date BETWEEN ?::date AND ?::date
                     ORDER BY e.check_date, r.reminder_time

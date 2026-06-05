@@ -27,10 +27,9 @@ object CheckInService {
 
     fun record(reminderId: Long, userId: Long, date: LocalDate, status: CheckinStatus): Boolean {
         val habitId = HabitRepository.findHabitIdByReminder(reminderId, userId) ?: return false
-        val paramId = HabitRepository.firstParamId(habitId, userId) ?: return false
         return CheckInRepository.upsertScheduledValue(
             CheckinEvent(userId, date, reminderId, habitId, comment = null),
-            CheckinValue(paramId, status),
+            status,
         )
     }
 
@@ -199,10 +198,9 @@ object CheckInService {
     }
 
     fun markPending(habitId: Long, userId: Long, reminderId: Long, date: LocalDate) {
-        val paramId = HabitRepository.firstParamId(habitId, userId) ?: return
         CheckInRepository.upsertScheduledValue(
             CheckinEvent(userId, date, reminderId, habitId, comment = null),
-            CheckinValue(paramId, status = null),
+            CheckinStatus.PENDING,
         )
     }
 }

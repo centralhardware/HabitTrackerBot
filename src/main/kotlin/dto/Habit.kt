@@ -49,9 +49,8 @@ enum class ParamType(val value: String) {
 }
 
 /**
- * A "field" of a habit, in its own `habit_params` row. Every habit has at least one:
- * scheduled/counter habits a single service param (metadata null — those keep their
- * targets/direction on the habit row), quantity habits one param per tracked field.
+ * A "field" of a habit, in its own `habit_params` row. Only quantity habits carry params now
+ * (scheduled/counter events store everything on the `checkins` row), one per tracked field.
  * `paramType` is NUMBER for regular decimal fields, TEXT for free-text fields.
  */
 @Serializable
@@ -63,8 +62,11 @@ data class HabitParam(
     @EncodeDefault(EncodeDefault.Mode.NEVER) val direction: Direction? = null,
     @EncodeDefault(EncodeDefault.Mode.NEVER) val dailyTarget: Double? = null,
     val position: Int = 0,
-    @EncodeDefault(EncodeDefault.Mode.NEVER) val paramType: ParamType? = null,
+    val paramType: ParamType,
 )
+
+/** A habit that an expired pause just flipped back to active, with enough to notify its owner. */
+data class ResumedHabit(val userId: Long, val name: String, val langCode: String?)
 
 @Serializable
 data class Habit(
@@ -106,7 +108,7 @@ fun Row.toHabitParam(): HabitParam = HabitParam(
     direction = Direction.parse(stringOrNull("direction")),
     dailyTarget = doubleOrNull("daily_target"),
     position = int("position"),
-    paramType = ParamType.parse(stringOrNull("param_type")),
+    paramType = ParamType.parse(string("param_type")) ?: error("habit_params.param_type is NULL"),
 )
 
 /** Reads a nullable Postgres int[] column; NULL becomes an empty list. */
