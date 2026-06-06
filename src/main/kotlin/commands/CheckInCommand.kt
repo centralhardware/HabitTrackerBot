@@ -62,11 +62,13 @@ fun BehaviourContext.registerCheckInCommand() {
             val habit = timersById.getValue(rt.habitId)
             val elapsed = TimerService.elapsedMinutes(rt.startedAt)
             val todayMinutes = CheckInService.timerMinutesOn(habit.id, today)
-            sendMessage(
+            val sent = sendMessage(
                 chatId = message.chat.id,
                 text = Strings.timerLine(data.lang, habit, running = true, elapsed, todayMinutes),
                 replyMarkup = Keyboards.timerControl(habit.id, running = true, today, data.lang)
             )
+            // Let the background ticker keep this message's elapsed time live.
+            TimerService.setMessage(habit.id, data.userId, sent.messageId.long)
         }
     }
 }

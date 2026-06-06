@@ -3,6 +3,7 @@ package services
 import db.TimerRepository
 import dto.HabitType
 import dto.RunningTimer
+import dto.RunningTimerTick
 import java.time.Duration
 import java.time.Instant
 import java.time.LocalDate
@@ -40,6 +41,14 @@ object TimerService {
     fun running(userId: Long): List<RunningTimer> = TimerRepository.running(userId)
 
     fun find(habitId: Long, userId: Long): RunningTimer? = TimerRepository.find(habitId, userId)
+
+    /** Remembers the message that shows this running timer, so the background ticker can update it. */
+    fun setMessage(habitId: Long, userId: Long, messageId: Long) {
+        TimerRepository.setMessage(habitId, userId, messageId)
+    }
+
+    /** Running timers (with a tracked message) the ticker should repaint. */
+    fun dueTicks(): List<RunningTimerTick> = TimerRepository.dueTicks()
 
     /** Minutes elapsed since [startedAt], rounded to two decimals (never below a recordable epsilon). */
     fun elapsedMinutes(startedAt: Instant): Double {

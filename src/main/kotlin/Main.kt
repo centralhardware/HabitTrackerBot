@@ -1,4 +1,5 @@
 import ReminderScheduler.sendDueReminders
+import TimerTicker.tickRunningTimers
 import commands.addhabit.registerAddHabitCommand
 import commands.registerCheckInCommand
 import commands.registerHabitsCommand
@@ -69,6 +70,8 @@ suspend fun main() {
                 }.onFailure { KSLog.error("autoResumeExpired failed", it) }
                 runCatching { sendDueReminders() }
                     .onFailure { KSLog.error("sendDueReminders failed", it) }
+                runCatching { tickRunningTimers() }
+                    .onFailure { KSLog.error("tickRunningTimers failed", it) }
                 runCatching { sendWeeklySummaries() }
                     .onFailure { KSLog.error("sendWeeklySummaries failed", it) }
             }

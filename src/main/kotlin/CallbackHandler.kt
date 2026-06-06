@@ -242,6 +242,8 @@ private suspend fun BehaviourContext.handleTimer(query: MessageDataCallbackQuery
                 TimerService.StartOutcome.NotFound -> { answerCallbackQuery(query, text = Strings.cbNotFound(lang)); return }
             }
             refresh(running = true)
+            // This edited message becomes the live display the background ticker updates.
+            TimerService.setMessage(habitId, userId, query.message.messageId.long)
             answerCallbackQuery(query, text = toast)
         }
         "stop" -> when (val o = TimerService.stop(habitId, userId, date)) {

@@ -2,7 +2,9 @@ package db
 
 import services.DatabaseService
 import dto.RunningTimer
+import dto.RunningTimerTick
 import dto.toRunningTimer
+import dto.toRunningTimerTick
 import kotliquery.queryOf
 import kotliquery.sessionOf
 import kotliquery.using
@@ -61,6 +63,35 @@ object TimerRepository {
                     "SELECT habit_id, user_id, started_at FROM running_timers WHERE user_id = ?",
                     userId
                 ).map { it.toRunningTimer() }.asList
+            )
+        }
+
+    /** Records which message currently displays the running timer, so the ticker can edit it. */
+    fun setMessage(habitId: Long, userId: Long, messageId: Long): Boolean =
+        using(sessionOf(DatabaseService.dataSource)) { session ->
+            session.update(
+                queryOf(
+                    "UPDATE running_timers SET message_id = ? WHERE habit_id = ? AND user_id = ?",
+                    messageId, habitId, userId
+                )
+            ) > 0
+        }
+
+    /** Every running timer that has a tracked message, with the data needed to repaint it live. */
+    fun dueTicks(): List<RunningTimerTick> =
+        sessionOf(DatabaseService.dataSource).use { session ->
+            session.run(
+                queryOf(
+                    """
+                    SELECT rt.habit_id, rt.user_id, rt.started_at, rt.message_id,
+                           h.name, us.language AS lang, us.timezone AS tz
+                    FROM running_timers rt
+                    JOIN habits h ON h.id = rt.habit_id
+                    LEFT JOIN user_settings us ON us.user_id = rt.user_id
+                    WHERE rt.message_id IS NOT NULL
+                      AND h.status = 'active'
+                    """.trimIndent()
+                ).map { it.toRunningTimerTick() }.asList
             )
         }
 }
