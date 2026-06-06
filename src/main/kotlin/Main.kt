@@ -1,5 +1,5 @@
 import ReminderScheduler.sendDueReminders
-import commands.registerAddHabitCommand
+import commands.addhabit.registerAddHabitCommand
 import commands.registerCheckInCommand
 import commands.registerHabitsCommand
 import commands.registerMcpCommands
