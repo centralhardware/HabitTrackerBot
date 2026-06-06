@@ -246,7 +246,7 @@ private suspend fun BehaviourContext.handleTimer(query: MessageDataCallbackQuery
             TimerService.setMessage(habitId, userId, query.message.messageId.long)
             answerCallbackQuery(query, text = toast)
         }
-        "stop" -> when (val o = TimerService.stop(habitId, userId, date)) {
+        "stop" -> when (val o = TimerService.stop(habitId, userId, date, data.tz)) {
             is TimerService.StopOutcome.Stopped -> { refresh(running = false); answerCallbackQuery(query, text = Strings.cbTimerStopped(lang, o.seconds)) }
             TimerService.StopOutcome.NotRunning -> { refresh(running = false); answerCallbackQuery(query, text = Strings.cbTimerNotRunning(lang)) }
             TimerService.StopOutcome.NotFound -> answerCallbackQuery(query, text = Strings.cbNotFound(lang))
@@ -255,7 +255,7 @@ private suspend fun BehaviourContext.handleTimer(query: MessageDataCallbackQuery
         // then ask for a comment and attach it to the just-written check-in.
         "stopc" -> {
             answerCallbackQuery(query)
-            when (val o = TimerService.stop(habitId, userId, date)) {
+            when (val o = TimerService.stop(habitId, userId, date, data.tz)) {
                 is TimerService.StopOutcome.Stopped -> {
                     refresh(running = false)
                     sendMessage(query.message.chat.id, Strings.sendTimerComment(lang))
