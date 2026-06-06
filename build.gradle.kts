@@ -18,7 +18,7 @@ val mcpSdkVersion = "0.13.0"
 val ktorVersion = "3.5.0"
 
 dependencies {
-    implementation("com.github.centralhardware:ktgbotapi-commons:5e4f3244")
+    implementation("com.github.centralhardware:ktgbotapi-commons:e9517e98")
 
     implementation("org.postgresql:postgresql:42.7.11")
     implementation("com.zaxxer:HikariCP:7.0.2")
