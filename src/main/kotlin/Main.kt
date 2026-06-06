@@ -76,7 +76,7 @@ suspend fun main() {
         }
 
         launch {
-            doInfinity("/10 * * * *") {
+            doInfinity("* * * * *") {
                 runCatching { tickRunningTimers() }
                     .onFailure { KSLog.error("tickRunningTimers failed", it) }
             }

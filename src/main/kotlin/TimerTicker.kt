@@ -12,18 +12,24 @@ import java.time.ZoneId
 
 object TimerTicker {
 
+    /** How often, in seconds, a running timer's live message is repainted. */
+    private const val TICK_SECONDS = 10L
+
     /**
      * Repaints the live message of every running timer with its current elapsed time. Run once a
-     * minute. The text only changes when the whole-minute count advances, so a "message not
-     * modified" edit (or a deleted/old message) is swallowed per-timer and the loop carries on.
+     * second: each timer is repainted only when its own elapsed time crosses a [TICK_SECONDS]
+     * boundary, so the displayed value advances on the timer's own grid (0, 10, 20…) regardless of
+     * when the second-aligned cron fires. A deleted/old/unchanged message is swallowed per-timer
+     * and the loop carries on.
      */
     suspend fun BehaviourContext.tickRunningTimers() {
         TimerService.dueTicks().forEach { t ->
             runCatching {
+                val elapsed = TimerService.elapsedSeconds(t.startedAt)
+                if (elapsed.toLong() % TICK_SECONDS != 0L) return@forEach
                 val lang = t.langCode?.let { runCatching { Lang.valueOf(it) }.getOrNull() } ?: Lang.EN
                 val zone = t.tzId?.let { runCatching { ZoneId.of(it) }.getOrNull() }
                 val date = if (zone != null) LocalDate.now(zone) else LocalDate.now()
-                val elapsed = TimerService.elapsedSeconds(t.startedAt)
                 val habit = Habit(id = t.habitId, name = t.name, type = HabitType.TIMER)
                 editMessageText(
                     chatId = t.userId.toChatId(),

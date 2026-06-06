@@ -331,9 +331,13 @@ object Strings {
         HabitType.TIMER -> pick(l, "timer", "таймер")
     }
 
-    /** Renders elapsed seconds with second precision for a live timer, e.g. "1:05:30" or "12:30". */
+    /**
+     * Renders elapsed seconds for a live timer, e.g. "1:05:30" or "12:30". Quantised to the
+     * 10-second ticker grid (floored) so successive repaints advance by a clean 10s instead of
+     * exposing the few-second offset between the timer's start and the wall-clock cron boundary.
+     */
     fun formatElapsed(seconds: Double): String {
-        val totalSec = seconds.toLong()
+        val totalSec = seconds.toLong() / 10 * 10
         val h = totalSec / 3600
         val m = (totalSec % 3600) / 60
         val s = totalSec % 60
