@@ -43,6 +43,7 @@ object Strings {
             /pause — pause reminders for a habit
             /resume — resume a paused habit
             /checkin — today's check-ins
+            /timer — start/stop time tracking
             /stats — statistics
             /tz — show or set your timezone (e.g. /tz Europe/Moscow)
             /lang — switch language (en/ru)
@@ -58,6 +59,7 @@ object Strings {
             /pause — поставить напоминания на паузу
             /resume — возобновить привычку
             /checkin — чек-ины за сегодня
+            /timer — старт/стоп отслеживания времени
             /stats — статистика
             /tz — показать или задать часовой пояс (например, /tz Europe/Moscow)
             /lang — сменить язык (en/ru)
@@ -79,13 +81,14 @@ object Strings {
     fun cancelled(l: Lang) = pick(l, "Cancelled.", "Отменено.")
 
     fun pickHabitType(l: Lang) = pick(l,
-        "Pick a habit type:\n• scheduled — fixed reminder times, done/skip\n• counter — count check-ins (optional daily target, optional direction)\n• quantity — log decimal amounts (optional target, unit, direction)",
-        "Выберите тип привычки:\n• расписание — фиксированные напоминания, готово/пропуск\n• счётчик — считать чек-ины (опциональные цель и направление)\n• количество — вводить вещественные значения (опциональные цель, единица, направление)")
+        "Pick a habit type:\n• scheduled — fixed reminder times, done/skip\n• counter — count check-ins (optional daily target, optional direction)\n• quantity — log decimal amounts (optional target, unit, direction)\n• timer — auto-track time spent (start/stop)",
+        "Выберите тип привычки:\n• расписание — фиксированные напоминания, готово/пропуск\n• счётчик — считать чек-ины (опциональные цель и направление)\n• количество — вводить вещественные значения (опциональные цель, единица, направление)\n• таймер — автоматически засекать время (старт/стоп)")
 
     fun typeButtonLabel(l: Lang, t: HabitType): String = when (t) {
         HabitType.SCHEDULED -> pick(l, "📅 scheduled", "📅 расписание")
         HabitType.COUNTER -> pick(l, "🔢 counter", "🔢 счётчик")
         HabitType.QUANTITY -> pick(l, "⚖️ quantity", "⚖️ количество")
+        HabitType.TIMER -> pick(l, "⏱ timer", "⏱ таймер")
     }
 
     fun directionButtonLabel(l: Lang, d: Direction?): String = when (d) {
@@ -101,6 +104,10 @@ object Strings {
     fun invalidTarget(l: Lang) = pick(l,
         "Target must be a positive integer or \"-\".",
         "Цель должна быть положительным целым или «-».")
+
+    fun sendTimerTarget(l: Lang) = pick(l,
+        "Daily target in minutes (integer, e.g. 60)? Send \"-\" to skip.",
+        "Дневная цель в минутах (целое число, например 60)? Отправьте «-», чтобы пропустить.")
 
     fun sendDailyTargetValue(l: Lang) = pick(l,
         "Daily target (decimal, e.g. 1.5)? Send \"-\" to skip.",
@@ -207,6 +214,13 @@ object Strings {
                     h.direction?.let { append(" — ${directionLabel(l, it)}") }
                     if (times.isNotEmpty()) append(" — $times")
                 }
+                HabitType.TIMER -> {
+                    h.dailyTarget?.let {
+                        append(" — ${pick(l, "target: ${formatDuration(l, it)}/day", "цель: ${formatDuration(l, it)}/день")}")
+                    }
+                    h.direction?.let { append(" — ${directionLabel(l, it)}") }
+                    if (times.isNotEmpty()) append(" — $times")
+                }
             }
         }
         return pick(l, "Added: \"${h.name}\" [$type]$tail", "Добавлено: «${h.name}» [$type]$tail")
@@ -272,10 +286,60 @@ object Strings {
         return "$mark $date — ${h.name}: $body"
     }
 
+    // ---- timer ----
+
+    fun tzRequiredTimer(l: Lang) = pick(l,
+        "Set your timezone first with /tz <IANA name>.",
+        "Сначала задайте часовой пояс через /tz <IANA>.")
+
+    fun noTimers(l: Lang) = pick(l,
+        "No timer habits yet. Add one with /addhabit (type ⏱ timer).",
+        "Таймеров пока нет. Добавьте через /addhabit (тип ⏱ таймер).")
+
+    fun yourTimers(l: Lang) = pick(l, "Timers:", "Таймеры:")
+
+    fun btnTimerStart(l: Lang) = pick(l, "▶️ Start", "▶️ Старт")
+    fun btnTimerStop(l: Lang) = pick(l, "⏹ Stop", "⏹ Стоп")
+    fun btnTimerStopComment(l: Lang) = pick(l, "⏹💬 Stop + note", "⏹💬 Стоп + заметка")
+
+    fun sendTimerComment(l: Lang) = pick(l,
+        "Send a note for this session:",
+        "Отправьте заметку к этой сессии:")
+
+    /** A timer habit's line: shows running-since elapsed time, or today's accumulated total when idle. */
+    fun timerLine(l: Lang, h: Habit, running: Boolean, elapsedMinutes: Double, todayMinutes: Double): String {
+        val target = h.dailyTarget
+        return if (running) {
+            "⏱ ${h.name} — ${pick(l, "running", "идёт")}: ${formatDuration(l, elapsedMinutes)}"
+        } else {
+            val todayPart = pick(l, "today: ${formatDuration(l, todayMinutes)}", "сегодня: ${formatDuration(l, todayMinutes)}")
+            val targetPart = target?.let { " / ${formatDuration(l, it)}" } ?: ""
+            "⏱ ${h.name} — $todayPart$targetPart"
+        }
+    }
+
+    fun cbTimerStarted(l: Lang) = pick(l, "Timer started", "Таймер запущен")
+    fun cbTimerAlreadyRunning(l: Lang) = pick(l, "Already running", "Уже идёт")
+    fun cbTimerStopped(l: Lang, minutes: Double) =
+        pick(l, "Logged ${formatDuration(l, minutes)}", "Записано ${formatDuration(l, minutes)}")
+    fun cbTimerNotRunning(l: Lang) = pick(l, "Timer wasn't running", "Таймер не был запущен")
+
     fun habitTypeLabel(l: Lang, h: Habit): String = when (h.type) {
         HabitType.SCHEDULED -> pick(l, "scheduled", "расписание")
         HabitType.COUNTER -> pick(l, "counter", "счётчик")
         HabitType.QUANTITY -> pick(l, "quantity", "количество")
+        HabitType.TIMER -> pick(l, "timer", "таймер")
+    }
+
+    /** Renders a minute count as a compact duration, e.g. "1h 05m" / "1ч 05м" or "12m" / "12м". */
+    fun formatDuration(l: Lang, minutes: Double): String {
+        val totalMin = minutes.toLong()
+        val h = totalMin / 60
+        val m = totalMin % 60
+        return when {
+            h > 0 -> pick(l, "${h}h %02dm".format(m), "${h}ч %02dм".format(m))
+            else -> pick(l, "${m}m", "${m}м")
+        }
     }
 
     fun formatAmount(v: Double): String {
@@ -385,6 +449,19 @@ object Strings {
                         appendLine(pick(l,
                             "    total: ${formatAmount(s.quantityTotal)}$unit   days: ${s.quantityDays}   avg/day: $avg$unit$dirSuffix",
                             "    всего: ${formatAmount(s.quantityTotal)}$unit   дней: ${s.quantityDays}   среднее: $avg$unit$dirSuffix"))
+                        if (s.dailyTarget != null) {
+                            appendLine(pick(l,
+                                "    🎯 target hit: ${s.targetHitDays}/7",
+                                "    🎯 цель достигнута: ${s.targetHitDays}/7"))
+                        }
+                    }
+                    HabitType.TIMER -> {
+                        val total = formatDuration(l, s.quantityTotal)
+                        val avg = if (s.quantityDays > 0) formatDuration(l, s.quantityTotal / s.quantityDays) else formatDuration(l, 0.0)
+                        val dirSuffix = s.direction?.let { "   (${directionShort(l, it)})" } ?: ""
+                        appendLine(pick(l,
+                            "    total: $total   days: ${s.quantityDays}   avg/day: $avg$dirSuffix",
+                            "    всего: $total   дней: ${s.quantityDays}   среднее: $avg$dirSuffix"))
                         if (s.dailyTarget != null) {
                             appendLine(pick(l,
                                 "    🎯 target hit: ${s.targetHitDays}/7",
@@ -611,6 +688,7 @@ object BotCommandsI18n {
     fun list(l: Lang): List<Pair<String, String>> = when (l) {
         Lang.EN -> listOf(
             "checkin" to "today's check-ins",
+            "timer" to "start/stop time tracking",
             "stats" to "statistics",
             "habits" to "list habits",
             "addhabit" to "add a habit (interactive)",
@@ -626,6 +704,7 @@ object BotCommandsI18n {
         )
         Lang.RU -> listOf(
             "checkin" to "чек-ины за сегодня",
+            "timer" to "старт/стоп отслеживания времени",
             "stats" to "статистика",
             "habits" to "список привычек",
             "addhabit" to "добавить привычку (интерактивно)",

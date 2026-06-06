@@ -10,7 +10,8 @@ import kotliquery.Row
 enum class HabitType(val value: String) {
     @SerialName("scheduled") SCHEDULED("scheduled"),
     @SerialName("counter") COUNTER("counter"),
-    @SerialName("quantity") QUANTITY("quantity");
+    @SerialName("quantity") QUANTITY("quantity"),
+    @SerialName("timer") TIMER("timer");
 
     companion object {
         fun parse(s: String?): HabitType = entries.firstOrNull { it.value == s } ?: SCHEDULED

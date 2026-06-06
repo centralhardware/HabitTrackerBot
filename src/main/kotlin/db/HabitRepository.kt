@@ -70,7 +70,7 @@ object HabitRepository {
                 val params = paramsByHabit[h.id].orEmpty()
                 // Single-field quantity habits keep their metadata on the param row; hoist it onto
                 // the habit so every single-field habit looks the same to callers.
-                val hoisted = if (h.type == HabitType.QUANTITY && params.size == 1) {
+                val hoisted = if ((h.type == HabitType.QUANTITY || h.type == HabitType.TIMER) && params.size == 1) {
                     val p = params[0]
                     h.copy(
                         unit = h.unit ?: p.unit,
@@ -116,8 +116,9 @@ object HabitRepository {
 
                 val params = habit.params.ifEmpty {
                     when (habit.type) {
-                        // Quantity habits get a numeric service param.
-                        HabitType.QUANTITY -> listOf(HabitParam(id = 0, paramType = dto.ParamType.NUMBER))
+                        // Quantity habits get a numeric service param; timer habits store their
+                        // elapsed minutes on the same kind of single numeric param.
+                        HabitType.QUANTITY, HabitType.TIMER -> listOf(HabitParam(id = 0, paramType = dto.ParamType.NUMBER))
                         // Counter events are bare checkins rows; scheduled events keep their
                         // done/skip status on the checkins row — neither needs a param.
                         HabitType.COUNTER, HabitType.SCHEDULED -> emptyList()

@@ -114,6 +114,24 @@ fun BehaviourContext.registerAddHabitCommand() {
             }
         }
 
+        if (type == HabitType.TIMER && !logOnly) {
+            sendMessage(message.chat.id, Strings.sendTimerTarget(data.lang))
+            val raw = nextText()
+            if (raw.startsWith("/")) {
+                sendMessage(message.chat.id, Strings.cancelled(data.lang))
+                return@onCommand
+            }
+            if (!isSkipped(raw)) {
+                val n = raw.toIntOrNull()
+                if (n == null || n <= 0) {
+                    sendMessage(message.chat.id, Strings.invalidTarget(data.lang))
+                    return@onCommand
+                }
+                dailyTarget = n.toDouble()
+            }
+            // Timers only measure elapsed time — no direction.
+        }
+
         var groupFields: MutableList<HabitParam>? = null
 
         if (type == HabitType.QUANTITY) {

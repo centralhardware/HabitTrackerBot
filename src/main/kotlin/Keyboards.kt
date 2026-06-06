@@ -29,6 +29,18 @@ object Keyboards {
         )
     }
 
+    /** Start/stop control for a timer habit. Payload: `tm|<habitId>|<date>|start|stop|stopc`. */
+    fun timerControl(habitId: Long, running: Boolean, date: LocalDate, lang: Lang): InlineKeyboardMarkup {
+        val row = if (running)
+            listOf(
+                CallbackDataInlineKeyboardButton(Strings.btnTimerStop(lang), "tm|$habitId|$date|stop"),
+                CallbackDataInlineKeyboardButton(Strings.btnTimerStopComment(lang), "tm|$habitId|$date|stopc"),
+            )
+        else
+            listOf(CallbackDataInlineKeyboardButton(Strings.btnTimerStart(lang), "tm|$habitId|$date|start"))
+        return InlineKeyboardMarkup(listOf(row))
+    }
+
     /** Duration choices shown after a habit is picked for pausing. Payload: `pd|<habitId>|<days>` (0 = indefinite). */
     fun pauseDurations(habitId: Long, lang: Lang): InlineKeyboardMarkup {
         return InlineKeyboardMarkup(

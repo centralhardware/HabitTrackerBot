@@ -95,7 +95,7 @@ object WeeklySummaryService {
                     else count >= targetInt
                 }
             }
-            HabitType.QUANTITY -> {
+            HabitType.QUANTITY, HabitType.TIMER -> {
                 CheckinAnalytics.quantitySumsPerDayInRange(rows, from, to).values
                     .count { hits(it, target, direction) }
             }

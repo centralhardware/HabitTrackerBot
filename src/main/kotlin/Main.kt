@@ -9,6 +9,7 @@ import commands.registerResumeCommand
 import commands.registerLangCommand
 import commands.registerStartCommand
 import commands.registerStatsCommand
+import commands.registerTimerCommand
 import commands.registerTzCommand
 import dev.inmo.krontab.doInfinity
 import dev.inmo.kslog.common.KSLog
@@ -51,6 +52,7 @@ suspend fun main() {
         registerPauseCommand()
         registerResumeCommand()
         registerCheckInCommand()
+        registerTimerCommand()
         registerStatsCommand()
         registerTzCommand()
         registerLangCommand()

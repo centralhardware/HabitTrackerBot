@@ -62,6 +62,25 @@ object CheckInService {
         )
     }
 
+    /**
+     * Records [minutes] of elapsed time as a check-in for a timer habit, stored on its single
+     * NUMBER param. Returns the new `checkins.id`, or 0 if the habit isn't a timer / has no param.
+     */
+    fun recordTimer(habitId: Long, userId: Long, date: LocalDate, minutes: Double, comment: String? = null): Long {
+        if (minutes <= 0.0) return 0
+        val habit = HabitService.findById(habitId, userId) ?: return 0
+        if (habit.type != HabitType.TIMER) return 0
+        val param = habit.params.firstOrNull() ?: return 0
+        return CheckInRepository.insertEventWithValues(
+            CheckinEvent(userId, date, reminderId = null, habitId = habitId, comment = comment?.trim()?.ifEmpty { null }),
+            listOf(CheckinValue(param.id, CheckinStatus.DONE, FieldValue.Numeric(minutes))),
+        )
+    }
+
+    /** Sets (or clears) the comment on an existing event — used to attach a note to a stopped timer. */
+    fun setComment(checkinId: Long, userId: Long, comment: String?): Boolean =
+        CheckInRepository.updateCheckinComment(checkinId, userId, comment?.trim()?.ifEmpty { null })
+
     fun deleteCheckin(checkinId: Long, userId: Long, notBefore: LocalDate): DeleteOutcome {
         val event = CheckInRepository.loadEventForDelete(checkinId, userId) ?: return DeleteOutcome.NotFound
         if (event.date.isBefore(notBefore)) return DeleteOutcome.TooOld(event.date)
@@ -116,6 +135,10 @@ object CheckInService {
     fun counterCountOn(habitId: Long, date: LocalDate): Int =
         CheckinAnalytics.countOn(CheckInRepository.loadForHabit(habitId), date)
 
+    /** Total minutes recorded for a timer [habitId] on [date]. */
+    fun timerMinutesOn(habitId: Long, date: LocalDate): Double =
+        CheckinAnalytics.quantitySumsPerDay(CheckInRepository.loadForHabit(habitId))[date] ?: 0.0
+
     fun userStats(userId: Long, today: LocalDate): List<HabitStat> {
         // Log-only habits are pure journals — no streaks/completion/trends — so they're omitted here.
         // Paused habits are excluded too: listActive() really returns all non-deleted habits.
@@ -135,7 +158,7 @@ object CheckInService {
             streak = streak(loggedDates, skipDates, today),
             loggedDays = pastLogged,
             totalDays = pastDaysSince(rows, today),
-            trend = if (h.type == HabitType.QUANTITY && !h.multiField) quantityTrend(h.unit, h.direction, rows, today) else null,
+            trend = if ((h.type == HabitType.QUANTITY || h.type == HabitType.TIMER) && !h.multiField) quantityTrend(h.unit, h.direction, rows, today) else null,
             groupFields = if (h.multiField) h.params.map { paramStat(h, it, rows, today) } else emptyList(),
         )
     }

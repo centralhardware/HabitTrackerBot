@@ -41,6 +41,8 @@ object ReminderScheduler {
                     Keyboards.checkIn(reminder.reminderId, reminder.userDate, lang)
                 HabitType.COUNTER ->
                     Keyboards.logPlus(reminder.habitId, reminder.userDate, lang)
+                HabitType.TIMER ->
+                    Keyboards.timerControl(reminder.habitId, running = false, reminder.userDate, lang)
                 HabitType.QUANTITY -> null
             }
             val sent = sendMessage(

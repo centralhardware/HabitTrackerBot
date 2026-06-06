@@ -3,6 +3,7 @@ package commands
 import services.CheckInService
 import services.HabitService
 import services.ReminderMessageService
+import services.TimerService
 import Keyboards
 import Strings
 import lang
@@ -27,8 +28,11 @@ fun BehaviourContext.registerCheckInCommand() {
         val scheduled = CheckInRepository.pendingCheckIns(data.userId, yesterday, today)
         val active = HabitService.listActive(data.userId).filter { it.status == HabitStatus.ACTIVE }
         val counters = active.filter { it.type == HabitType.COUNTER }
+        // Running timers surface here too, so the user can stop them mid check-in.
+        val timersById = active.filter { it.type == HabitType.TIMER }.associateBy { it.id }
+        val runningTimers = TimerService.running(data.userId).filter { it.habitId in timersById }
 
-        if (scheduled.isEmpty() && counters.isEmpty()) {
+        if (scheduled.isEmpty() && counters.isEmpty() && runningTimers.isEmpty()) {
             sendMessage(message.chat.id, Strings.nothingToCheckIn(data.lang))
             return@onCommand
         }
@@ -51,6 +55,17 @@ fun BehaviourContext.registerCheckInCommand() {
                 chatId = message.chat.id,
                 text = Strings.counterLine(data.lang, habit, current, today),
                 replyMarkup = Keyboards.logPlus(habit.id, today, data.lang)
+            )
+        }
+
+        runningTimers.forEach { rt ->
+            val habit = timersById.getValue(rt.habitId)
+            val elapsed = TimerService.elapsedMinutes(rt.startedAt)
+            val todayMinutes = CheckInService.timerMinutesOn(habit.id, today)
+            sendMessage(
+                chatId = message.chat.id,
+                text = Strings.timerLine(data.lang, habit, running = true, elapsed, todayMinutes),
+                replyMarkup = Keyboards.timerControl(habit.id, running = true, today, data.lang)
             )
         }
     }

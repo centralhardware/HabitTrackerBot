@@ -13,11 +13,13 @@ import dto.CheckinStatus
 import dto.HabitType
 import services.CheckInService
 import services.HabitService
+import services.TimerService
 import java.time.LocalDate
 
 fun BehaviourContext.registerCallbackHandler() {
     onMessageDataCallbackQuery(Regex("^ci\\|.*")) { handleCheckIn(it) }
     onMessageDataCallbackQuery(Regex("^lg\\|.*")) { handleLog(it) }
+    onMessageDataCallbackQuery(Regex("^tm\\|.*")) { handleTimer(it) }
     onMessageDataCallbackQuery(Regex("^rm\\|.*")) { handleHabitAction(it, "rm|", HabitService::softDelete, Strings::cbRemovedShort, Strings::cbRemovedFull) }
     onMessageDataCallbackQuery(Regex("^ps\\|.*")) { handlePausePick(it) }
     onMessageDataCallbackQuery(Regex("^pd\\|.*")) { handlePauseDuration(it) }
@@ -208,6 +210,63 @@ private suspend fun BehaviourContext.handleLog(query: MessageDataCallbackQuery) 
         )
     }
     if (action != "c") answerCallbackQuery(query, text = Strings.cbLogged(lang))
+}
+
+private suspend fun BehaviourContext.handleTimer(query: MessageDataCallbackQuery) {
+    val (userId, lang, habitId, date, action) = parseCallback(query) ?: return
+    val habit = HabitService.findById(habitId, userId)
+    if (habit == null || habit.type != HabitType.TIMER) {
+        answerCallbackQuery(query, text = Strings.cbNotFound(lang))
+        return
+    }
+
+    // Repaints the timer message to reflect its current running/idle state.
+    suspend fun refresh(running: Boolean) {
+        val elapsed = TimerService.find(habitId, userId)?.let { TimerService.elapsedMinutes(it.startedAt) } ?: 0.0
+        val todayMinutes = CheckInService.timerMinutesOn(habitId, date)
+        runCatching {
+            editMessageText(
+                chatId = query.message.chat.id,
+                messageId = query.message.messageId,
+                text = Strings.timerLine(lang, habit, running, elapsed, todayMinutes),
+                replyMarkup = Keyboards.timerControl(habitId, running, date, lang)
+            )
+        }
+    }
+
+    when (action) {
+        "start" -> {
+            val toast = when (TimerService.start(habitId, userId)) {
+                TimerService.StartOutcome.Started -> Strings.cbTimerStarted(lang)
+                TimerService.StartOutcome.AlreadyRunning -> Strings.cbTimerAlreadyRunning(lang)
+                TimerService.StartOutcome.NotFound -> { answerCallbackQuery(query, text = Strings.cbNotFound(lang)); return }
+            }
+            refresh(running = true)
+            answerCallbackQuery(query, text = toast)
+        }
+        "stop" -> when (val o = TimerService.stop(habitId, userId, date)) {
+            is TimerService.StopOutcome.Stopped -> { refresh(running = false); answerCallbackQuery(query, text = Strings.cbTimerStopped(lang, o.minutes)) }
+            TimerService.StopOutcome.NotRunning -> { refresh(running = false); answerCallbackQuery(query, text = Strings.cbTimerNotRunning(lang)) }
+            TimerService.StopOutcome.NotFound -> answerCallbackQuery(query, text = Strings.cbNotFound(lang))
+        }
+        // Stop + note: stop first (so the elapsed time is frozen and safely recorded),
+        // then ask for a comment and attach it to the just-written check-in.
+        "stopc" -> {
+            answerCallbackQuery(query)
+            when (val o = TimerService.stop(habitId, userId, date)) {
+                is TimerService.StopOutcome.Stopped -> {
+                    refresh(running = false)
+                    sendMessage(query.message.chat.id, Strings.sendTimerComment(lang))
+                    val note = waitTextMessage().first { it.chat.id.chatId.long == data.userId }.content.text.trim()
+                    if (o.checkinId > 0) CheckInService.setComment(o.checkinId, userId, note)
+                    sendMessage(query.message.chat.id, Strings.cbTimerStopped(lang, o.minutes))
+                }
+                TimerService.StopOutcome.NotRunning -> { refresh(running = false); sendMessage(query.message.chat.id, Strings.cbTimerNotRunning(lang)) }
+                TimerService.StopOutcome.NotFound -> sendMessage(query.message.chat.id, Strings.cbNotFound(lang))
+            }
+        }
+        else -> answerCallbackQuery(query, text = Strings.cbBadButton(lang))
+    }
 }
 
 private suspend fun BehaviourContext.handleHabitAction(
