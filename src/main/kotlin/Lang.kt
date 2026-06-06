@@ -307,12 +307,12 @@ object Strings {
         "Отправьте заметку к этой сессии:")
 
     /** A timer habit's line: shows running-since elapsed time, or today's accumulated total when idle. */
-    fun timerLine(l: Lang, h: Habit, running: Boolean, elapsedMinutes: Double, todayMinutes: Double): String {
+    fun timerLine(l: Lang, h: Habit, running: Boolean, elapsedSeconds: Double, todaySeconds: Double): String {
         val target = h.dailyTarget
         return if (running) {
-            "⏱ ${h.name} — ${pick(l, "running", "идёт")}: ${formatDuration(l, elapsedMinutes)}"
+            "⏱ ${h.name} — ${pick(l, "running", "идёт")}: ${formatElapsed(elapsedSeconds)}"
         } else {
-            val todayPart = pick(l, "today: ${formatDuration(l, todayMinutes)}", "сегодня: ${formatDuration(l, todayMinutes)}")
+            val todayPart = pick(l, "today: ${formatDuration(l, todaySeconds)}", "сегодня: ${formatDuration(l, todaySeconds)}")
             val targetPart = target?.let { " / ${formatDuration(l, it)}" } ?: ""
             "⏱ ${h.name} — $todayPart$targetPart"
         }
@@ -320,8 +320,8 @@ object Strings {
 
     fun cbTimerStarted(l: Lang) = pick(l, "Timer started", "Таймер запущен")
     fun cbTimerAlreadyRunning(l: Lang) = pick(l, "Already running", "Уже идёт")
-    fun cbTimerStopped(l: Lang, minutes: Double) =
-        pick(l, "Logged ${formatDuration(l, minutes)}", "Записано ${formatDuration(l, minutes)}")
+    fun cbTimerStopped(l: Lang, seconds: Double) =
+        pick(l, "Logged ${formatDuration(l, seconds)}", "Записано ${formatDuration(l, seconds)}")
     fun cbTimerNotRunning(l: Lang) = pick(l, "Timer wasn't running", "Таймер не был запущен")
 
     fun habitTypeLabel(l: Lang, h: Habit): String = when (h.type) {
@@ -331,9 +331,18 @@ object Strings {
         HabitType.TIMER -> pick(l, "timer", "таймер")
     }
 
-    /** Renders a minute count as a compact duration, e.g. "1h 05m" / "1ч 05м" or "12m" / "12м". */
-    fun formatDuration(l: Lang, minutes: Double): String {
-        val totalMin = minutes.toLong()
+    /** Renders elapsed seconds with second precision for a live timer, e.g. "1:05:30" or "12:30". */
+    fun formatElapsed(seconds: Double): String {
+        val totalSec = seconds.toLong()
+        val h = totalSec / 3600
+        val m = (totalSec % 3600) / 60
+        val s = totalSec % 60
+        return if (h > 0) "%d:%02d:%02d".format(h, m, s) else "%d:%02d".format(m, s)
+    }
+
+    /** Renders a second count as a compact duration, e.g. "1h 05m" / "1ч 05м" or "12m" / "12м". */
+    fun formatDuration(l: Lang, seconds: Double): String {
+        val totalMin = (seconds / 60.0).toLong()
         val h = totalMin / 60
         val m = totalMin % 60
         return when {

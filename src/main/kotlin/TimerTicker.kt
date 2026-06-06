@@ -23,12 +23,12 @@ object TimerTicker {
                 val lang = t.langCode?.let { runCatching { Lang.valueOf(it) }.getOrNull() } ?: Lang.EN
                 val zone = t.tzId?.let { runCatching { ZoneId.of(it) }.getOrNull() }
                 val date = if (zone != null) LocalDate.now(zone) else LocalDate.now()
-                val elapsed = TimerService.elapsedMinutes(t.startedAt)
+                val elapsed = TimerService.elapsedSeconds(t.startedAt)
                 val habit = Habit(id = t.habitId, name = t.name, type = HabitType.TIMER)
                 editMessageText(
                     chatId = t.userId.toChatId(),
                     messageId = MessageId(t.messageId),
-                    text = Strings.timerLine(lang, habit, running = true, elapsed, todayMinutes = 0.0),
+                    text = Strings.timerLine(lang, habit, running = true, elapsed, todaySeconds = 0.0),
                     replyMarkup = Keyboards.timerControl(t.habitId, running = true, date, lang),
                 )
             }.onFailure { e ->

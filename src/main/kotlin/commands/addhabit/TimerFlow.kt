@@ -24,7 +24,8 @@ suspend fun BehaviourContext.timerFlow(chatId: IdChatIdentifier, logOnly: Boolea
         if (n == null || n <= 0) {
             sendMessage(chatId, Strings.invalidTarget(data.lang)); return null
         }
-        dailyTarget = n.toDouble()
+        // Targets are stored in seconds, but the user enters whole minutes.
+        dailyTarget = n.toDouble() * 60
     }
 
     return HabitDraft(dailyTarget = dailyTarget)

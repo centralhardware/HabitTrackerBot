@@ -70,10 +70,15 @@ suspend fun main() {
                 }.onFailure { KSLog.error("autoResumeExpired failed", it) }
                 runCatching { sendDueReminders() }
                     .onFailure { KSLog.error("sendDueReminders failed", it) }
-                runCatching { tickRunningTimers() }
-                    .onFailure { KSLog.error("tickRunningTimers failed", it) }
                 runCatching { sendWeeklySummaries() }
                     .onFailure { KSLog.error("sendWeeklySummaries failed", it) }
+            }
+        }
+
+        launch {
+            doInfinity("/10 * * * *") {
+                runCatching { tickRunningTimers() }
+                    .onFailure { KSLog.error("tickRunningTimers failed", it) }
             }
         }
     }.second.join()

@@ -63,17 +63,17 @@ object CheckInService {
     }
 
     /**
-     * Records [minutes] of elapsed time as a check-in for a timer habit, stored on its single
+     * Records [seconds] of elapsed time as a check-in for a timer habit, stored on its single
      * NUMBER param. Returns the new `checkins.id`, or 0 if the habit isn't a timer / has no param.
      */
-    fun recordTimer(habitId: Long, userId: Long, date: LocalDate, minutes: Double, comment: String? = null): Long {
-        if (minutes <= 0.0) return 0
+    fun recordTimer(habitId: Long, userId: Long, date: LocalDate, seconds: Double, comment: String? = null): Long {
+        if (seconds <= 0.0) return 0
         val habit = HabitService.findById(habitId, userId) ?: return 0
         if (habit.type != HabitType.TIMER) return 0
         val param = habit.params.firstOrNull() ?: return 0
         return CheckInRepository.insertEventWithValues(
             CheckinEvent(userId, date, reminderId = null, habitId = habitId, comment = comment?.trim()?.ifEmpty { null }),
-            listOf(CheckinValue(param.id, CheckinStatus.DONE, FieldValue.Numeric(minutes))),
+            listOf(CheckinValue(param.id, CheckinStatus.DONE, FieldValue.Numeric(seconds))),
         )
     }
 
@@ -135,8 +135,8 @@ object CheckInService {
     fun counterCountOn(habitId: Long, date: LocalDate): Int =
         CheckinAnalytics.countOn(CheckInRepository.loadForHabit(habitId), date)
 
-    /** Total minutes recorded for a timer [habitId] on [date]. */
-    fun timerMinutesOn(habitId: Long, date: LocalDate): Double =
+    /** Total seconds recorded for a timer [habitId] on [date]. */
+    fun timerSecondsOn(habitId: Long, date: LocalDate): Double =
         CheckinAnalytics.quantitySumsPerDay(CheckInRepository.loadForHabit(habitId))[date] ?: 0.0
 
     fun userStats(userId: Long, today: LocalDate): List<HabitStat> {

@@ -222,13 +222,13 @@ private suspend fun BehaviourContext.handleTimer(query: MessageDataCallbackQuery
 
     // Repaints the timer message to reflect its current running/idle state.
     suspend fun refresh(running: Boolean) {
-        val elapsed = TimerService.find(habitId, userId)?.let { TimerService.elapsedMinutes(it.startedAt) } ?: 0.0
-        val todayMinutes = CheckInService.timerMinutesOn(habitId, date)
+        val elapsed = TimerService.find(habitId, userId)?.let { TimerService.elapsedSeconds(it.startedAt) } ?: 0.0
+        val todaySeconds = CheckInService.timerSecondsOn(habitId, date)
         runCatching {
             editMessageText(
                 chatId = query.message.chat.id,
                 messageId = query.message.messageId,
-                text = Strings.timerLine(lang, habit, running, elapsed, todayMinutes),
+                text = Strings.timerLine(lang, habit, running, elapsed, todaySeconds),
                 replyMarkup = Keyboards.timerControl(habitId, running, date, lang)
             )
         }
@@ -247,7 +247,7 @@ private suspend fun BehaviourContext.handleTimer(query: MessageDataCallbackQuery
             answerCallbackQuery(query, text = toast)
         }
         "stop" -> when (val o = TimerService.stop(habitId, userId, date)) {
-            is TimerService.StopOutcome.Stopped -> { refresh(running = false); answerCallbackQuery(query, text = Strings.cbTimerStopped(lang, o.minutes)) }
+            is TimerService.StopOutcome.Stopped -> { refresh(running = false); answerCallbackQuery(query, text = Strings.cbTimerStopped(lang, o.seconds)) }
             TimerService.StopOutcome.NotRunning -> { refresh(running = false); answerCallbackQuery(query, text = Strings.cbTimerNotRunning(lang)) }
             TimerService.StopOutcome.NotFound -> answerCallbackQuery(query, text = Strings.cbNotFound(lang))
         }
@@ -261,7 +261,7 @@ private suspend fun BehaviourContext.handleTimer(query: MessageDataCallbackQuery
                     sendMessage(query.message.chat.id, Strings.sendTimerComment(lang))
                     val note = waitTextMessage().first { it.chat.id.chatId.long == data.userId }.content.text.trim()
                     if (o.checkinId > 0) CheckInService.setComment(o.checkinId, userId, note)
-                    sendMessage(query.message.chat.id, Strings.cbTimerStopped(lang, o.minutes))
+                    sendMessage(query.message.chat.id, Strings.cbTimerStopped(lang, o.seconds))
                 }
                 TimerService.StopOutcome.NotRunning -> { refresh(running = false); sendMessage(query.message.chat.id, Strings.cbTimerNotRunning(lang)) }
                 TimerService.StopOutcome.NotFound -> sendMessage(query.message.chat.id, Strings.cbNotFound(lang))
