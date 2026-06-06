@@ -140,10 +140,11 @@ object CheckInService {
         CheckinAnalytics.quantitySumsPerDay(CheckInRepository.loadForHabit(habitId))[date] ?: 0.0
 
     fun userStats(userId: Long, today: LocalDate): List<HabitStat> {
-        // Log-only habits are pure journals — no streaks/completion/trends — so they're omitted here.
+        // Log-only habits are pure journals — normally omitted — but timers track elapsed time
+        // worth surfacing, so a log-only timer still shows up (just its recorded time, no verdict).
         // Paused habits are excluded too: listActive() really returns all non-deleted habits.
         return HabitService.listActive(userId)
-            .filter { it.status == HabitStatus.ACTIVE && !it.logOnly }
+            .filter { it.status == HabitStatus.ACTIVE && (!it.logOnly || it.type == HabitType.TIMER) }
             .map { habitStat(it, today) }
     }
 
@@ -158,8 +159,11 @@ object CheckInService {
             streak = streak(loggedDates, skipDates, today),
             loggedDays = pastLogged,
             totalDays = pastDaysSince(rows, today),
-            trend = if ((h.type == HabitType.QUANTITY || h.type == HabitType.TIMER) && !h.multiField) quantityTrend(h.unit, h.direction, rows, today) else null,
+            trend = if ((h.type == HabitType.QUANTITY || h.type == HabitType.TIMER) && !h.multiField)
+                quantityTrend(h.unit, h.direction, rows, today, target = h.dailyTarget, isDuration = h.type == HabitType.TIMER)
+            else null,
             groupFields = if (h.multiField) h.params.map { paramStat(h, it, rows, today) } else emptyList(),
+            logOnly = h.logOnly,
         )
     }
 
@@ -198,7 +202,14 @@ object CheckInService {
 
     private const val TREND_WINDOW_DAYS = 7
 
-    private fun quantityTrend(unit: String?, direction: Direction?, rows: List<CheckinValueRow>, today: LocalDate): QuantityTrend {
+    private fun quantityTrend(
+        unit: String?,
+        direction: Direction?,
+        rows: List<CheckinValueRow>,
+        today: LocalDate,
+        target: Double? = null,
+        isDuration: Boolean = false,
+    ): QuantityTrend {
         val perDay = CheckinAnalytics.quantitySumsPerDay(rows)
         val recent = (1..TREND_WINDOW_DAYS)
             .mapNotNull { perDay[today.minusDays(it.toLong())] }
@@ -211,6 +222,8 @@ object CheckInService {
             recentAvg = if (recent.isEmpty()) 0.0 else Mean().evaluate(recent),
             overallAvg = if (all.isEmpty()) 0.0 else Mean().evaluate(all),
             windowDays = TREND_WINDOW_DAYS,
+            target = target,
+            isDuration = isDuration,
         )
     }
 

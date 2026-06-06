@@ -388,7 +388,9 @@ object Strings {
         val days = pick(l,
             "📅 ${s.loggedDays}/${s.totalDays} days ($pct)",
             "📅 ${s.loggedDays}/${s.totalDays} дн. ($pct)")
-        val lines = mutableListOf("${statsStreak(l, s.streak)}   $days")
+        // Log-only habits (e.g. log-only timers) are journals: skip the streak/completion line and
+        // just show their recorded values below.
+        val lines = if (s.logOnly) mutableListOf() else mutableListOf("${statsStreak(l, s.streak)}   $days")
         s.trend?.let { lines += trendLine(l, it) }
         s.groupFields.forEach { f ->
             f.trend?.let { lines += "${f.name}: ${trendLine(l, it)}" }
@@ -397,6 +399,7 @@ object Strings {
     }
 
     private fun trendLine(l: Lang, t: dto.QuantityTrend): String {
+        if (t.isDuration) return timerTrendLine(l, t)
         val unit = t.unit?.let { " $it" } ?: ""
         val today = formatAmount(t.today)
         val recent = formatAmount(t.recentAvg)
@@ -416,6 +419,24 @@ object Strings {
         return pick(l,
             "📈 $today$unit · ${t.windowDays}d $recent · all $overall · $arrow$verdict",
             "📈 $today$unit · ${t.windowDays}д $recent · всё $overall · $arrow$verdict")
+    }
+
+    /**
+     * Timer trend: values are seconds rendered as durations. When the habit has a daily target
+     * ("со статами") it gets a today-vs-target verdict (✅ reached / ⏳ not yet); a log-only timer
+     * ("без статов") just shows its recorded time.
+     */
+    private fun timerTrendLine(l: Lang, t: dto.QuantityTrend): String {
+        val today = formatDuration(l, t.today)
+        val recent = formatDuration(l, t.recentAvg)
+        val overall = formatDuration(l, t.overallAvg)
+        val targetPart = t.target?.let { tgt ->
+            val mark = if (t.today >= tgt) "✅" else "⏳"
+            " / ${formatDuration(l, tgt)} $mark"
+        } ?: ""
+        return pick(l,
+            "⏱ $today$targetPart · ${t.windowDays}d $recent · all $overall",
+            "⏱ $today$targetPart · ${t.windowDays}д $recent · всё $overall")
     }
 
     fun weeklySummary(
