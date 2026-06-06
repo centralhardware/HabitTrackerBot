@@ -13,14 +13,12 @@ repositories {
     maven("https://jitpack.io")
 }
 
-val ktgbotapiVersion = "33.1.0"
 val flywayVersion = "12.8.0"
 val mcpSdkVersion = "0.13.0"
 val ktorVersion = "3.5.0"
 
 dependencies {
-    implementation("dev.inmo:tgbotapi:$ktgbotapiVersion")
-    implementation("com.github.centralhardware:ktgbotapi-commons:8b9e69dd")
+    implementation("com.github.centralhardware:ktgbotapi-commons:5e4f3244")
 
     implementation("org.postgresql:postgresql:42.7.11")
     implementation("com.zaxxer:HikariCP:7.0.2")
