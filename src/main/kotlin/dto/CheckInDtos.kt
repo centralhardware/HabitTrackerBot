@@ -89,6 +89,9 @@ data class CheckinValueRow(
     val comment: String?,
     val offsetMinutes: Int?,
     val textValue: String? = null,
+    // Non-null on a timer's extra annotation field — a pure annotation the analytics layer
+    // ignores entirely (never summed, never counted toward logged days).
+    val timerPhase: TimerPhase? = null,
 )
 
 fun Row.toCheckinValueRow(): CheckinValueRow {
@@ -104,6 +107,7 @@ fun Row.toCheckinValueRow(): CheckinValueRow {
         comment = stringOrNull("comment"),
         offsetMinutes = intOrNull("reminder_time"),
         textValue = if (paramType == ParamType.TEXT) rawValue else null,
+        timerPhase = TimerPhase.parse(stringOrNull("timer_phase")),
     )
 }
 

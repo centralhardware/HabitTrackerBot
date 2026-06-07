@@ -84,6 +84,9 @@ internal const val LOG_OFF = "tracked"
 internal const val PTYPE_PREFIX = "apt"
 internal const val PTYPE_NUMBER = "number"
 internal const val PTYPE_TEXT = "text"
+internal const val PHASE_PREFIX = "aph"
+internal const val PHASE_BEFORE = "before"
+internal const val PHASE_AFTER = "after"
 
 // ---- keyboards ----
 
@@ -91,6 +94,13 @@ internal fun paramTypeKeyboard(lang: Lang) = InlineKeyboardMarkup(
     listOf(
         listOf(CallbackDataInlineKeyboardButton(Strings.btnParamTypeNumber(lang), "$PTYPE_PREFIX|$PTYPE_NUMBER")),
         listOf(CallbackDataInlineKeyboardButton(Strings.btnParamTypeText(lang), "$PTYPE_PREFIX|$PTYPE_TEXT")),
+    )
+)
+
+internal fun timerPhaseKeyboard(lang: Lang) = InlineKeyboardMarkup(
+    listOf(
+        listOf(CallbackDataInlineKeyboardButton(Strings.btnPhaseBefore(lang), "$PHASE_PREFIX|$PHASE_BEFORE")),
+        listOf(CallbackDataInlineKeyboardButton(Strings.btnPhaseAfter(lang), "$PHASE_PREFIX|$PHASE_AFTER")),
     )
 )
 

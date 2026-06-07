@@ -50,6 +50,20 @@ enum class ParamType(val value: String) {
 }
 
 /**
+ * When a timer's extra annotation field is filled in: BEFORE the timer starts, or AFTER it stops.
+ * Null on every other param (including the timer's own elapsed-seconds param).
+ */
+@Serializable
+enum class TimerPhase(val value: String) {
+    @SerialName("before") BEFORE("before"),
+    @SerialName("after") AFTER("after");
+
+    companion object {
+        fun parse(s: String?): TimerPhase? = entries.firstOrNull { it.value == s }
+    }
+}
+
+/**
  * A "field" of a habit, in its own `habit_params` row. Only quantity habits carry params now
  * (scheduled/counter events store everything on the `checkins` row), one per tracked field.
  * `paramType` is NUMBER for regular decimal fields, TEXT for free-text fields.
@@ -64,6 +78,9 @@ data class HabitParam(
     @EncodeDefault(EncodeDefault.Mode.NEVER) val dailyTarget: Double? = null,
     val position: Int = 0,
     val paramType: ParamType,
+    // Set only on a timer's extra annotation fields, marking whether they're collected
+    // before the timer starts or after it stops. Null on the duration param and elsewhere.
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val timerPhase: TimerPhase? = null,
 )
 
 /** A habit that an expired pause just flipped back to active, with enough to notify its owner. */
@@ -84,8 +101,10 @@ data class Habit(
     @EncodeDefault(EncodeDefault.Mode.NEVER) val logOnly: Boolean = false,
 ) {
     /** A multi-field quantity habit: more than one param. Single-field habits hoist their
-     *  param's metadata onto the habit row, so callers can treat them as plain habits. */
-    val multiField: Boolean get() = params.size > 1
+     *  param's metadata onto the habit row, so callers can treat them as plain habits.
+     *  Timers may carry several params too (their extra annotation fields), but those are
+     *  pure annotations — a timer is never a multi-field habit for stats/rendering. */
+    val multiField: Boolean get() = type == HabitType.QUANTITY && params.size > 1
 }
 
 /** Maps a `habits` row. Reminders and params are loaded separately and filled in by the repository. */
@@ -110,6 +129,7 @@ fun Row.toHabitParam(): HabitParam = HabitParam(
     dailyTarget = doubleOrNull("daily_target"),
     position = int("position"),
     paramType = ParamType.parse(string("param_type")) ?: error("habit_params.param_type is NULL"),
+    timerPhase = TimerPhase.parse(stringOrNull("timer_phase")),
 )
 
 /** Reads a nullable Postgres int[] column; NULL becomes an empty list. */

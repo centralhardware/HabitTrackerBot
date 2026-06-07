@@ -70,7 +70,10 @@ object CheckInService {
         if (seconds <= 0.0) return 0
         val habit = HabitService.findById(habitId, userId) ?: return 0
         if (habit.type != HabitType.TIMER) return 0
-        val param = habit.params.firstOrNull() ?: return 0
+        // The elapsed time lives on the duration param (a NUMBER param with no timer phase);
+        // extra annotation fields are skipped here and attached separately.
+        val param = habit.params.firstOrNull { it.timerPhase == null && it.paramType == ParamType.NUMBER }
+            ?: habit.params.firstOrNull() ?: return 0
         return CheckInRepository.insertEventWithValues(
             CheckinEvent(userId, date, reminderId = null, habitId = habitId, comment = comment?.trim()?.ifEmpty { null }),
             listOf(CheckinValue(param.id, CheckinStatus.DONE, FieldValue.Numeric(seconds))),
@@ -80,6 +83,24 @@ object CheckInService {
     /** Sets (or clears) the comment on an existing event — used to attach a note to a stopped timer. */
     fun setComment(checkinId: Long, userId: Long, comment: String?): Boolean =
         CheckInRepository.updateCheckinComment(checkinId, userId, comment?.trim()?.ifEmpty { null })
+
+    /**
+     * Attaches a timer's extra annotation fields ([values]: paramId → entered text) to the
+     * elapsed-time check-in [checkinId]. Only params that actually belong to the habit are kept;
+     * each value is stored verbatim (numbers as their numeric text, free text as-is) and never
+     * counts toward any statistic.
+     */
+    fun attachTimerFieldValues(checkinId: Long, userId: Long, habitId: Long, values: Map<Long, String>) {
+        if (checkinId <= 0 || values.isEmpty()) return
+        val habit = HabitService.findById(habitId, userId) ?: return
+        val paramIds = habit.params.mapTo(mutableSetOf()) { it.id }
+        val rows = values.mapNotNull { (paramId, text) ->
+            val clean = text.trim()
+            if (paramId !in paramIds || clean.isEmpty()) null
+            else CheckinValue(paramId, CheckinStatus.DONE, FieldValue.Text(clean))
+        }
+        CheckInRepository.addValues(checkinId, rows)
+    }
 
     fun deleteCheckin(checkinId: Long, userId: Long, notBefore: LocalDate): DeleteOutcome {
         val event = CheckInRepository.loadEventForDelete(checkinId, userId) ?: return DeleteOutcome.NotFound

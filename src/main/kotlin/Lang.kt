@@ -306,6 +306,25 @@ object Strings {
         "Send a note for this session:",
         "Отправьте заметку к этой сессии:")
 
+    fun sendFirstTimerFieldNameOrSkip(l: Lang) = pick(l,
+        "Extra fields to fill before/after each session? Send a field name, or \"-\" to skip.",
+        "Дополнительные поля для заполнения до/после сессии? Отправьте название поля или «-», чтобы пропустить.")
+
+    fun sendNextTimerFieldNameOrDone(l: Lang) = pick(l,
+        "Another field? Send its name, or \"done\" to finish.",
+        "Ещё поле? Отправьте название или «готово», чтобы закончить.")
+
+    fun pickTimerFieldPhase(l: Lang) = pick(l,
+        "When is this field filled in?",
+        "Когда заполнять это поле?")
+
+    fun btnPhaseBefore(l: Lang) = pick(l, "▶️ Before start", "▶️ До старта")
+    fun btnPhaseAfter(l: Lang) = pick(l, "⏹ After stop", "⏹ После стопа")
+
+    fun sendTimerFieldValue(l: Lang, name: String) = pick(l,
+        "$name (send \"-\" to skip):",
+        "$name (отправьте «-», чтобы пропустить):")
+
     /** A timer habit's line: shows running-since elapsed time, or today's accumulated total when idle. */
     fun timerLine(l: Lang, h: Habit, running: Boolean, elapsedSeconds: Double, todaySeconds: Double): String {
         val target = h.dailyTarget

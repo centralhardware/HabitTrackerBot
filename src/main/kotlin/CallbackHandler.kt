@@ -11,6 +11,7 @@ import dev.inmo.tgbotapi.types.MessageId
 import kotlinx.coroutines.flow.first
 import dto.CheckinStatus
 import dto.HabitType
+import dto.TimerPhase
 import services.CheckInService
 import services.HabitService
 import services.TimerService
@@ -234,8 +235,14 @@ private suspend fun BehaviourContext.handleTimer(query: MessageDataCallbackQuery
         }
     }
 
+    val beforeFields = habit.params.filter { it.timerPhase == TimerPhase.BEFORE }
+    val afterFields = habit.params.filter { it.timerPhase == TimerPhase.AFTER }
+    val chatId = query.message.chat.id
+
     when (action) {
-        "start" -> {
+        // No "before" fields: the original one-tap start (toast only). Otherwise we must collect
+        // the "before"-phase fields first and only start the timer once they're answered.
+        "start" -> if (beforeFields.isEmpty()) {
             val toast = when (TimerService.start(habitId, userId)) {
                 TimerService.StartOutcome.Started -> Strings.cbTimerStarted(lang)
                 TimerService.StartOutcome.AlreadyRunning -> Strings.cbTimerAlreadyRunning(lang)
@@ -245,30 +252,68 @@ private suspend fun BehaviourContext.handleTimer(query: MessageDataCallbackQuery
             // This edited message becomes the live display the background ticker updates.
             TimerService.setMessage(habitId, userId, query.message.messageId.long)
             answerCallbackQuery(query, text = toast)
+        } else {
+            answerCallbackQuery(query)
+            if (TimerService.find(habitId, userId) != null) {
+                sendMessage(chatId, Strings.cbTimerAlreadyRunning(lang)); return
+            }
+            val before = collectTimerFieldValues(chatId, beforeFields) ?: run {
+                sendMessage(chatId, Strings.cancelled(lang)); return
+            }
+            when (TimerService.start(habitId, userId, before)) {
+                TimerService.StartOutcome.Started -> {
+                    refresh(running = true)
+                    TimerService.setMessage(habitId, userId, query.message.messageId.long)
+                    sendMessage(chatId, Strings.cbTimerStarted(lang))
+                }
+                TimerService.StartOutcome.AlreadyRunning -> sendMessage(chatId, Strings.cbTimerAlreadyRunning(lang))
+                TimerService.StartOutcome.NotFound -> sendMessage(chatId, Strings.cbNotFound(lang))
+            }
         }
-        "stop" -> when (val o = TimerService.stop(habitId, userId, date, data.tz)) {
-            is TimerService.StopOutcome.Stopped -> { refresh(running = false); answerCallbackQuery(query, text = Strings.cbTimerStopped(lang, o.seconds)) }
-            TimerService.StopOutcome.NotRunning -> { refresh(running = false); answerCallbackQuery(query, text = Strings.cbTimerNotRunning(lang)) }
-            TimerService.StopOutcome.NotFound -> answerCallbackQuery(query, text = Strings.cbNotFound(lang))
-        }
-        // Stop + note: stop first (so the elapsed time is frozen and safely recorded),
-        // then ask for a comment and attach it to the just-written check-in.
-        "stopc" -> {
+        // Stop (optionally + note): stop first (so the elapsed time is frozen and safely recorded),
+        // then collect the "after"-phase fields and attach them — together with the "before" values
+        // stashed at start — to the just-written check-in.
+        "stop", "stopc" -> {
             answerCallbackQuery(query)
             when (val o = TimerService.stop(habitId, userId, date, data.tz)) {
                 is TimerService.StopOutcome.Stopped -> {
                     refresh(running = false)
-                    sendMessage(query.message.chat.id, Strings.sendTimerComment(lang))
-                    val note = waitTextMessage().first { it.chat.id.chatId.long == data.userId }.content.text.trim()
-                    if (o.checkinId > 0) CheckInService.setComment(o.checkinId, userId, note)
-                    sendMessage(query.message.chat.id, Strings.cbTimerStopped(lang, o.seconds))
+                    if (action == "stopc") {
+                        sendMessage(chatId, Strings.sendTimerComment(lang))
+                        val note = waitTextMessage().first { it.chat.id.chatId.long == data.userId }.content.text.trim()
+                        if (o.checkinId > 0) CheckInService.setComment(o.checkinId, userId, note)
+                    }
+                    val after = collectTimerFieldValues(chatId, afterFields) ?: emptyMap()
+                    CheckInService.attachTimerFieldValues(o.checkinId, userId, habitId, o.beforeValues + after)
+                    sendMessage(chatId, Strings.cbTimerStopped(lang, o.seconds))
                 }
-                TimerService.StopOutcome.NotRunning -> { refresh(running = false); sendMessage(query.message.chat.id, Strings.cbTimerNotRunning(lang)) }
-                TimerService.StopOutcome.NotFound -> sendMessage(query.message.chat.id, Strings.cbNotFound(lang))
+                TimerService.StopOutcome.NotRunning -> { refresh(running = false); sendMessage(chatId, Strings.cbTimerNotRunning(lang)) }
+                TimerService.StopOutcome.NotFound -> sendMessage(chatId, Strings.cbNotFound(lang))
             }
         }
         else -> answerCallbackQuery(query, text = Strings.cbBadButton(lang))
     }
+}
+
+/**
+ * Prompts for each [fields] value one at a time (a timer's before/after annotation fields),
+ * returning paramId → entered text. A field answered with "-" is skipped; a "/command" aborts the
+ * whole collection (returns null). Returns an empty map when there are no fields.
+ */
+private suspend fun BehaviourContext.collectTimerFieldValues(
+    chatId: IdChatIdentifier,
+    fields: List<dto.HabitParam>,
+): Map<Long, String>? {
+    if (fields.isEmpty()) return emptyMap()
+    val result = LinkedHashMap<Long, String>()
+    for (f in fields) {
+        sendMessage(chatId, Strings.sendTimerFieldValue(data.lang, f.name ?: ""))
+        val text = waitTextMessage().first { it.chat.id.chatId.long == data.userId }.content.text.trim()
+        if (text.startsWith("/")) return null
+        if (text == "-") continue
+        result[f.id] = text
+    }
+    return result
 }
 
 private suspend fun BehaviourContext.handleHabitAction(

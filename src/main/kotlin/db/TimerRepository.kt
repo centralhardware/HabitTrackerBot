@@ -12,23 +12,29 @@ import java.time.Instant
 
 object TimerRepository {
 
-    /** Starts a timer for [habitId]; false if one is already running (PK conflict). */
-    fun start(habitId: Long, userId: Long): Boolean =
+    /**
+     * Starts a timer for [habitId]; false if one is already running (PK conflict). [pendingValuesJson]
+     * is the JSON object of "before"-phase field values to carry until the timer stops (null when none).
+     */
+    fun start(habitId: Long, userId: Long, pendingValuesJson: String?): Boolean =
         using(sessionOf(DatabaseService.dataSource)) { session ->
             session.update(
                 queryOf(
                     """
-                    INSERT INTO running_timers (habit_id, user_id, started_at)
-                    VALUES (?, ?, now())
+                    INSERT INTO running_timers (habit_id, user_id, started_at, pending_values)
+                    VALUES (?, ?, now(), ?::jsonb)
                     ON CONFLICT (habit_id) DO NOTHING
                     """.trimIndent(),
-                    habitId, userId
+                    habitId, userId, pendingValuesJson
                 )
             ) > 0
         }
 
-    /** Stops the timer for [habitId], returning the moment it was started, or null if none was running. */
-    fun stop(habitId: Long, userId: Long): Instant? =
+    /**
+     * Stops the timer for [habitId], returning the moment it was started and the JSON of its stashed
+     * "before"-phase field values (or null), or null if none was running.
+     */
+    fun stop(habitId: Long, userId: Long): Pair<Instant, String?>? =
         sessionOf(DatabaseService.dataSource).use { session ->
             session.run(
                 queryOf(
@@ -36,12 +42,12 @@ object TimerRepository {
                     WITH stopped AS (
                         DELETE FROM running_timers
                         WHERE habit_id = ? AND user_id = ?
-                        RETURNING started_at
+                        RETURNING started_at, pending_values
                     )
-                    SELECT started_at FROM stopped
+                    SELECT started_at, pending_values FROM stopped
                     """.trimIndent(),
                     habitId, userId
-                ).map { it.instant("started_at") }.asSingle
+                ).map { it.instant("started_at") to it.stringOrNull("pending_values") }.asSingle
             )
         }
 

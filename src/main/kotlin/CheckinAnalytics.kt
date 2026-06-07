@@ -24,15 +24,17 @@ object CheckinAnalytics {
     fun firstDate(rows: List<CheckinValueRow>): LocalDate? =
         rows.minOfOrNull { it.date }
 
-    /** Per-day sums of manual quantities (old `quantitySumsPerDay`). */
+    /** Per-day sums of manual quantities (old `quantitySumsPerDay`). Timer annotation fields are
+     *  pure notes — excluded so their numbers never inflate a timer's logged time. */
     fun quantitySumsPerDay(rows: List<CheckinValueRow>): Map<LocalDate, Double> =
-        rows.filter { !it.isScheduled && it.quantity != null }
+        rows.filter { !it.isScheduled && it.quantity != null && it.timerPhase == null }
             .groupBy { it.date }
             .mapValues { (_, day) -> day.sumOf { it.quantity!! } }
 
-    /** Days with any logged activity: manual events, or scheduled events marked done. */
+    /** Days with any logged activity: manual events, or scheduled events marked done.
+     *  Timer annotation fields don't make a day "logged" on their own. */
     fun loggedDates(rows: List<CheckinValueRow>): Set<LocalDate> =
-        rows.filter { !it.isScheduled || it.status == CheckinStatus.DONE }
+        rows.filter { (!it.isScheduled || it.status == CheckinStatus.DONE) && it.timerPhase == null }
             .mapTo(mutableSetOf()) { it.date }
 
     /** Days with a skipped scheduled event. */
@@ -52,8 +54,8 @@ object CheckinAnalytics {
     /** Weekly totals over [from]..[to] (old `WeeklySummaryRepository.weeklyTotals`). */
     fun weekTotals(rows: List<CheckinValueRow>, from: LocalDate, to: LocalDate): WeekTotals {
         val window = rows.filter { it.date in from..to }
-        val counterEvents = window.filter { !it.isScheduled && it.quantity == null && it.textValue == null }
-        val quantityEvents = window.filter { !it.isScheduled && it.quantity != null }
+        val counterEvents = window.filter { !it.isScheduled && it.quantity == null && it.textValue == null && it.timerPhase == null }
+        val quantityEvents = window.filter { !it.isScheduled && it.quantity != null && it.timerPhase == null }
         return WeekTotals(
             done = window.count { it.isScheduled && it.status == CheckinStatus.DONE },
             skip = window.count { it.isScheduled && it.status == CheckinStatus.SKIP },
@@ -72,7 +74,7 @@ object CheckinAnalytics {
 
     /** Per-day quantity sums within [from]..[to] (old `quantitySumsInRange`). */
     fun quantitySumsPerDayInRange(rows: List<CheckinValueRow>, from: LocalDate, to: LocalDate): Map<LocalDate, Double> =
-        rows.filter { !it.isScheduled && it.quantity != null && it.date in from..to }
+        rows.filter { !it.isScheduled && it.quantity != null && it.timerPhase == null && it.date in from..to }
             .groupBy { it.date }
             .mapValues { (_, day) -> day.sumOf { it.quantity!! } }
 }

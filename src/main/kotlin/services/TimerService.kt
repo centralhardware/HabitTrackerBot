@@ -4,6 +4,9 @@ import db.TimerRepository
 import dto.HabitType
 import dto.RunningTimer
 import dto.RunningTimerTick
+import kotlinx.serialization.decodeFromString
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
 import java.time.Duration
 import java.time.Instant
 import java.time.LocalDate
@@ -18,15 +21,18 @@ object TimerService {
     }
 
     sealed interface StopOutcome {
-        data class Stopped(val seconds: Double, val checkinId: Long) : StopOutcome
+        /** [beforeValues] are the "before"-phase field values stashed at start (paramId → text). */
+        data class Stopped(val seconds: Double, val checkinId: Long, val beforeValues: Map<Long, String>) : StopOutcome
         data object NotRunning : StopOutcome
         data object NotFound : StopOutcome
     }
 
-    fun start(habitId: Long, userId: Long): StartOutcome {
+    /** [beforeValues] are the "before"-phase annotation fields the user filled in (paramId → text). */
+    fun start(habitId: Long, userId: Long, beforeValues: Map<Long, String> = emptyMap()): StartOutcome {
         val habit = HabitService.findById(habitId, userId) ?: return StartOutcome.NotFound
         if (habit.type != HabitType.TIMER) return StartOutcome.NotFound
-        return if (TimerRepository.start(habitId, userId)) StartOutcome.Started else StartOutcome.AlreadyRunning
+        val json = if (beforeValues.isEmpty()) null else Json.encodeToString(beforeValues)
+        return if (TimerRepository.start(habitId, userId, json)) StartOutcome.Started else StartOutcome.AlreadyRunning
     }
 
     /**
@@ -39,7 +45,10 @@ object TimerService {
     fun stop(habitId: Long, userId: Long, today: LocalDate, zone: ZoneId?): StopOutcome {
         val habit = HabitService.findById(habitId, userId) ?: return StopOutcome.NotFound
         if (habit.type != HabitType.TIMER) return StopOutcome.NotFound
-        val startedAt = TimerRepository.stop(habitId, userId) ?: return StopOutcome.NotRunning
+        val (startedAt, pendingJson) = TimerRepository.stop(habitId, userId) ?: return StopOutcome.NotRunning
+        val beforeValues = pendingJson?.let {
+            runCatching { Json.decodeFromString<Map<Long, String>>(it) }.getOrDefault(emptyMap())
+        } ?: emptyMap()
         val stoppedAt = Instant.now()
         val totalSeconds = Duration.between(startedAt, stoppedAt).seconds.coerceAtLeast(1).toDouble()
         val segments = if (zone != null) splitByLocalDay(startedAt, stoppedAt, zone) else listOf(today to totalSeconds)
@@ -52,7 +61,7 @@ object TimerService {
         if (lastCheckinId == 0L) {
             lastCheckinId = CheckInService.recordTimer(habitId, userId, segments.lastOrNull()?.first ?: today, 1.0)
         }
-        return StopOutcome.Stopped(totalSeconds, lastCheckinId)
+        return StopOutcome.Stopped(totalSeconds, lastCheckinId, beforeValues)
     }
 
     /** Splits the [start, end] interval into the whole seconds falling within each local day of [zone]. */

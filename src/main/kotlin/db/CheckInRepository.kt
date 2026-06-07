@@ -101,6 +101,31 @@ object CheckInRepository {
     }
 
     /**
+     * Appends extra value rows to an existing check-in — used to attach a timer's before/after
+     * annotation fields to the elapsed-time event written when the timer stopped. No-op when
+     * [values] is empty. A param already present on the check-in keeps its existing row.
+     */
+    fun addValues(checkinId: Long, values: List<CheckinValue>) {
+        if (values.isEmpty()) return
+        val valuesSql = values.joinToString(", ") { "(?, ?, ?::checkin_status, ?)" }
+        val params = buildList<Any?> {
+            values.forEach { add(checkinId); add(it.paramId); add(it.status?.value); add(it.value?.asString) }
+        }
+        using(sessionOf(DatabaseService.dataSource)) { session ->
+            session.update(
+                queryOf(
+                    """
+                    INSERT INTO checkin_values (checkin_id, param_id, status, value)
+                    VALUES $valuesSql
+                    ON CONFLICT (checkin_id, param_id) DO NOTHING
+                    """.trimIndent(),
+                    *params.toTypedArray()
+                )
+            )
+        }
+    }
+
+    /**
      * Inserts a bare event with no values (a counter tap). Returns the new `checkins.id`.
      * The CTE-wrapped RETURNING mirrors [insertEventWithValues] to dodge the PG JDBC 42.7.4
      * top-level-RETURNING crash.
@@ -173,7 +198,7 @@ object CheckInRepository {
             session.run(
                 queryOf(
                     """
-                    SELECT e.id AS checkin_id, v.param_id, p.param_type, e.check_date, e.reminder_id,
+                    SELECT e.id AS checkin_id, v.param_id, p.param_type, p.timer_phase, e.check_date, e.reminder_id,
                            v.status, v.value, e.comment, r.reminder_time
                     FROM checkins e
                     -- LEFT JOIN: counter events have no checkin_values row, but still
