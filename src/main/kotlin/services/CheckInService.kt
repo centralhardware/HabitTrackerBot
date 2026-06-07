@@ -148,8 +148,10 @@ object CheckInService {
     }
 
     fun listInRange(habitId: Long, userId: Long, from: LocalDate, to: LocalDate): List<CheckinRecord>? {
-        HabitService.findById(habitId, userId) ?: return null
-        return CheckinAnalytics.inRange(CheckInRepository.loadForHabit(habitId), from, to)
+        val habit = HabitService.findById(habitId, userId) ?: return null
+        return CheckinAnalytics.inRange(
+            CheckInRepository.loadForHabit(habitId), from, to, isTimer = habit.type == HabitType.TIMER,
+        )
     }
 
     /** Number of counter/manual events logged for [habitId] on [date]. */

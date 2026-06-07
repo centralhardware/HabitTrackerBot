@@ -199,7 +199,7 @@ object CheckInRepository {
                 queryOf(
                     """
                     SELECT e.id AS checkin_id, v.param_id, p.param_type, p.timer_phase, e.check_date, e.reminder_id,
-                           v.status, v.value, e.comment, r.reminder_time
+                           v.status, v.value, e.comment, r.reminder_time, e.checked_at
                     FROM checkins e
                     -- LEFT JOIN: counter events have no checkin_values row, but still
                     -- need to appear (one row per event) so they're counted.

@@ -42,13 +42,25 @@ object CheckinAnalytics {
         rows.filter { it.status == CheckinStatus.SKIP }
             .mapTo(mutableSetOf()) { it.date }
 
-    /** Rows in [from]..[to] mapped to the public [CheckinRecord] shape (old `findInRange`). */
-    fun inRange(rows: List<CheckinValueRow>, from: LocalDate, to: LocalDate): List<CheckinRecord> =
+    /**
+     * Rows in [from]..[to] mapped to the public [CheckinRecord] shape (old `findInRange`).
+     * When [isTimer] is true, the duration row also carries a derived [CheckinRecord.startedAt]
+     * (recordedAt − elapsed seconds) so the session's start as well as its end are exposed.
+     */
+    fun inRange(rows: List<CheckinValueRow>, from: LocalDate, to: LocalDate, isTimer: Boolean = false): List<CheckinRecord> =
         rows.filter { it.date in from..to }
             // status is meaningful only for scheduled habits; never surface it for quantity/counter rows.
             .map { row ->
                 val value = row.quantity?.let { FieldValue.Numeric(it) } ?: row.textValue?.let { FieldValue.Text(it) }
-                CheckinRecord(row.checkinId, row.paramId, row.date, row.status.takeIf { row.isScheduled }, value, row.offsetMinutes, row.comment)
+                // A timer's duration row (the elapsed-seconds value, not a before/after annotation):
+                // start = end − seconds. Only there does deriving a start make sense.
+                val startedAt = row.recordedAt?.takeIf {
+                    isTimer && !row.isScheduled && row.timerPhase == null && row.quantity != null
+                }?.minusSeconds(row.quantity!!.toLong())
+                CheckinRecord(
+                    row.checkinId, row.paramId, row.date, row.status.takeIf { row.isScheduled },
+                    value, row.offsetMinutes, row.comment, row.recordedAt, startedAt,
+                )
             }
 
     /** Weekly totals over [from]..[to] (old `WeeklySummaryRepository.weeklyTotals`). */
