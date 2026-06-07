@@ -50,7 +50,8 @@ fun BehaviourContext.registerAddHabitCommand() {
             HabitType.QUANTITY -> quantityFlow(chatId, logOnly)
         } ?: return@onCommand
 
-        val reminders = collectReminders(chatId, type) ?: return@onCommand
+        val reminders = if (type == HabitType.TIMER) emptyList()
+        else collectReminders(chatId, type) ?: return@onCommand
 
         val habit = HabitService.addHabit(
             Habit(
