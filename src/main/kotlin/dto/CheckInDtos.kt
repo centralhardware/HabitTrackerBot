@@ -4,6 +4,7 @@ import kotlinx.serialization.EncodeDefault
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotliquery.Row
+import java.time.Instant
 import java.time.LocalDate
 
 @Serializable
@@ -70,6 +71,14 @@ data class CheckinRecord(
     @EncodeDefault(EncodeDefault.Mode.NEVER) val value: FieldValue? = null,
     @EncodeDefault(EncodeDefault.Mode.NEVER) val offsetMinutes: Int? = null,
     @EncodeDefault(EncodeDefault.Mode.NEVER) val comment: String? = null,
+    // When the row was written (`checkins.checked_at`). For a timer this is the moment it was
+    // stopped — i.e. the session's end. Null only for never-resolved pending scheduled slots.
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    @Serializable(InstantSerializer::class) val recordedAt: Instant? = null,
+    // The timer session's start, derived as recordedAt − elapsed seconds. Only set on a timer's
+    // duration row; omitted for every other habit type and for a timer's annotation fields.
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    @Serializable(InstantSerializer::class) val startedAt: Instant? = null,
 )
 
 /**
@@ -92,6 +101,8 @@ data class CheckinValueRow(
     // Non-null on a timer's extra annotation field — a pure annotation the analytics layer
     // ignores entirely (never summed, never counted toward logged days).
     val timerPhase: TimerPhase? = null,
+    // `checkins.checked_at`: when the event was recorded. Null for never-resolved pending slots.
+    val recordedAt: Instant? = null,
 )
 
 fun Row.toCheckinValueRow(): CheckinValueRow {
@@ -108,6 +119,7 @@ fun Row.toCheckinValueRow(): CheckinValueRow {
         offsetMinutes = intOrNull("reminder_time"),
         textValue = if (paramType == ParamType.TEXT) rawValue else null,
         timerPhase = TimerPhase.parse(stringOrNull("timer_phase")),
+        recordedAt = instantOrNull("checked_at"),
     )
 }
 
