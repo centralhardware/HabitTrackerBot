@@ -132,11 +132,15 @@ object CheckInService {
     ): UpdateOutcome {
         val event = CheckInRepository.loadEventForDelete(checkinId, userId) ?: return UpdateOutcome.NotFound
         if (event.date.isBefore(notBefore)) return UpdateOutcome.TooOld(event.date)
-        val allowedParamIds = event.values.map { it.paramId }.toSet()
+        // Validate against the habit's params, not just the values already on the entry: a patch may
+        // set a param the entry doesn't carry yet (e.g. a book name never filled in at the time), so
+        // we upsert it rather than silently dropping it.
+        val habitParamIds = HabitService.findById(event.habitId, userId)?.params?.mapTo(mutableSetOf()) { it.id }
+            ?: return UpdateOutcome.NotFound
         if (updateComment) CheckInRepository.updateCheckinComment(checkinId, userId, comment)
         for ((paramId, value) in valuePatch) {
-            if (paramId !in allowedParamIds) continue
-            CheckInRepository.updateCheckinValue(checkinId, userId, paramId, value)
+            if (paramId !in habitParamIds) continue
+            CheckInRepository.upsertCheckinValue(checkinId, userId, paramId, value)
         }
         return UpdateOutcome.Updated(CheckInRepository.loadEventForDelete(checkinId, userId) ?: event)
     }

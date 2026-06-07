@@ -280,23 +280,27 @@ object CheckInRepository {
         }
     }
 
-    /** Updates the stored [value] string of a single param row within a check-in. */
-    fun updateCheckinValue(checkinId: Long, userId: Long, paramId: Long, value: String): Boolean {
+    /**
+     * Inserts or updates a single param [value] on a check-in the user owns. The edit path may set a
+     * param the entry doesn't carry yet (e.g. a book name added after the fact), so this is an upsert,
+     * not a plain UPDATE. The INSERT is gated on ownership via the SELECT; the ON CONFLICT predicate
+     * matches the partial unique index checkin_values_param_uniq (V30, WHERE param_id IS NOT NULL).
+     */
+    fun upsertCheckinValue(checkinId: Long, userId: Long, paramId: Long, value: String): Boolean {
         return using(sessionOf(DatabaseService.dataSource)) { session ->
             session.update(
                 queryOf(
                     """
-                    UPDATE checkin_values v
-                    SET value = ?
+                    INSERT INTO checkin_values (checkin_id, param_id, status, value)
+                    SELECT e.id, ?, 'done'::checkin_status, ?
                     FROM checkins e
-                    WHERE v.checkin_id = e.id
-                      AND e.id = ?
+                    WHERE e.id = ?
                       AND e.user_id = ?
                       AND e.deleted = false
-                      AND v.param_id = ?
-                      AND v.value IS NOT NULL
+                    ON CONFLICT (checkin_id, param_id) WHERE param_id IS NOT NULL
+                    DO UPDATE SET value = EXCLUDED.value
                     """.trimIndent(),
-                    value, checkinId, userId, paramId
+                    paramId, value, checkinId, userId
                 )
             ) > 0
         }
