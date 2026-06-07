@@ -117,7 +117,11 @@ object CheckInRepository {
                     """
                     INSERT INTO checkin_values (checkin_id, param_id, status, value)
                     VALUES $valuesSql
-                    ON CONFLICT (checkin_id, param_id) DO NOTHING
+                    -- Match the partial unique index checkin_values_param_uniq (V30), defined
+                    -- WHERE param_id IS NOT NULL. Without repeating that predicate Postgres can't
+                    -- infer the index and the whole INSERT errors out — which silently dropped
+                    -- every timer before/after annotation field. These rows always have a param_id.
+                    ON CONFLICT (checkin_id, param_id) WHERE param_id IS NOT NULL DO NOTHING
                     """.trimIndent(),
                     *params.toTypedArray()
                 )
