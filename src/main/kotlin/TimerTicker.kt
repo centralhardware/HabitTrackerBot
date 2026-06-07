@@ -13,7 +13,7 @@ import java.time.ZoneId
 object TimerTicker {
 
     /** How often, in seconds, a running timer's live message is repainted. */
-    private const val TICK_SECONDS = 1L
+    private const val TICK_SECONDS = 10L
 
     /**
      * Repaints the live message of every running timer with its current elapsed time. Run once a
