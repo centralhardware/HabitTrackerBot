@@ -13,9 +13,6 @@ import services.ReminderMessageService
 object ReminderScheduler {
 
     suspend fun BehaviourContext.sendDueReminders() {
-        CheckInService.autoSkipOverdue().forEach { resolved ->
-            resolveCheckInMessages(resolved.reminderId, resolved.checkDate, CheckinStatus.SKIP)
-        }
         HabitService.backfillMissedScheduled().forEach { reminder ->
             deliver(reminder, markPending = false, withDate = true)
         }
@@ -31,7 +28,12 @@ object ReminderScheduler {
     ) {
         runCatching {
             if (markPending && reminder.habitType == HabitType.SCHEDULED) {
+                // Creating this slot's pending row also skips the previous unresolved
+                // occurrence of the same habit; settle those messages now.
                 CheckInService.markPending(reminder.habitId, reminder.userId, reminder.reminderId, reminder.userDate)
+                    .forEach { resolved ->
+                        resolveCheckInMessages(resolved.reminderId, resolved.checkDate, CheckinStatus.SKIP)
+                    }
             }
             val lang = reminder.langCode?.let { runCatching { Lang.valueOf(it) }.getOrNull() } ?: Lang.EN
             val datePrefix = if (withDate) "📅 ${reminder.userDate} " else ""

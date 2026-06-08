@@ -153,31 +153,67 @@ object CheckInRepository {
     }
 
     /**
-     * Skips pending scheduled values whose slot fired before [threshold], returning the
-     * (reminder, date) of each flipped row. The overdue test uses the slot's firing moment
-     * (`check_date + reminder_time` in the user's timezone), since pending rows no longer
-     * carry a `checked_at`; the flip then stamps `checked_at = now()` as the skip moment.
+     * Marks a scheduled slot pending (creating its checkin row) and, in the same statement,
+     * skips every older still-pending check-in of the same habit — the previous reminder
+     * occurrences the user never resolved. Returns the (reminder, date) of each flipped row,
+     * for message updates.
+     *
+     * A slot's firing moment is `check_date + reminder_time` in the user's timezone; the new
+     * slot's firing moment is the cut-off — older pending siblings that fired before it get
+     * flipped to `skip` and stamped `checked_at = now()` as their skip moment. Replaces the
+     * old standalone 24h overdue scan: the skip now happens exactly when the next reminder
+     * fires.
      */
-    fun markPendingAsSkip(threshold: Instant): List<dto.ResolvedCheckin> {
-        return sessionOf(DatabaseService.dataSource).use { session ->
+    fun markPendingSkippingPrevious(event: CheckinEvent): List<dto.ResolvedCheckin> {
+        require(event.reminderId != null) { "scheduled pending requires reminderId" }
+        return using(sessionOf(DatabaseService.dataSource)) { session ->
             session.run(
                 queryOf(
                     """
-                    WITH flipped AS (
+                    WITH upsert_event AS (
+                        INSERT INTO checkins (user_id, check_date, reminder_id, habit_id, comment, checked_at)
+                        VALUES (?, ?, ?, ?, NULL, NULL)
+                        ON CONFLICT (reminder_id, check_date)
+                            WHERE reminder_id IS NOT NULL
+                        DO UPDATE SET checked_at = COALESCE(EXCLUDED.checked_at, checkins.checked_at)
+                        RETURNING id, user_id, habit_id, reminder_id, check_date
+                    ),
+                    upsert_value AS (
+                        -- Scheduled habits have no param, so the status row carries a NULL param_id.
+                        INSERT INTO checkin_values (checkin_id, param_id, status, value)
+                        SELECT id, NULL, 'pending'::checkin_status, NULL
+                        FROM upsert_event
+                        ON CONFLICT (checkin_id) WHERE param_id IS NULL
+                        DO UPDATE SET status = EXCLUDED.status
+                    ),
+                    new_slot AS (
+                        SELECT ue.id, ue.habit_id,
+                               (ue.check_date::date
+                                + CASE WHEN r.reminder_time >= 1440 THEN INTERVAL '1 day' ELSE INTERVAL '0' END
+                                + (r.reminder_time % 1440) * INTERVAL '1 minute'
+                               ) AT TIME ZONE us.timezone AS fired_at
+                        FROM upsert_event ue
+                        JOIN habit_reminders r ON r.id = ue.reminder_id
+                        JOIN user_settings us ON us.user_id = ue.user_id
+                        WHERE us.timezone IS NOT NULL
+                    ),
+                    flipped AS (
                         UPDATE checkin_values v
                         SET status = 'skip'
                         FROM checkins e
-                        JOIN habit_reminders r ON r.id = e.reminder_id
-                        JOIN user_settings us ON us.user_id = e.user_id
+                        JOIN habit_reminders r2 ON r2.id = e.reminder_id
+                        JOIN user_settings us2 ON us2.user_id = e.user_id
+                        CROSS JOIN new_slot ns
                         WHERE v.checkin_id = e.id
                           AND v.status = 'pending'
-                          AND e.reminder_id IS NOT NULL
+                          AND e.id <> ns.id
+                          AND e.habit_id = ns.habit_id
                           AND e.deleted = false
-                          AND us.timezone IS NOT NULL
+                          AND us2.timezone IS NOT NULL
                           AND (e.check_date::date
-                               + CASE WHEN r.reminder_time >= 1440 THEN INTERVAL '1 day' ELSE INTERVAL '0' END
-                               + (r.reminder_time % 1440) * INTERVAL '1 minute'
-                              ) AT TIME ZONE us.timezone < ?
+                               + CASE WHEN r2.reminder_time >= 1440 THEN INTERVAL '1 day' ELSE INTERVAL '0' END
+                               + (r2.reminder_time % 1440) * INTERVAL '1 minute'
+                              ) AT TIME ZONE us2.timezone < ns.fired_at
                         RETURNING v.checkin_id, e.reminder_id AS reminder_id, e.check_date AS check_date
                     ),
                     touch AS (
@@ -186,7 +222,7 @@ object CheckInRepository {
                     )
                     SELECT reminder_id, check_date FROM flipped
                     """.trimIndent(),
-                    threshold
+                    event.userId, event.checkDate, event.reminderId, event.habitId
                 ).map { it.toResolvedCheckin() }.asList
             )
         }

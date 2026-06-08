@@ -18,8 +18,6 @@ import dto.HabitType
 import dto.ParamType
 import dto.QuantityTrend
 import org.apache.commons.math3.stat.descriptive.moment.Mean
-import java.time.Duration
-import java.time.Instant
 import java.time.LocalDate
 import java.time.temporal.ChronoUnit
 
@@ -254,16 +252,14 @@ object CheckInService {
         )
     }
 
-    /** Skips pending scheduled check-ins older than 24h; returns the ones flipped, for message updates. */
-    fun autoSkipOverdue(): List<dto.ResolvedCheckin> {
-        val threshold = Instant.now().minus(Duration.ofHours(24))
-        return CheckInRepository.markPendingAsSkip(threshold)
-    }
-
-    fun markPending(habitId: Long, userId: Long, reminderId: Long, date: LocalDate) {
-        CheckInRepository.upsertScheduledValue(
+    /**
+     * Marks a scheduled slot pending and skips any older still-pending check-in of the same
+     * habit (the previous reminder occurrence the user never resolved). Returns the flipped
+     * ones, for message updates.
+     */
+    fun markPending(habitId: Long, userId: Long, reminderId: Long, date: LocalDate): List<dto.ResolvedCheckin> {
+        return CheckInRepository.markPendingSkippingPrevious(
             CheckinEvent(userId, date, reminderId, habitId, comment = null),
-            CheckinStatus.PENDING,
         )
     }
 }
