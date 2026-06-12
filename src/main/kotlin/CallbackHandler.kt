@@ -262,9 +262,19 @@ private suspend fun BehaviourContext.handleTimer(query: MessageDataCallbackQuery
             }
             when (TimerService.start(habitId, userId, before)) {
                 TimerService.StartOutcome.Started -> {
-                    refresh(running = true)
-                    TimerService.setMessage(habitId, userId, query.message.messageId.long)
+                    // The before-field Q&A pushed messages below the original timer card, so a
+                    // ticker edited in place would be stranded above them. Drop the old card and
+                    // post a fresh live one at the bottom so the ticking timer is the last message.
+                    runCatching { deleteMessage(chatId = chatId, messageId = query.message.messageId) }
                     sendMessage(chatId, Strings.cbTimerStarted(lang))
+                    val elapsed = TimerService.find(habitId, userId)?.let { TimerService.elapsedSeconds(it.startedAt) } ?: 0.0
+                    val todaySeconds = CheckInService.timerSecondsOn(habitId, date)
+                    val live = sendMessage(
+                        chatId,
+                        Strings.timerLine(lang, habit, running = true, elapsed, todaySeconds),
+                        replyMarkup = Keyboards.timerControl(habitId, running = true, date, lang),
+                    )
+                    TimerService.setMessage(habitId, userId, live.messageId.long)
                 }
                 TimerService.StartOutcome.AlreadyRunning -> sendMessage(chatId, Strings.cbTimerAlreadyRunning(lang))
                 TimerService.StartOutcome.NotFound -> sendMessage(chatId, Strings.cbNotFound(lang))
