@@ -308,10 +308,25 @@ private suspend fun BehaviourContext.collectTimerFieldValues(
     val result = LinkedHashMap<Long, String>()
     for (f in fields) {
         sendMessage(chatId, Strings.sendTimerFieldValue(data.lang, f.name ?: ""))
-        val text = waitTextMessage().first { it.chat.id.chatId.long == data.userId }.content.text.trim()
-        if (text.startsWith("/")) return null
-        if (text == "-") continue
-        result[f.id] = text
+        // NUMBER fields re-prompt until a parseable number (or "-"/skip) is sent, so a number
+        // field can never be saved with non-numeric text. TEXT fields take whatever is typed.
+        while (true) {
+            val text = waitTextMessage().first { it.chat.id.chatId.long == data.userId }.content.text.trim()
+            if (text.startsWith("/")) return null
+            if (text == "-") break
+            if (f.paramType == dto.ParamType.NUMBER) {
+                val n = text.replace(',', '.').toDoubleOrNull()
+                if (n == null || n.isNaN() || n.isInfinite()) {
+                    sendMessage(chatId, Strings.timerFieldNotANumber(data.lang, f.name ?: ""))
+                    continue
+                }
+                // Store the canonical numeric form so later toDoubleOrNull reads back cleanly.
+                result[f.id] = n.toString()
+            } else {
+                result[f.id] = text
+            }
+            break
+        }
     }
     return result
 }

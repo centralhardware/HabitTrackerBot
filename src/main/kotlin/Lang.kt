@@ -325,6 +325,10 @@ object Strings {
         "$name (send \"-\" to skip):",
         "$name (отправьте «-», чтобы пропустить):")
 
+    fun timerFieldNotANumber(l: Lang, name: String) = pick(l,
+        "\"$name\" must be a number (e.g. 1.5). Try again, or send \"-\" to skip:",
+        "«$name» должно быть числом (например 1.5). Попробуйте ещё раз или отправьте «-», чтобы пропустить:")
+
     /** A timer habit's line: shows running-since elapsed time, or today's accumulated total when idle. */
     fun timerLine(l: Lang, h: Habit, running: Boolean, elapsedSeconds: Double, todaySeconds: Double): String {
         val target = h.dailyTarget
