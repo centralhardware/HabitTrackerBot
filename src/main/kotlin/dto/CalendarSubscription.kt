@@ -20,7 +20,7 @@ fun Row.toCalendarSubscription(): CalendarSubscription = CalendarSubscription(
     lastUsedAt = instantOrNull("last_used_at"),
 )
 
-/** A logged check-in flattened for the calendar feed, carrying its habit's name. */
+/** A logged check-in value flattened for the calendar feed, carrying its habit and field metadata. */
 data class CalendarCheckin(
     val checkinId: Long,
     val habitName: String,
@@ -28,6 +28,8 @@ data class CalendarCheckin(
     val status: String?,
     val value: String?,
     val paramType: String?,
+    val paramName: String?,
+    val unit: String?,
     val comment: String?,
     val checkedAt: Instant?,
 )
@@ -39,6 +41,8 @@ fun Row.toCalendarCheckin(): CalendarCheckin = CalendarCheckin(
     status = stringOrNull("status"),
     value = stringOrNull("value"),
     paramType = stringOrNull("param_type"),
+    paramName = stringOrNull("param_name"),
+    unit = stringOrNull("unit"),
     comment = stringOrNull("comment"),
     checkedAt = instantOrNull("checked_at"),
 )

@@ -68,7 +68,11 @@ object CalendarFeedService {
 
     private fun formatValue(c: CalendarCheckin): String? {
         val raw = c.value?.takeIf { it.isNotBlank() } ?: return null
-        return if (c.paramType == "number") raw.toDoubleOrNull()?.let(::trimNumber) ?: raw else raw
+        val v = if (c.paramType == "number") raw.toDoubleOrNull()?.let(::trimNumber) ?: raw else raw
+        // Numeric fields carry a unit; text fields don't. A field name (multi-field habits) labels
+        // the value so bare numbers don't appear context-free in the calendar.
+        val withUnit = if (c.paramType == "number" && !c.unit.isNullOrBlank()) "$v ${c.unit}" else v
+        return c.paramName?.takeIf { it.isNotBlank() }?.let { "$it: $withUnit" } ?: withUnit
     }
 
     private fun trimNumber(d: Double): String =

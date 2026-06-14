@@ -22,7 +22,7 @@ object CalendarFeedRepository {
                 queryOf(
                     """
                     SELECT e.id AS checkin_id, h.name, e.check_date, v.status, v.value,
-                           p.param_type, e.comment, e.checked_at
+                           p.param_type, p.name AS param_name, p.unit, e.comment, e.checked_at
                     FROM checkins e
                     JOIN habits h ON h.id = e.habit_id AND h.status <> 'deleted'
                     LEFT JOIN checkin_values v ON v.checkin_id = e.id
@@ -30,7 +30,7 @@ object CalendarFeedRepository {
                     WHERE e.user_id = ?
                       AND e.deleted = false
                       AND e.check_date >= ?
-                    ORDER BY e.check_date, e.id
+                    ORDER BY e.check_date, e.id, p.position
                     """.trimIndent(),
                     userId, since
                 ).map { it.toCalendarCheckin() }.asList
