@@ -25,6 +25,16 @@ object CalendarFeedService {
     private val LOCAL = DateTimeFormatter.ofPattern("yyyyMMdd'T'HHmmss")
     private val BYDAY = arrayOf("MO", "TU", "WE", "TH", "FR", "SA", "SU")
 
+    // CSS3 color names (RFC 7986 COLOR property) — one per habit, picked deterministically by name
+    // so a habit keeps the same color across feed refreshes. Clients that support per-event colors
+    // (e.g. Apple Calendar) tint each habit's events distinctly.
+    private val PALETTE = arrayOf(
+        "tomato", "darkorange", "gold", "yellowgreen", "seagreen", "teal",
+        "steelblue", "royalblue", "slateblue", "mediumorchid", "hotpink", "sienna",
+    )
+
+    private fun colorFor(name: String): String = PALETTE[Math.floorMod(name.hashCode(), PALETTE.size)]
+
     fun build(userId: Long, tz: ZoneId, includeCheckins: Boolean, includeReminders: Boolean): String {
         val stamp = STAMP.format(Instant.now().atZone(ZoneOffset.UTC))
         val sb = StringBuilder()
@@ -102,6 +112,7 @@ object CalendarFeedService {
         line(sb, "DTEND;VALUE=DATE:${DATE.format(ev.date.plusDays(1))}")
         line(sb, "SUMMARY:${escape(ev.name)}")
         ev.details?.let { line(sb, "DESCRIPTION:${escape(it)}") }
+        line(sb, "COLOR:${colorFor(ev.name)}")
         line(sb, "TRANSP:TRANSPARENT")
         line(sb, "END:VEVENT")
     }
@@ -124,6 +135,7 @@ object CalendarFeedService {
         else "FREQ=WEEKLY;BYDAY=" + rem.days.sorted().joinToString(",") { BYDAY[it - 1] }
         line(sb, "RRULE:$rule")
         line(sb, "SUMMARY:${escape(rem.habitName)}")
+        line(sb, "COLOR:${colorFor(rem.habitName)}")
         line(sb, "END:VEVENT")
     }
 
