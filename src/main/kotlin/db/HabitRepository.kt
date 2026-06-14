@@ -59,7 +59,7 @@ object HabitRepository {
                     SELECT p.id, p.habit_id, p.name, p.unit, p.direction, p.daily_target, p.position, p.param_type, p.timer_phase
                     FROM habit_params p
                     JOIN habits h ON h.id = p.habit_id
-                    WHERE h.user_id = ? AND h.status <> 'deleted'
+                    WHERE h.user_id = ? AND h.status <> 'deleted' AND p.deleted = false
                     ORDER BY p.habit_id, p.position, p.id
                     """.trimIndent(),
                     userId
@@ -341,6 +341,29 @@ object HabitRepository {
             )
         }
     }
+
+    /**
+     * Soft-deletes a single habit param owned by [userId]: the row (and its checkin_values) stay so
+     * historical records still resolve its name, but it's hidden from the active habit. Refuses
+     * (returns false) when it's the habit's only live param, since every habit must keep >=1.
+     */
+    fun deleteParam(paramId: Long, userId: Long): Boolean =
+        sessionOf(DatabaseService.dataSource).use { session ->
+            session.update(
+                queryOf(
+                    """
+                    UPDATE habit_params p
+                    SET deleted = true, deleted_at = now()
+                    FROM habits h
+                    WHERE p.id = ? AND p.habit_id = h.id AND h.user_id = ?
+                      AND p.deleted = false
+                      AND (SELECT count(*) FROM habit_params p2
+                           WHERE p2.habit_id = p.habit_id AND p2.deleted = false) > 1
+                    """.trimIndent(),
+                    paramId, userId
+                )
+            ) > 0
+        }
 
     /** Renders weekday list as a Postgres int[] literal, or null (= every day) when empty. */
     private fun List<Int>.toPgArray(): String? =

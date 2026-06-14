@@ -70,4 +70,15 @@ object Keyboards {
             }
         )
     }
+
+    /** Field choices shown after a habit is picked for param deletion. Payload: `dp|<paramId>`. */
+    fun pickParam(params: List<dto.HabitParam>, lang: Lang): InlineKeyboardMarkup {
+        return InlineKeyboardMarkup(
+            params.map { p ->
+                listOf(
+                    CallbackDataInlineKeyboardButton("🗑 ${p.name.orEmpty()}", "dp|${p.id}")
+                )
+            }
+        )
+    }
 }

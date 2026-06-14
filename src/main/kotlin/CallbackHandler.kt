@@ -26,6 +26,51 @@ fun BehaviourContext.registerCallbackHandler() {
     onMessageDataCallbackQuery(Regex("^pd\\|.*")) { handlePauseDuration(it) }
     onMessageDataCallbackQuery(Regex("^pc\\|.*")) { handlePauseCustom(it) }
     onMessageDataCallbackQuery(Regex("^rs\\|.*")) { handleHabitAction(it, "rs|", HabitService::resume, Strings::cbResumedShort, Strings::cbResumedFull) }
+    onMessageDataCallbackQuery(Regex("^dh\\|.*")) { handleParamHabitPick(it) }
+    onMessageDataCallbackQuery(Regex("^dp\\|.*")) { handleParamDelete(it) }
+}
+
+/** A habit was picked for field deletion — swap the message for its deletable fields. */
+private suspend fun BehaviourContext.handleParamHabitPick(query: MessageDataCallbackQuery) {
+    val habitId = query.data.removePrefix("dh|").toLongOrNull() ?: run {
+        answerCallbackQuery(query, text = Strings.cbError(data.lang))
+        return
+    }
+    val habit = HabitService.findById(habitId, data.userId)
+    val params = habit?.params?.filter { it.name != null }.orEmpty()
+    if (habit == null || params.isEmpty() || habit.params.size <= 1) {
+        answerCallbackQuery(query, text = Strings.cbNotFound(data.lang))
+        return
+    }
+    runCatching {
+        editMessageText(
+            chatId = query.message.chat.id,
+            messageId = query.message.messageId,
+            text = Strings.pickParamToDelete(data.lang),
+            replyMarkup = Keyboards.pickParam(params, data.lang),
+        )
+    }
+    answerCallbackQuery(query)
+}
+
+/** A field was picked — delete it (`dp|<paramId>`) and confirm in place. */
+private suspend fun BehaviourContext.handleParamDelete(query: MessageDataCallbackQuery) {
+    val paramId = query.data.removePrefix("dp|").toLongOrNull() ?: run {
+        answerCallbackQuery(query, text = Strings.cbError(data.lang))
+        return
+    }
+    if (HabitService.deleteParam(paramId, data.userId)) {
+        runCatching {
+            editMessageText(
+                chatId = query.message.chat.id,
+                messageId = query.message.messageId,
+                text = Strings.cbParamDeleted(data.lang),
+            )
+        }
+        answerCallbackQuery(query, text = Strings.cbDeleted(data.lang))
+    } else {
+        answerCallbackQuery(query, text = Strings.cbNotFound(data.lang))
+    }
 }
 
 /** A habit was picked for pausing — swap the message for the duration choices. */

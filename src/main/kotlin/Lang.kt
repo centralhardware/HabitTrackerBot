@@ -238,6 +238,12 @@ object Strings {
 
     fun pickHabitToRemove(l: Lang) = pick(l, "Pick a habit to remove:", "Выберите привычку для удаления:")
 
+    fun noParamsToDelete(l: Lang) = pick(l, "No fields to delete.", "Нет полей для удаления.")
+
+    fun pickHabitForParam(l: Lang) = pick(l, "Pick a habit:", "Выберите привычку:")
+
+    fun pickParamToDelete(l: Lang) = pick(l, "Pick a field to delete:", "Выберите поле для удаления:")
+
     fun noActiveToPause(l: Lang) = pick(l, "No active habits to pause.", "Нет активных привычек для паузы.")
 
     fun pickHabitToPause(l: Lang) = pick(l, "Pick a habit to pause:", "Выберите привычку для паузы:")
@@ -684,6 +690,7 @@ object Strings {
     fun cbLogged(l: Lang) = pick(l, "Logged ➕", "Записано ➕")
     fun cbRemovedShort(l: Lang) = pick(l, "Removed", "Удалено")
     fun cbRemovedFull(l: Lang) = pick(l, "Habit removed.", "Привычка удалена.")
+    fun cbParamDeleted(l: Lang) = pick(l, "Field deleted. 🗑", "Поле удалено. 🗑")
     fun cbPausedShort(l: Lang) = pick(l, "Paused", "На паузе")
     fun cbPausedFull(l: Lang) = pick(l, "Habit paused.", "Привычка на паузе.")
     fun cbPausedForDays(l: Lang, days: Int) = pick(
@@ -749,6 +756,7 @@ object BotCommandsI18n {
             "pause" to "pause a habit",
             "resume" to "resume a paused habit",
             "removehabit" to "remove a habit",
+            "deleteparam" to "delete a habit field",
             "tz" to "show or set your timezone",
             "lang" to "switch language (en/ru)",
             "mcp_new" to "create an MCP API token",
@@ -765,6 +773,7 @@ object BotCommandsI18n {
             "pause" to "поставить привычку на паузу",
             "resume" to "возобновить привычку",
             "removehabit" to "удалить привычку",
+            "deleteparam" to "удалить поле привычки",
             "tz" to "показать или задать часовой пояс",
             "lang" to "сменить язык (en/ru)",
             "mcp_new" to "создать токен MCP API",

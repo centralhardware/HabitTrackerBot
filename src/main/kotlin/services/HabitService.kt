@@ -28,6 +28,10 @@ object HabitService {
 
     fun softDelete(habitId: Long, userId: Long): Boolean = transition(habitId, userId, HabitStatus.DELETED)
 
+    /** Soft-deletes a habit field/param: hidden from the active habit, kept for historical records.
+     *  False if it's the habit's only live param. */
+    fun deleteParam(paramId: Long, userId: Long): Boolean = HabitRepository.deleteParam(paramId, userId)
+
     /**
      * Pauses a habit for [durationDays] (0 = indefinitely, until a manual /resume). A finite
      * duration sets an auto-resume deadline that [autoResumeExpired] later lifts.

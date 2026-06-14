@@ -352,7 +352,7 @@ object CheckInRepository {
                 queryOf(
                     """
                     UPDATE checkins e
-                    SET deleted = true
+                    SET deleted = true, deleted_at = now()
                     WHERE e.id = ?
                       AND e.user_id = ?
                       AND e.reminder_id IS NULL
