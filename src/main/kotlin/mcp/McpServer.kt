@@ -15,6 +15,9 @@ import io.ktor.server.request.header
 import io.ktor.server.request.path
 import io.ktor.server.response.header
 import io.ktor.server.response.respond
+import io.ktor.server.routing.get
+import io.ktor.server.routing.routing
+import calendar.CalendarHandler
 import io.ktor.util.AttributeKey
 import io.modelcontextprotocol.kotlin.sdk.server.Server
 import io.modelcontextprotocol.kotlin.sdk.server.ServerOptions
@@ -58,6 +61,11 @@ object McpServer {
                 context.attributes.put(UserIdKey, userId)
                 context.attributes.put(LangKey, Lang.stored(UserSettingsService.getLanguageCode(userId)) ?: Lang.EN)
                 context.attributes.put(TzKey, UserSettingsService.getTimezone(userId) ?: ZoneOffset.UTC)
+            }
+            routing {
+                // Read-only iCal subscription feed; the token in the path authenticates the user,
+                // so calendar apps (Google/Apple/Outlook) can subscribe without an auth header.
+                get("/calendar/{token}") { CalendarHandler.handle(call) }
             }
             mcpStatelessStreamableHttp(
                 path = "/mcp",

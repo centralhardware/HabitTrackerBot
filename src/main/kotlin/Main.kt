@@ -1,6 +1,7 @@
 import ReminderScheduler.sendDueReminders
 import TimerTicker.tickRunningTimers
 import commands.addhabit.registerAddHabitCommand
+import commands.registerCalendarCommand
 import commands.registerCheckInCommand
 import commands.registerDeleteParamCommand
 import commands.registerHabitsCommand
@@ -60,6 +61,7 @@ suspend fun main() {
         registerTzCommand()
         registerLangCommand()
         registerMcpCommands()
+        registerCalendarCommand()
         registerCallbackHandler()
 
         launch {

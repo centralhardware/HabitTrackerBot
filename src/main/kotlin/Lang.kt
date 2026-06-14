@@ -598,6 +598,36 @@ object Strings {
         "Token #$id not found or already revoked.",
         "Токен #$id не найден или уже отозван.")
 
+    fun calTitle(l: Lang) = pick(l, "📅 Habit calendar subscription", "📅 Подписка на календарь привычек")
+
+    fun calHowTo(l: Lang) = pick(l,
+        "Add this URL in your calendar app (Google/Apple/Outlook) as a subscribed calendar:",
+        "Добавьте эту ссылку в календарь (Google/Apple/Outlook) как подписной календарь:")
+
+    fun calToggleHint(l: Lang) = pick(l,
+        "Choose what shows up in the calendar:",
+        "Выберите, что показывать в календаре:")
+
+    fun calCheckins(l: Lang) = pick(l, "Check-ins", "Чек-ины")
+
+    fun calReminders(l: Lang) = pick(l, "Reminders", "Напоминания")
+
+    fun calNewLink(l: Lang) = pick(l, "🔄 New link", "🔄 Новая ссылка")
+
+    fun calLinkReset(l: Lang) = pick(l,
+        "New link created — the old one no longer works.",
+        "Новая ссылка создана — старая больше не работает.")
+
+    fun calUpdated(l: Lang) = pick(l, "Updated", "Обновлено")
+
+    fun calOff(l: Lang) = pick(l,
+        "Calendar subscription disabled. The link no longer works.",
+        "Подписка на календарь отключена. Ссылка больше не работает.")
+
+    fun calNoSub(l: Lang) = pick(l,
+        "No active calendar subscription. Create one with /calendar.",
+        "Активной подписки нет. Создайте через /calendar.")
+
     fun mcpRecordedQuantity(l: Lang, name: String, amount: Double, unit: String?, date: LocalDate, comment: String?): String {
         val u = unit?.let { " $it" } ?: ""
         val c = comment?.let { "\n💬 $it" } ?: ""
@@ -759,6 +789,8 @@ object BotCommandsI18n {
             "deleteparam" to "delete a habit field",
             "tz" to "show or set your timezone",
             "lang" to "switch language (en/ru)",
+            "calendar" to "subscribe to a habit calendar (iCal)",
+            "calendar_off" to "disable the calendar subscription",
             "mcp_new" to "create an MCP API token",
             "mcp_list" to "list MCP API tokens",
             "mcp_revoke" to "revoke an MCP API token",
@@ -776,6 +808,8 @@ object BotCommandsI18n {
             "deleteparam" to "удалить поле привычки",
             "tz" to "показать или задать часовой пояс",
             "lang" to "сменить язык (en/ru)",
+            "calendar" to "подписка на календарь привычек (iCal)",
+            "calendar_off" to "отключить подписку на календарь",
             "mcp_new" to "создать токен MCP API",
             "mcp_list" to "список токенов MCP API",
             "mcp_revoke" to "отозвать токен MCP API",

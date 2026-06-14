@@ -81,4 +81,16 @@ object Keyboards {
             }
         )
     }
+
+    /** Content toggles + relink control for the calendar feed. Payload: `cal|tc|tr|new`. */
+    fun calendar(includeCheckins: Boolean, includeReminders: Boolean, lang: Lang): InlineKeyboardMarkup {
+        fun mark(on: Boolean) = if (on) "✅" else "⬜"
+        return InlineKeyboardMarkup(
+            listOf(
+                listOf(CallbackDataInlineKeyboardButton("${mark(includeCheckins)} ${Strings.calCheckins(lang)}", "cal|tc")),
+                listOf(CallbackDataInlineKeyboardButton("${mark(includeReminders)} ${Strings.calReminders(lang)}", "cal|tr")),
+                listOf(CallbackDataInlineKeyboardButton(Strings.calNewLink(lang), "cal|new")),
+            )
+        )
+    }
 }
