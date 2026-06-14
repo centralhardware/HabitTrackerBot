@@ -68,6 +68,11 @@ object CalendarFeedService {
 
     private fun formatValue(c: CalendarCheckin): String? {
         val raw = c.value?.takeIf { it.isNotBlank() } ?: return null
+        // A timer's unnamed numeric field is its elapsed seconds — show it as a readable duration
+        // rather than a bare second count.
+        if (c.habitType == "timer" && c.paramType == "number" && c.paramName.isNullOrBlank()) {
+            return raw.toDoubleOrNull()?.let { humanizeSeconds(it.toLong()) } ?: raw
+        }
         val v = if (c.paramType == "number") raw.toDoubleOrNull()?.let(::trimNumber) ?: raw else raw
         // Numeric fields carry a unit; text fields don't. A field name (multi-field habits) labels
         // the value so bare numbers don't appear context-free in the calendar.
@@ -77,6 +82,17 @@ object CalendarFeedService {
 
     private fun trimNumber(d: Double): String =
         if (d == d.toLong().toDouble()) d.toLong().toString() else d.toString()
+
+    private fun humanizeSeconds(total: Long): String {
+        val h = total / 3600
+        val m = total % 3600 / 60
+        val s = total % 60
+        return buildString {
+            if (h > 0) append("${h}h ")
+            if (m > 0) append("${m}m ")
+            if (s > 0 || isEmpty()) append("${s}s")
+        }.trim()
+    }
 
     private fun writeAllDay(sb: StringBuilder, ev: CheckinEvent, stamp: String) {
         line(sb, "BEGIN:VEVENT")
