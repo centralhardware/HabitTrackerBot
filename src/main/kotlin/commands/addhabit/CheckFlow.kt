@@ -7,11 +7,19 @@ import dev.inmo.tgbotapi.types.IdChatIdentifier
 import lang
 
 /**
- * Counter habit: an optional integer daily target and an optional direction.
+ * Check habit: a done/skip habit whose behavior is the product of two facts gathered here and in
+ * the reminder step — whether ad-hoc check-ins are allowed (asked first; if so, an optional daily
+ * target + direction follow) and whether it has a schedule (the reminders collected afterwards).
+ * The orchestrator rejects a habit that ends up with neither.
  * Returns null (after sending a message) if the user cancelled or sent invalid input.
  */
-suspend fun BehaviourContext.counterFlow(chatId: IdChatIdentifier, logOnly: Boolean): HabitDraft? {
-    if (logOnly) return HabitDraft()
+suspend fun BehaviourContext.checkFlow(chatId: IdChatIdentifier, logOnly: Boolean): HabitDraft? {
+    val adHocChoice = pickFromKeyboard(chatId, Strings.askAllowAdHoc(data.lang), adHocKeyboard(data.lang), ADHOC_PREFIX)
+        ?: run { sendMessage(chatId, Strings.cancelled(data.lang)); return null }
+    val allowAdHoc = adHocChoice == ADHOC_YES
+
+    // Targets/directions only make sense for ad-hoc counting; log-only habits track no targets either.
+    if (!allowAdHoc || logOnly) return HabitDraft(allowAdHoc = allowAdHoc)
 
     sendMessage(chatId, Strings.sendDailyTarget(data.lang))
     val raw = nextText()
@@ -32,5 +40,5 @@ suspend fun BehaviourContext.counterFlow(chatId: IdChatIdentifier, logOnly: Bool
         DirPick.Cancelled -> { sendMessage(chatId, Strings.cancelled(data.lang)); return null }
     }
 
-    return HabitDraft(dailyTarget = dailyTarget, direction = direction)
+    return HabitDraft(dailyTarget = dailyTarget, direction = direction, allowAdHoc = true)
 }

@@ -27,7 +27,7 @@ object ReminderScheduler {
         withDate: Boolean
     ) {
         runCatching {
-            if (markPending && reminder.habitType == HabitType.SCHEDULED) {
+            if (markPending && reminder.habitType == HabitType.CHECK) {
                 // Creating this slot's pending row also skips the previous unresolved
                 // occurrence of the same habit; settle those messages now.
                 CheckInService.markPending(reminder.habitId, reminder.userId, reminder.reminderId, reminder.userDate)
@@ -39,10 +39,9 @@ object ReminderScheduler {
             val datePrefix = if (withDate) "📅 ${reminder.userDate} " else ""
             val text = "$datePrefix⏳ ${Strings.formatDisplayTime(reminder.offsetMinutes)} — ${reminder.name}"
             val keyboard = when (reminder.habitType) {
-                HabitType.SCHEDULED ->
+                // A check habit's reminder is a markable slot now (done/skip), never a "+1" nudge.
+                HabitType.CHECK ->
                     Keyboards.checkIn(reminder.reminderId, reminder.userDate, lang)
-                HabitType.COUNTER ->
-                    Keyboards.logPlus(reminder.habitId, reminder.userDate, lang)
                 HabitType.TIMER ->
                     Keyboards.timerControl(reminder.habitId, running = false, reminder.userDate, lang)
                 HabitType.QUANTITY -> null
@@ -52,7 +51,7 @@ object ReminderScheduler {
                 text = text,
                 replyMarkup = keyboard
             )
-            if (reminder.habitType == HabitType.SCHEDULED) {
+            if (reminder.habitType == HabitType.CHECK) {
                 ReminderMessageService.remember(
                     reminder.userId, sent.messageId.long, reminder.reminderId, reminder.userDate, text
                 )

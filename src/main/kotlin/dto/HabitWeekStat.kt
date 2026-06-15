@@ -13,7 +13,11 @@ data class HabitWeekStat(
     val counterDays: Int,
     val quantityTotal: Double,
     val quantityDays: Int,
-    val targetHitDays: Int
+    val targetHitDays: Int,
+    // CHECK habits only: whether the habit has reminder slots (done/skip block) and/or
+    // allows ad-hoc check-ins (counter block). Both blocks may be rendered.
+    val hasSchedule: Boolean = false,
+    val allowAdHoc: Boolean = false,
 )
 
 data class WeekTotals(

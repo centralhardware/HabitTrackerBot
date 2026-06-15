@@ -30,7 +30,7 @@ fun BehaviourContext.registerHabitsCommand() {
                 }
                 val tail = when {
                     times.isNotEmpty() -> " — $times"
-                    habit.type == HabitType.SCHEDULED -> ""
+                    habit.type == HabitType.CHECK -> ""
                     habit.multiField -> ""
                     else -> " — ${Strings.noReminders(data.lang)}"
                 }

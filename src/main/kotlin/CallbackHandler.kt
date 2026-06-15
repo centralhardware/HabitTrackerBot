@@ -241,7 +241,7 @@ private suspend fun BehaviourContext.handleLog(query: MessageDataCallbackQuery) 
     val total = CheckInService.counterCountOn(habitId, date)
     val msg = query.message
     val originalText = (msg.content as? dev.inmo.tgbotapi.types.message.content.TextContent)?.text.orEmpty()
-    val newText = if (habit != null && habit.type == HabitType.COUNTER) {
+    val newText = if (habit != null && habit.type == HabitType.CHECK) {
         Strings.counterLine(lang, habit, total, date)
     } else {
         originalText

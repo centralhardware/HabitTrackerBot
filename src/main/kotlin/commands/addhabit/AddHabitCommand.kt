@@ -15,7 +15,7 @@ import userId
 
 /**
  * /addhabit dialog: collects the habit name, type and log mode, delegates the type-specific
- * fields to the matching flow (see [counterFlow] / [timerFlow] / [quantityFlow]), then gathers
+ * fields to the matching flow (see [checkFlow] / [timerFlow] / [quantityFlow]), then gathers
  * reminders and saves. Each flow returns null when the user cancelled (having sent its own
  * message), which aborts the whole dialog.
  */
@@ -44,14 +44,19 @@ fun BehaviourContext.registerAddHabitCommand() {
         val logOnly = logChoice == LOG_ON
 
         val draft = when (type) {
-            HabitType.SCHEDULED -> HabitDraft()
-            HabitType.COUNTER -> counterFlow(chatId, logOnly)
+            HabitType.CHECK -> checkFlow(chatId, logOnly)
             HabitType.TIMER -> timerFlow(chatId, logOnly)
             HabitType.QUANTITY -> quantityFlow(chatId, logOnly)
         } ?: return@onCommand
 
         val reminders = if (type == HabitType.TIMER) emptyList()
-        else collectReminders(chatId, type) ?: return@onCommand
+        else collectReminders(chatId) ?: return@onCommand
+
+        // A check habit must have something to track: a schedule and/or ad-hoc check-ins.
+        if (type == HabitType.CHECK && reminders.isEmpty() && !draft.allowAdHoc) {
+            sendMessage(chatId, Strings.checkNeedsScheduleOrAdHoc(data.lang))
+            return@onCommand
+        }
 
         val habit = HabitService.addHabit(
             Habit(
@@ -64,6 +69,7 @@ fun BehaviourContext.registerAddHabitCommand() {
                 reminders = reminders,
                 params = draft.params,
                 logOnly = logOnly,
+                allowAdHoc = draft.allowAdHoc,
             )
         )
         sendMessage(chatId, Strings.habitAddedDetailed(data.lang, habit))
@@ -71,26 +77,23 @@ fun BehaviourContext.registerAddHabitCommand() {
 }
 
 /**
- * Reminder-collection loop, shared by all types. Scheduled habits require at least one time;
- * the others may skip reminders entirely. Returns null (after sending a message) on cancel/error.
+ * Reminder-collection loop, shared by all types. Reminders are always optional here; a check
+ * habit's "must have a schedule and/or ad-hoc" rule is enforced by the caller after this returns.
+ * Returns null (after sending a message) on cancel/error.
  */
-private suspend fun BehaviourContext.collectReminders(chatId: IdChatIdentifier, type: HabitType): List<HabitReminder>? {
-    val timesRequired = type == HabitType.SCHEDULED
+private suspend fun BehaviourContext.collectReminders(chatId: IdChatIdentifier): List<HabitReminder>? {
     val reminders = mutableListOf<HabitReminder>()
     while (true) {
         val firstOne = reminders.isEmpty()
-        val prompt = when {
-            !firstOne -> Strings.sendNextReminderTimeOrDone(data.lang)
-            timesRequired -> Strings.sendFirstReminderTime(data.lang)
-            else -> Strings.sendFirstReminderTimeOptional(data.lang)
-        }
+        val prompt = if (firstOne) Strings.sendFirstReminderTimeOptional(data.lang)
+                     else Strings.sendNextReminderTimeOrDone(data.lang)
         sendMessage(chatId, prompt)
         val timeText = nextText()
         if (timeText.startsWith("/")) {
             sendMessage(chatId, Strings.cancelled(data.lang)); return null
         }
         if (!firstOne && isDone(timeText)) break
-        if (firstOne && !timesRequired && isSkipped(timeText)) break
+        if (firstOne && isSkipped(timeText)) break
 
         val offsetMinutes = parseTime(timeText)
         if (offsetMinutes == null) {

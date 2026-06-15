@@ -27,7 +27,7 @@ fun BehaviourContext.registerCheckInCommand() {
         val yesterday = today.minusDays(1)
         val scheduled = CheckInRepository.pendingCheckIns(data.userId, yesterday, today)
         val active = HabitService.listActive(data.userId).filter { it.status == HabitStatus.ACTIVE }
-        val counters = active.filter { it.type == HabitType.COUNTER }
+        val counters = active.filter { it.type == HabitType.CHECK && it.allowAdHoc }
         // Running timers surface here too, so the user can stop them mid check-in.
         val timersById = active.filter { it.type == HabitType.TIMER }.associateBy { it.id }
         val runningTimers = TimerService.running(data.userId).filter { it.habitId in timersById }

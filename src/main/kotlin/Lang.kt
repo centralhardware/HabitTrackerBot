@@ -81,12 +81,11 @@ object Strings {
     fun cancelled(l: Lang) = pick(l, "Cancelled.", "Отменено.")
 
     fun pickHabitType(l: Lang) = pick(l,
-        "Pick a habit type:\n• scheduled — fixed reminder times, done/skip\n• counter — count check-ins (optional daily target, optional direction)\n• quantity — log decimal amounts (optional target, unit, direction)\n• timer — auto-track time spent (start/stop)",
-        "Выберите тип привычки:\n• расписание — фиксированные напоминания, готово/пропуск\n• счётчик — считать чек-ины (опциональные цель и направление)\n• количество — вводить вещественные значения (опциональные цель, единица, направление)\n• таймер — автоматически засекать время (старт/стоп)")
+        "Pick a habit type:\n• check — done/skip habit: mark scheduled times and/or log check-ins any time\n• quantity — log decimal amounts (optional target, unit, direction)\n• timer — auto-track time spent (start/stop)",
+        "Выберите тип привычки:\n• отметка — привычка готово/пропуск: отмечать по расписанию и/или в любое время\n• количество — вводить вещественные значения (опциональные цель, единица, направление)\n• таймер — автоматически засекать время (старт/стоп)")
 
     fun typeButtonLabel(l: Lang, t: HabitType): String = when (t) {
-        HabitType.SCHEDULED -> pick(l, "📅 scheduled", "📅 расписание")
-        HabitType.COUNTER -> pick(l, "🔢 counter", "🔢 счётчик")
+        HabitType.CHECK -> pick(l, "✅ check", "✅ отметка")
         HabitType.QUANTITY -> pick(l, "⚖️ quantity", "⚖️ количество")
         HabitType.TIMER -> pick(l, "⏱ timer", "⏱ таймер")
     }
@@ -197,10 +196,12 @@ object Strings {
         }
         val tail = buildString {
             when (h.type) {
-                HabitType.SCHEDULED -> append(" — $times")
-                HabitType.COUNTER -> {
-                    h.dailyTarget?.toInt()?.let { append(" — ${pick(l, "target: $it/day", "цель: $it/день")}") }
-                    h.direction?.let { append(" — ${directionLabel(l, it)}") }
+                HabitType.CHECK -> {
+                    if (h.allowAdHoc) {
+                        append(" — ${pick(l, "any time", "в любое время")}")
+                        h.dailyTarget?.toInt()?.let { append(" — ${pick(l, "target: $it/day", "цель: $it/день")}") }
+                        h.direction?.let { append(" — ${directionLabel(l, it)}") }
+                    }
                     if (times.isNotEmpty()) append(" — $times")
                 }
                 HabitType.QUANTITY -> {
@@ -354,8 +355,7 @@ object Strings {
     fun cbTimerNotRunning(l: Lang) = pick(l, "Timer wasn't running", "Таймер не был запущен")
 
     fun habitTypeLabel(l: Lang, h: Habit): String = when (h.type) {
-        HabitType.SCHEDULED -> pick(l, "scheduled", "расписание")
-        HabitType.COUNTER -> pick(l, "counter", "счётчик")
+        HabitType.CHECK -> pick(l, "check", "отметка")
         HabitType.QUANTITY -> pick(l, "quantity", "количество")
         HabitType.TIMER -> pick(l, "timer", "таймер")
     }
@@ -483,22 +483,25 @@ object Strings {
             stats.forEach { s ->
                 appendLine("• ${s.name}")
                 when (s.type) {
-                    HabitType.SCHEDULED -> {
-                        val total = s.scheduledDone + s.scheduledSkip
-                        val rate = if (total > 0) "%.0f%%".format(java.util.Locale.ROOT, s.scheduledDone * 100.0 / total) else "—"
-                        appendLine("    ✅ ${s.scheduledDone}   ❌ ${s.scheduledSkip}   ${statsCompletion(l)}: $rate")
-                    }
-                    HabitType.COUNTER -> {
-                        val avg = if (s.counterDays > 0) "%.1f".format(java.util.Locale.ROOT, s.counterTotal.toDouble() / s.counterDays) else "0"
-                        val dirSuffix = s.direction?.let { "   (${directionShort(l, it)})" } ?: ""
-                        appendLine(pick(l,
-                            "    total: ${s.counterTotal}   days: ${s.counterDays}   avg/day: $avg$dirSuffix",
-                            "    всего: ${s.counterTotal}   дней: ${s.counterDays}   среднее: $avg$dirSuffix"))
-                        val target = s.dailyTarget
-                        if (target != null) {
+                    // A check habit shows its scheduled (done/skip) block when it has reminders and
+                    // its ad-hoc counter block when it allows ad-hoc check-ins; both may appear.
+                    HabitType.CHECK -> {
+                        if (s.hasSchedule) {
+                            val total = s.scheduledDone + s.scheduledSkip
+                            val rate = if (total > 0) "%.0f%%".format(java.util.Locale.ROOT, s.scheduledDone * 100.0 / total) else "—"
+                            appendLine("    ✅ ${s.scheduledDone}   ❌ ${s.scheduledSkip}   ${statsCompletion(l)}: $rate")
+                        }
+                        if (s.allowAdHoc) {
+                            val avg = if (s.counterDays > 0) "%.1f".format(java.util.Locale.ROOT, s.counterTotal.toDouble() / s.counterDays) else "0"
+                            val dirSuffix = s.direction?.let { "   (${directionShort(l, it)})" } ?: ""
                             appendLine(pick(l,
-                                "    🎯 target hit: ${s.targetHitDays}/7",
-                                "    🎯 цель достигнута: ${s.targetHitDays}/7"))
+                                "    total: ${s.counterTotal}   days: ${s.counterDays}   avg/day: $avg$dirSuffix",
+                                "    всего: ${s.counterTotal}   дней: ${s.counterDays}   среднее: $avg$dirSuffix"))
+                            if (s.dailyTarget != null) {
+                                appendLine(pick(l,
+                                    "    🎯 target hit: ${s.targetHitDays}/7",
+                                    "    🎯 цель достигнута: ${s.targetHitDays}/7"))
+                            }
                         }
                     }
                     HabitType.QUANTITY -> {
@@ -636,6 +639,13 @@ object Strings {
             "🤖 через MCP — $name: ${formatAmount(amount)}$u — $date$c")
     }
 
+    fun mcpRecordedCheck(l: Lang, h: Habit, total: Int, date: LocalDate, comment: String?): String {
+        val c = comment?.let { "\n💬 $it" } ?: ""
+        return counterLine(l, h, total, date).let { line ->
+            pick(l, "🤖 via MCP — $line$c", "🤖 через MCP — $line$c")
+        }
+    }
+
     fun mcpRecordedQuantityGroup(
         l: Lang,
         root: Habit,
@@ -701,6 +711,17 @@ object Strings {
 
     fun btnTracked(l: Lang) = pick(l, "📊 tracked", "📊 с метриками")
     fun btnLogOnly(l: Lang) = pick(l, "📒 log only", "📒 только журнал")
+
+    fun askAllowAdHoc(l: Lang) = pick(l,
+        "Allow logging check-ins any time (a \"+1\" you can press whenever), on top of any scheduled times?",
+        "Разрешить отмечать в любое время (кнопка «+1», когда угодно), помимо времени по расписанию?")
+
+    fun btnAdHocYes(l: Lang) = pick(l, "✅ yes, any time", "✅ да, в любое время")
+    fun btnAdHocNo(l: Lang) = pick(l, "📅 no, scheduled only", "📅 нет, только по расписанию")
+
+    fun checkNeedsScheduleOrAdHoc(l: Lang) = pick(l,
+        "A check habit needs a schedule and/or ad-hoc check-ins — you chose neither. Start over with /addhabit.",
+        "Привычке-отметке нужно расписание и/или отметки в любое время — вы не выбрали ни то, ни другое. Начните заново через /addhabit.")
 
     fun sendFirstFieldName(l: Lang) = pick(l,
         "Name of the first field (e.g. \"km\"):",

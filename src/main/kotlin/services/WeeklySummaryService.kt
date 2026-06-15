@@ -26,6 +26,8 @@ object WeeklySummaryService {
                         direction = p.direction,
                         dailyTarget = p.dailyTarget,
                         unit = p.unit,
+                        hasSchedule = h.scheduled,
+                        allowAdHoc = h.allowAdHoc,
                         rows = rows.filter { it.paramId == p.id },
                         from = from,
                         to = to,
@@ -40,6 +42,8 @@ object WeeklySummaryService {
                         direction = h.direction,
                         dailyTarget = h.dailyTarget,
                         unit = h.unit,
+                        hasSchedule = h.scheduled,
+                        allowAdHoc = h.allowAdHoc,
                         rows = rows,
                         from = from,
                         to = to,
@@ -56,6 +60,8 @@ object WeeklySummaryService {
         direction: Direction?,
         dailyTarget: Double?,
         unit: String?,
+        hasSchedule: Boolean,
+        allowAdHoc: Boolean,
         rows: List<CheckinValueRow>,
         from: LocalDate,
         to: LocalDate,
@@ -74,12 +80,15 @@ object WeeklySummaryService {
             counterDays = totals.days,
             quantityTotal = totals.quantityTotal,
             quantityDays = totals.quantityDays,
-            targetHitDays = computeTargetHits(type, dailyTarget, direction, rows, from, to),
+            targetHitDays = computeTargetHits(type, allowAdHoc, dailyTarget, direction, rows, from, to),
+            hasSchedule = hasSchedule,
+            allowAdHoc = allowAdHoc,
         )
     }
 
     private fun computeTargetHits(
         type: HabitType,
+        allowAdHoc: Boolean,
         target: Double?,
         direction: Direction?,
         rows: List<CheckinValueRow>,
@@ -88,7 +97,9 @@ object WeeklySummaryService {
     ): Int {
         if (target == null) return 0
         return when (type) {
-            HabitType.COUNTER -> {
+            // A check habit's daily target applies to its ad-hoc counts; no target without ad-hoc.
+            HabitType.CHECK -> {
+                if (!allowAdHoc) return 0
                 val targetInt = target.toInt()
                 CheckinAnalytics.counterCountsPerDay(rows, from, to).values.count { count ->
                     if (direction == Direction.LESS) count <= targetInt
@@ -99,7 +110,6 @@ object WeeklySummaryService {
                 CheckinAnalytics.quantitySumsPerDayInRange(rows, from, to).values
                     .count { hits(it, target, direction) }
             }
-            HabitType.SCHEDULED -> 0
         }
     }
 

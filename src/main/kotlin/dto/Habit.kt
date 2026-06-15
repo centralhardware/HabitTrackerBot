@@ -8,13 +8,15 @@ import kotliquery.Row
 
 @Serializable
 enum class HabitType(val value: String) {
-    @SerialName("scheduled") SCHEDULED("scheduled"),
-    @SerialName("counter") COUNTER("counter"),
+    // A "did I do the thing?" habit. Its behavior is the product of two facts: whether it has
+    // reminders (schedule -> markable done/skip slots) and whether it allows ad-hoc check-ins
+    // (allowAdHoc -> a "+1" event any time). Merges the former `scheduled` and `counter` types.
+    @SerialName("check") CHECK("check"),
     @SerialName("quantity") QUANTITY("quantity"),
     @SerialName("timer") TIMER("timer");
 
     companion object {
-        fun parse(s: String?): HabitType = entries.firstOrNull { it.value == s } ?: SCHEDULED
+        fun parse(s: String?): HabitType = entries.firstOrNull { it.value == s } ?: CHECK
     }
 }
 
@@ -99,12 +101,18 @@ data class Habit(
     val status: HabitStatus = HabitStatus.ACTIVE,
     @EncodeDefault(EncodeDefault.Mode.NEVER) val params: List<HabitParam> = emptyList(),
     @EncodeDefault(EncodeDefault.Mode.NEVER) val logOnly: Boolean = false,
+    /** CHECK habits only: whether arbitrary "+1" check-ins may be logged any time, independent
+     *  of any schedule. A check habit must have a schedule and/or this flag (never neither). */
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val allowAdHoc: Boolean = false,
 ) {
     /** A multi-field quantity habit: more than one param. Single-field habits hoist their
      *  param's metadata onto the habit row, so callers can treat them as plain habits.
      *  Timers may carry several params too (their extra annotation fields), but those are
      *  pure annotations — a timer is never a multi-field habit for stats/rendering. */
     val multiField: Boolean get() = type == HabitType.QUANTITY && params.size > 1
+
+    /** A check habit with reminders marks each fired occurrence as a done/skip slot. */
+    val scheduled: Boolean get() = type == HabitType.CHECK && reminders.isNotEmpty()
 }
 
 /** Maps a `habits` row. Reminders and params are loaded separately and filled in by the repository. */
@@ -118,6 +126,7 @@ fun Row.toHabit(): Habit = Habit(
     direction = Direction.parse(stringOrNull("direction")),
     status = HabitStatus.parse(stringOrNull("status")),
     logOnly = boolean("log_only"),
+    allowAdHoc = boolean("allow_adhoc"),
 )
 
 fun Row.toHabitParam(): HabitParam = HabitParam(

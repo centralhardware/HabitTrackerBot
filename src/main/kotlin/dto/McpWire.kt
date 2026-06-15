@@ -88,6 +88,13 @@ fun FieldValueArg.parse(paramType: ParamType): FieldValue? = when (paramType) {
 }
 
 @Serializable
+data class CheckRecordArgs(
+    val habitId: Long,
+    val date: String? = null,
+    val comment: String? = null,
+)
+
+@Serializable
 data class CheckinDeleteArgs(
     val checkinId: Long,
 )

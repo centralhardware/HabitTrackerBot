@@ -92,7 +92,7 @@ object HabitService {
             DueReminder(
                 reminderId = r.reminderId,
                 habitId = r.habitId,
-                habitType = HabitType.SCHEDULED,
+                habitType = HabitType.CHECK,
                 userId = r.userId,
                 name = r.name,
                 offsetMinutes = r.offsetMinutes,

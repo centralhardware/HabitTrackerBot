@@ -28,6 +28,7 @@ data class HabitDraft(
     val unit: String? = null,
     val direction: Direction? = null,
     val params: List<HabitParam> = emptyList(),
+    val allowAdHoc: Boolean = false,
 )
 
 /** Outcome of a direction prompt: a chosen direction (possibly null = "no direction") or a cancel. */
@@ -87,6 +88,9 @@ internal const val PTYPE_TEXT = "text"
 internal const val PHASE_PREFIX = "aph"
 internal const val PHASE_BEFORE = "before"
 internal const val PHASE_AFTER = "after"
+internal const val ADHOC_PREFIX = "aah"
+internal const val ADHOC_YES = "yes"
+internal const val ADHOC_NO = "no"
 
 // ---- keyboards ----
 
@@ -101,6 +105,13 @@ internal fun timerPhaseKeyboard(lang: Lang) = InlineKeyboardMarkup(
     listOf(
         listOf(CallbackDataInlineKeyboardButton(Strings.btnPhaseBefore(lang), "$PHASE_PREFIX|$PHASE_BEFORE")),
         listOf(CallbackDataInlineKeyboardButton(Strings.btnPhaseAfter(lang), "$PHASE_PREFIX|$PHASE_AFTER")),
+    )
+)
+
+internal fun adHocKeyboard(lang: Lang) = InlineKeyboardMarkup(
+    listOf(
+        listOf(CallbackDataInlineKeyboardButton(Strings.btnAdHocYes(lang), "$ADHOC_PREFIX|$ADHOC_YES")),
+        listOf(CallbackDataInlineKeyboardButton(Strings.btnAdHocNo(lang), "$ADHOC_PREFIX|$ADHOC_NO")),
     )
 )
 

@@ -30,7 +30,7 @@ object HabitRepository {
                 queryOf(
                     """
                     SELECT h.id, h.user_id, h.name, h.habit_type, h.daily_target,
-                           h.unit, h.direction, h.status, h.log_only
+                           h.unit, h.direction, h.status, h.log_only, h.allow_adhoc
                     FROM habits h
                     WHERE h.user_id = ? AND h.status <> 'deleted'
                     ORDER BY h.created_at
@@ -96,12 +96,12 @@ object HabitRepository {
                 val id = tx.updateAndReturnGeneratedKey(
                     queryOf(
                         """
-                        INSERT INTO habits (user_id, name, habit_type, daily_target, unit, direction, status, log_only)
-                        VALUES (?, ?, ?::habit_type, ?, ?, ?::habit_direction, ?::habit_status, ?)
+                        INSERT INTO habits (user_id, name, habit_type, daily_target, unit, direction, status, log_only, allow_adhoc)
+                        VALUES (?, ?, ?::habit_type, ?, ?, ?::habit_direction, ?::habit_status, ?, ?)
                         """.trimIndent(),
                         habit.userId, habit.name, habit.type.value,
                         habit.dailyTarget, habit.unit, habit.direction?.value,
-                        habit.status.value, habit.logOnly
+                        habit.status.value, habit.logOnly, habit.allowAdHoc
                     )
                 ) ?: error("Failed to insert habit")
 
@@ -119,9 +119,9 @@ object HabitRepository {
                         // Quantity habits get a numeric service param; timer habits store their
                         // elapsed minutes on the same kind of single numeric param.
                         HabitType.QUANTITY, HabitType.TIMER -> listOf(HabitParam(id = 0, paramType = dto.ParamType.NUMBER))
-                        // Counter events are bare checkins rows; scheduled events keep their
-                        // done/skip status on the checkins row — neither needs a param.
-                        HabitType.COUNTER, HabitType.SCHEDULED -> emptyList()
+                        // Check habits need no param: ad-hoc events are bare checkins rows, and
+                        // scheduled slots keep their done/skip status on the checkins row.
+                        HabitType.CHECK -> emptyList()
                     }
                 }
                 val savedParams = params.mapIndexed { i, p ->
@@ -155,13 +155,14 @@ object HabitRepository {
                         direction    = ?::habit_direction,
                         status       = ?::habit_status,
                         log_only     = ?,
+                        allow_adhoc  = ?,
                         paused_at    = CASE WHEN ?::habit_status = 'paused'  AND status <> 'paused'  THEN now() ELSE paused_at  END,
                         deleted_at   = CASE WHEN ?::habit_status = 'deleted' AND status <> 'deleted' THEN now() ELSE deleted_at END,
                         paused_until = CASE WHEN ?::habit_status <> 'paused' THEN NULL ELSE paused_until END
                     WHERE id = ? AND user_id = ?
                     """.trimIndent(),
                     habit.name, habit.type.value, habit.dailyTarget, habit.unit, habit.direction?.value,
-                    habit.status.value, habit.logOnly,
+                    habit.status.value, habit.logOnly, habit.allowAdHoc,
                     habit.status.value, habit.status.value, habit.status.value,
                     habit.id, habit.userId
                 )
@@ -243,7 +244,7 @@ object HabitRepository {
                        END
                     WHERE h.status = 'active'
                       AND us.timezone IS NOT NULL
-                      AND (h.habit_type <> 'scheduled' OR c.id IS NULL)
+                      AND (h.habit_type <> 'check' OR c.id IS NULL)
                     """.trimIndent()
                 ).map { it.toRawDue() }.asList
             )
@@ -288,7 +289,7 @@ object HabitRepository {
                             ON c.reminder_id = r.id
                            AND c.check_date  = d::date
                         WHERE h.status = 'active'
-                          AND h.habit_type = 'scheduled'
+                          AND h.habit_type = 'check'
                           AND us.timezone IS NOT NULL
                           AND c.id IS NULL
                           AND (r.reminder_days IS NULL

@@ -39,6 +39,7 @@ private val TzKey = AttributeKey<ZoneId>("mcpTz")
 private val tools: List<McpTool> = listOf(
     HabitsListTool,
     QuantityRecordTool,
+    CheckRecordTool,
     CheckinsListTool,
     CheckinUpdateTool,
     CheckinDeleteTool,
