@@ -100,6 +100,27 @@ data class CheckinDeleteArgs(
 )
 
 @Serializable
+data class ParamValuesListArgs(
+    val habitId: Long,
+    val paramId: Long,
+)
+
+@Serializable
+data class ParamValuesMergeArgs(
+    val habitId: Long,
+    val paramId: Long,
+    val from: List<String> = emptyList(),
+    val into: String,
+)
+
+/** One distinct value of a low-cardinality param's dictionary and how many check-ins use it. */
+@Serializable
+data class ParamValueUsage(
+    val value: String,
+    val uses: Int,
+)
+
+@Serializable
 data class CheckinUpdateArgs(
     val checkinId: Long,
     val comment: String? = null,
