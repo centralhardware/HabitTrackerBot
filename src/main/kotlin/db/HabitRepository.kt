@@ -56,7 +56,7 @@ object HabitRepository {
             val paramsByHabit = session.run(
                 queryOf(
                     """
-                    SELECT p.id, p.habit_id, p.name, p.unit, p.direction, p.daily_target, p.position, p.param_type, p.timer_phase
+                    SELECT p.id, p.habit_id, p.name, p.unit, p.direction, p.daily_target, p.position, p.param_type, p.timer_phase, p.low_cardinality
                     FROM habit_params p
                     JOIN habits h ON h.id = p.habit_id
                     WHERE h.user_id = ? AND h.status <> 'deleted' AND p.deleted = false
@@ -128,10 +128,10 @@ object HabitRepository {
                     val pid = tx.updateAndReturnGeneratedKey(
                         queryOf(
                             """
-                            INSERT INTO habit_params (habit_id, name, unit, direction, daily_target, position, param_type, timer_phase)
-                            VALUES (?, ?, ?, ?::habit_direction, ?, ?, ?::param_type, ?)
+                            INSERT INTO habit_params (habit_id, name, unit, direction, daily_target, position, param_type, timer_phase, low_cardinality)
+                            VALUES (?, ?, ?, ?::habit_direction, ?, ?, ?::param_type, ?, ?)
                             """.trimIndent(),
-                            id, p.name, p.unit, p.direction?.value, p.dailyTarget, i, p.paramType.value, p.timerPhase?.value
+                            id, p.name, p.unit, p.direction?.value, p.dailyTarget, i, p.paramType.value, p.timerPhase?.value, p.lowCardinality
                         )
                     ) ?: error("Failed to insert habit param")
                     p.copy(id = pid, habitId = id, position = i)

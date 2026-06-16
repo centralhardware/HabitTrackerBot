@@ -87,10 +87,12 @@ object CheckInRepository {
                         RETURNING id
                     ),
                     new_values AS (
-                        INSERT INTO checkin_values (checkin_id, param_id, status, value)
-                        SELECT ne.id, t.param_id, t.status, t.value
+                        INSERT INTO checkin_values (checkin_id, param_id, status, value, value_id)
+                        -- store_param_value decides inline vs. dictionary per param (V43).
+                        SELECT ne.id, t.param_id, t.status, s.value, s.value_id
                         FROM new_event ne
                         CROSS JOIN (VALUES $valuesSql) AS t(param_id, status, value)
+                        CROSS JOIN LATERAL store_param_value(t.param_id, t.value) AS s
                     )
                     SELECT id FROM new_event
                     """.trimIndent(),
@@ -115,8 +117,11 @@ object CheckInRepository {
             session.update(
                 queryOf(
                     """
-                    INSERT INTO checkin_values (checkin_id, param_id, status, value)
-                    VALUES $valuesSql
+                    INSERT INTO checkin_values (checkin_id, param_id, status, value, value_id)
+                    -- store_param_value decides inline vs. dictionary per param (V43).
+                    SELECT t.checkin_id, t.param_id, t.status, s.value, s.value_id
+                    FROM (VALUES $valuesSql) AS t(checkin_id, param_id, status, value)
+                    CROSS JOIN LATERAL store_param_value(t.param_id, t.value) AS s
                     -- Match the partial unique index checkin_values_param_uniq (V30), defined
                     -- WHERE param_id IS NOT NULL. Without repeating that predicate Postgres can't
                     -- infer the index and the whole INSERT errors out — which silently dropped
@@ -239,7 +244,7 @@ object CheckInRepository {
                 queryOf(
                     """
                     SELECT e.id AS checkin_id, v.param_id, p.param_type, p.timer_phase, e.check_date, e.reminder_id,
-                           v.status, v.value, e.comment, r.reminder_time, e.checked_at
+                           v.status, read_param_value(v.value, v.value_id) AS value, e.comment, r.reminder_time, e.checked_at
                     FROM checkins e
                     -- LEFT JOIN: counter events have no checkin_values row, but still
                     -- need to appear (one row per event) so they're counted.
@@ -267,7 +272,7 @@ object CheckInRepository {
                 queryOf(
                     """
                     SELECT e.habit_id, e.check_date, e.comment,
-                           v.param_id, p.param_type, v.status, v.value
+                           v.param_id, p.param_type, v.status, read_param_value(v.value, v.value_id) AS value
                     FROM checkins e
                     JOIN checkin_values v ON v.checkin_id = e.id
                     JOIN habit_params p ON p.id = v.param_id
@@ -275,7 +280,7 @@ object CheckInRepository {
                       AND e.user_id = ?
                       AND e.reminder_id IS NULL
                       AND e.deleted = false
-                      AND v.value IS NOT NULL
+                      AND read_param_value(v.value, v.value_id) IS NOT NULL
                     """.trimIndent(),
                     checkinId, userId
                 ).map { row ->
@@ -327,16 +332,18 @@ object CheckInRepository {
             session.update(
                 queryOf(
                     """
-                    INSERT INTO checkin_values (checkin_id, param_id, status, value)
-                    SELECT e.id, ?, 'done'::checkin_status, ?
+                    INSERT INTO checkin_values (checkin_id, param_id, status, value, value_id)
+                    -- store_param_value decides inline vs. dictionary per param (V43).
+                    SELECT e.id, ?, 'done'::checkin_status, s.value, s.value_id
                     FROM checkins e
+                    CROSS JOIN LATERAL store_param_value(?, ?) AS s
                     WHERE e.id = ?
                       AND e.user_id = ?
                       AND e.deleted = false
                     ON CONFLICT (checkin_id, param_id) WHERE param_id IS NOT NULL
-                    DO UPDATE SET value = EXCLUDED.value
+                    DO UPDATE SET value = EXCLUDED.value, value_id = EXCLUDED.value_id
                     """.trimIndent(),
-                    paramId, value, checkinId, userId
+                    paramId, paramId, value, checkinId, userId
                 )
             ) > 0
         }
@@ -360,7 +367,7 @@ object CheckInRepository {
                       AND e.check_date >= ?
                       AND EXISTS (
                           SELECT 1 FROM checkin_values v
-                          WHERE v.checkin_id = e.id AND v.value IS NOT NULL
+                          WHERE v.checkin_id = e.id AND read_param_value(v.value, v.value_id) IS NOT NULL
                       )
                     """.trimIndent(),
                     checkinId, userId, notBefore

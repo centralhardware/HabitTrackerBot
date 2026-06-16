@@ -24,7 +24,8 @@ data class CheckinEvent(
     val comment: String?,
 )
 
-/** One per-param value of an event: a row in `checkin_values`. */
+/** One per-param value of an event: a row in `checkin_values`. The value is passed as plain text;
+ *  for a low-cardinality param the INSERT interns it into the `param_values` dictionary (V43). */
 data class CheckinValue(
     val paramId: Long,
     val status: CheckinStatus?,
