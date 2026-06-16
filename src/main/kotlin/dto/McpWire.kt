@@ -1,5 +1,6 @@
 package dto
 
+import kotlinx.serialization.EncodeDefault
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.descriptors.PrimitiveKind
@@ -21,12 +22,21 @@ data class CheckinsListArgs(
     val to: String? = null,
 )
 
-/** One habit's check-ins in a batch [CheckinsListArgs] query. */
+/** One habit's check-ins in a batch [CheckinsListArgs] query. [paramValues] carries the value
+ *  dictionary of each low-cardinality param (empty/omitted for habits that have none). */
 @Serializable
 data class HabitCheckins(
     val habitId: Long,
     val found: Boolean,
     val checkins: List<CheckinRecord>,
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val paramValues: List<ParamDictionary> = emptyList(),
+)
+
+/** The distinct dictionary values of one low-cardinality param, with per-value usage counts. */
+@Serializable
+data class ParamDictionary(
+    val paramId: Long,
+    val values: List<ParamValueUsage>,
 )
 
 /** Batch [CheckinsListArgs] response: echoes the resolved date window so callers know what range they got. */
@@ -97,12 +107,6 @@ data class CheckRecordArgs(
 @Serializable
 data class CheckinDeleteArgs(
     val checkinId: Long,
-)
-
-@Serializable
-data class ParamValuesListArgs(
-    val habitId: Long,
-    val paramId: Long,
 )
 
 @Serializable

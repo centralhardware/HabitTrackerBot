@@ -2,11 +2,13 @@ package mcp
 
 import services.CheckInService
 import services.HabitService
+import services.ParamValueService
 import Lang
 import dto.CheckinsListArgs
 import dto.CheckinsListResult
 import dto.HabitCheckins
 import dto.McpJson
+import dto.ParamDictionary
 import io.modelcontextprotocol.kotlin.sdk.types.CallToolResult
 import io.modelcontextprotocol.kotlin.sdk.types.ToolAnnotations
 import io.modelcontextprotocol.kotlin.sdk.types.ToolSchema
@@ -30,7 +32,10 @@ object CheckinsListTool : TypedMcpTool<CheckinsListArgs>(CheckinsListArgs.serial
             "(done/skip/pending for scheduled habits), quantity (for quantity habits), reminderTime (for scheduled habits), " +
             "recordedAt (ISO-8601 instant the entry was written; for a timer this is when it was stopped, i.e. the session end), " +
             "startedAt (ISO-8601 instant; only on a timer's duration row — the session start, derived as recordedAt minus the elapsed seconds), and " +
-            "comment (when set). Unknown habit ids are returned with found=false."
+            "comment (when set). Unknown habit ids are returned with found=false. Each habit entry also carries " +
+            "paramValues[] — the value dictionary of every low-cardinality param ({ paramId, values:[{ value, uses }] }), " +
+            "most-used first; use it with param_values_merge to fold near-duplicate values together (omitted when the " +
+            "habit has no low-cardinality params)."
     override val inputSchema: ToolSchema = buildSchema()
     override val annotations = ToolAnnotations(readOnlyHint = true, openWorldHint = false)
 
@@ -53,7 +58,12 @@ object CheckinsListTool : TypedMcpTool<CheckinsListArgs>(CheckinsListArgs.serial
         val habitIds = args.habitIds.ifEmpty { HabitService.listActive(userId).map { it.id } }
         val habits = habitIds.distinct().map { habitId ->
             val rows = CheckInService.listInRange(habitId, userId, from, to)
-            HabitCheckins(habitId = habitId, found = rows != null, checkins = rows ?: emptyList())
+            val paramValues = HabitService.findById(habitId, userId)?.params
+                ?.filter { it.lowCardinality }
+                ?.map { ParamDictionary(it.id, ParamValueService.listValues(it.id)) }
+                ?.filter { it.values.isNotEmpty() }
+                ?: emptyList()
+            HabitCheckins(habitId, found = rows != null, checkins = rows ?: emptyList(), paramValues = paramValues)
         }
         val result = CheckinsListResult(from = from.toString(), to = to.toString(), habits = habits)
         return ok(McpJson.encodeToString(result))

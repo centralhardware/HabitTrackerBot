@@ -21,7 +21,7 @@ object ParamValuesMergeTool : TypedMcpTool<ParamValuesMergeArgs>(ParamValuesMerg
             "[\"brew method\",\"Brew method\"] into \"V60\", or fix a typo. Every check-in using a 'from' value is " +
             "repointed to 'into', and the emptied 'from' entries are dropped from the dictionary. 'into' may be an " +
             "existing value or a brand-new label (it's created if needed). 'habitId'/'paramId' come from habits_list; " +
-            "the param must be low-cardinality. Call param_values_list first to get the exact strings. " +
+            "the param must be low-cardinality. Read the exact strings from checkins_list paramValues[] first. " +
             "Returns the number of check-ins repointed."
     override val inputSchema: ToolSchema = buildSchema()
     override val annotations = ToolAnnotations(
@@ -76,7 +76,7 @@ object ParamValuesMergeTool : TypedMcpTool<ParamValuesMergeArgs>(ParamValuesMerg
             putJsonObject("from") {
                 put("type", "array")
                 put("minItems", 1)
-                put("description", "The values to fold away (exact strings from param_values_list).")
+                put("description", "The values to fold away (exact strings from checkins_list paramValues[]).")
                 putJsonObject("items") { put("type", "string") }
             }
             putJsonObject("into") {

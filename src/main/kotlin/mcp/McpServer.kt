@@ -43,7 +43,6 @@ private val tools: List<McpTool> = listOf(
     CheckinsListTool,
     CheckinUpdateTool,
     CheckinDeleteTool,
-    ParamValuesListTool,
     ParamValuesMergeTool,
     StatsUserTool,
 )
