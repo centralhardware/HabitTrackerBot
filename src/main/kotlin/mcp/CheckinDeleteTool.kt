@@ -48,12 +48,8 @@ object CheckinDeleteTool : TypedMcpTool<CheckinDeleteArgs>(CheckinDeleteArgs.ser
         val lines = deleted.values.map { v ->
             val param = habit?.params?.firstOrNull { it.id == v.paramId }
             val name = param?.name ?: habit?.name ?: "#${v.paramId}"
-            val unitSrc = param?.unit ?: habit?.unit
             val detail = when (val fv = v.value) {
-                is FieldValue.Numeric -> {
-                    val unit = unitSrc?.let { " $it" } ?: ""
-                    "${Strings.formatAmount(fv.v)}$unit"
-                }
+                is FieldValue.Numeric -> Strings.paramAmount(lang, habit, param, fv.v)
                 is FieldValue.Text -> fv.v
                 null -> v.status?.value ?: "—"
             }

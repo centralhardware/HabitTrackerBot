@@ -2,6 +2,7 @@ import dev.inmo.tgbotapi.types.abstracts.WithOptionalLanguageCode
 import dev.inmo.tgbotapi.types.chat.User
 import dto.Direction
 import dto.Habit
+import dto.HabitParam
 import dto.HabitStat
 import dto.HabitType
 import dto.HabitWeekStat
@@ -379,6 +380,18 @@ object Strings {
             else -> pick(l, "${m}m", "${m}м")
         }
     }
+
+    /**
+     * Display value of a numeric param. A timer's duration param (the `timerPhase == null` field of a
+     * TIMER habit) stores elapsed seconds, so render it as a duration ("50м") rather than a raw count;
+     * every other numeric param is a plain amount plus its unit.
+     */
+    fun paramAmount(l: Lang, habit: Habit?, param: HabitParam?, v: Double): String =
+        if (habit?.type == HabitType.TIMER && param?.timerPhase == null) {
+            formatDuration(l, v)
+        } else {
+            formatAmount(v) + ((param?.unit ?: habit?.unit)?.let { " $it" } ?: "")
+        }
 
     fun formatAmount(v: Double): String {
         if (v.isNaN() || v.isInfinite()) return "0"
