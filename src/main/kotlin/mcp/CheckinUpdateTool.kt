@@ -84,10 +84,7 @@ object CheckinUpdateTool : TypedMcpTool<CheckinUpdateArgs>(CheckinUpdateArgs.ser
                 val param = habit?.params?.firstOrNull { it.id == v.paramId }
                 val name = param?.name ?: habit?.name ?: "#${v.paramId}"
                 when (val fv = v.value) {
-                    is FieldValue.Numeric -> {
-                        val unit = (param?.unit ?: habit?.unit)?.let { " $it" } ?: ""
-                        add("$name: ${Strings.formatAmount(fv.v)}$unit")
-                    }
+                    is FieldValue.Numeric -> add("$name: ${Strings.paramAmount(lang, habit, param, fv.v)}")
                     is FieldValue.Text -> add("$name: ${fv.v}")
                     null -> {}
                 }
