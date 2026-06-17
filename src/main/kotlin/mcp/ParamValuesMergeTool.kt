@@ -17,12 +17,12 @@ import java.time.ZoneId
 object ParamValuesMergeTool : TypedMcpTool<ParamValuesMergeArgs>(ParamValuesMergeArgs.serializer()) {
     override val name = "param_values_merge"
     override val description =
-        "Fold near-duplicate values of a low-cardinality param into one canonical value — e.g. merge " +
+        "Fold near-duplicate values of a param into one canonical value — e.g. merge " +
             "[\"brew method\",\"Brew method\"] into \"V60\", or fix a typo. Every check-in using a 'from' value is " +
             "repointed to 'into', and the emptied 'from' entries are dropped from the dictionary. 'into' may be an " +
-            "existing value or a brand-new label (it's created if needed). 'habitId'/'paramId' come from habits_list; " +
-            "the param must be low-cardinality. Read the exact strings from checkins_list paramValues[] first. " +
-            "Returns the number of check-ins repointed."
+            "existing value or a brand-new label (it's created if needed). 'habitId'/'paramId' come from habits_list. " +
+            "Only values that have recurred have a dictionary entry; read the exact strings from checkins_list " +
+            "paramValues[] first. Returns the number of check-ins repointed."
     override val inputSchema: ToolSchema = buildSchema()
     override val annotations = ToolAnnotations(
         readOnlyHint = false,
@@ -34,9 +34,8 @@ object ParamValuesMergeTool : TypedMcpTool<ParamValuesMergeArgs>(ParamValuesMerg
     override fun handle(userId: Long, lang: Lang, tz: ZoneId, args: ParamValuesMergeArgs): CallToolResult {
         val habit = HabitService.findById(args.habitId, userId)
             ?: return err("Habit ${args.habitId} not found")
-        val param = habit.params.firstOrNull { it.id == args.paramId }
+        habit.params.firstOrNull { it.id == args.paramId }
             ?: return err("Param ${args.paramId} is not a field of habit ${args.habitId}")
-        if (!param.lowCardinality) return err("Param ${args.paramId} is not low-cardinality; it has no value dictionary")
 
         val into = args.into.trim()
         if (into.isEmpty()) return err("'into' must be non-blank")
@@ -71,7 +70,7 @@ object ParamValuesMergeTool : TypedMcpTool<ParamValuesMergeArgs>(ParamValuesMerg
             }
             putJsonObject("paramId") {
                 put("type", "integer")
-                put("description", "A low-cardinality param id from habits_list params[].id of this habit.")
+                put("description", "A param id from habits_list params[].id of this habit.")
             }
             putJsonObject("from") {
                 put("type", "array")

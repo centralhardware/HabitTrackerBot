@@ -83,9 +83,6 @@ data class HabitParam(
     // Set only on a timer's extra annotation fields, marking whether they're collected
     // before the timer starts or after it stops. Null on the duration param and elsewhere.
     @EncodeDefault(EncodeDefault.Mode.NEVER) val timerPhase: TimerPhase? = null,
-    // When true, this param's repeated text values are interned into the `param_values`
-    // dictionary instead of stored inline on every check-in (see V43).
-    @EncodeDefault(EncodeDefault.Mode.NEVER) val lowCardinality: Boolean = false,
 )
 
 /** A habit that an expired pause just flipped back to active, with enough to notify its owner. */
@@ -142,7 +139,6 @@ fun Row.toHabitParam(): HabitParam = HabitParam(
     position = int("position"),
     paramType = ParamType.parse(string("param_type")) ?: error("habit_params.param_type is NULL"),
     timerPhase = TimerPhase.parse(stringOrNull("timer_phase")),
-    lowCardinality = boolean("low_cardinality"),
 )
 
 /** Reads a nullable Postgres int[] column; NULL becomes an empty list. */

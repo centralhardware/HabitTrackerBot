@@ -22,8 +22,8 @@ data class CheckinsListArgs(
     val to: String? = null,
 )
 
-/** One habit's check-ins in a batch [CheckinsListArgs] query. [paramValues] carries the value
- *  dictionary of each low-cardinality param (empty/omitted for habits that have none). */
+/** One habit's check-ins in a batch [CheckinsListArgs] query. [paramValues] carries each param's
+ *  dictionary of recurring values (empty/omitted for habits that have none yet). */
 @Serializable
 data class HabitCheckins(
     val habitId: Long,
@@ -32,7 +32,7 @@ data class HabitCheckins(
     @EncodeDefault(EncodeDefault.Mode.NEVER) val paramValues: List<ParamDictionary> = emptyList(),
 )
 
-/** The distinct dictionary values of one low-cardinality param, with per-value usage counts. */
+/** The distinct dictionary (recurring) values of one param, with per-value usage counts. */
 @Serializable
 data class ParamDictionary(
     val paramId: Long,
@@ -117,7 +117,7 @@ data class ParamValuesMergeArgs(
     val into: String,
 )
 
-/** One distinct value of a low-cardinality param's dictionary and how many check-ins use it. */
+/** One distinct value of a param's recurring-value dictionary and how many check-ins use it. */
 @Serializable
 data class ParamValueUsage(
     val value: String,

@@ -33,9 +33,9 @@ object CheckinsListTool : TypedMcpTool<CheckinsListArgs>(CheckinsListArgs.serial
             "recordedAt (ISO-8601 instant the entry was written; for a timer this is when it was stopped, i.e. the session end), " +
             "startedAt (ISO-8601 instant; only on a timer's duration row — the session start, derived as recordedAt minus the elapsed seconds), and " +
             "comment (when set). Unknown habit ids are returned with found=false. Each habit entry also carries " +
-            "paramValues[] — the value dictionary of every low-cardinality param ({ paramId, values:[{ value, uses }] }), " +
+            "paramValues[] — the dictionary of recurring (seen more than once) param values ({ paramId, values:[{ value, uses }] }), " +
             "most-used first; use it with param_values_merge to fold near-duplicate values together (omitted when the " +
-            "habit has no low-cardinality params)."
+            "habit has no recurring values yet)."
     override val inputSchema: ToolSchema = buildSchema()
     override val annotations = ToolAnnotations(readOnlyHint = true, openWorldHint = false)
 
@@ -59,7 +59,6 @@ object CheckinsListTool : TypedMcpTool<CheckinsListArgs>(CheckinsListArgs.serial
         val habits = habitIds.distinct().map { habitId ->
             val rows = CheckInService.listInRange(habitId, userId, from, to)
             val paramValues = HabitService.findById(habitId, userId)?.params
-                ?.filter { it.lowCardinality }
                 ?.map { ParamDictionary(it.id, ParamValueService.listValues(it.id)) }
                 ?.filter { it.values.isNotEmpty() }
                 ?: emptyList()

@@ -3,7 +3,7 @@ package services
 import db.ParamValueRepository
 import dto.ParamValueUsage
 
-/** Maintenance over a low-cardinality param's value dictionary (V43). Ownership is checked by the
+/** Maintenance over a param's recurring-value dictionary (V43/V44). Ownership is checked by the
  *  caller (the MCP tool resolves the param through the user's own habit before delegating here). */
 object ParamValueService {
 

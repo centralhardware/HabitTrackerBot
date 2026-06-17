@@ -21,7 +21,7 @@ object CalendarFeedRepository {
             session.run(
                 queryOf(
                     """
-                    SELECT e.id AS checkin_id, h.name, h.habit_type, e.check_date, v.status, read_param_value(v.value, v.value_id) AS value,
+                    SELECT e.id AS checkin_id, h.name, h.habit_type, e.check_date, v.status, read_param_value(v.value, v.value_id, v.value_num) AS value,
                            p.param_type, p.name AS param_name, p.unit, e.comment, e.checked_at
                     FROM checkins e
                     JOIN habits h ON h.id = e.habit_id AND h.status <> 'deleted'

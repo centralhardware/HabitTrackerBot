@@ -6,7 +6,7 @@ import kotliquery.queryOf
 import kotliquery.sessionOf
 import kotliquery.using
 
-/** The per-param low-cardinality value dictionary (`param_values`, V43). */
+/** The per-param dictionary of recurring values (`param_values`, V43; interning made automatic in V44). */
 object ParamValueRepository {
 
     /** Distinct dictionary values of [paramId] with how many check-ins use each, most-used first. */
