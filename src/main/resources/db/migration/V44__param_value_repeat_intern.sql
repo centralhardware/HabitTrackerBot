@@ -41,7 +41,10 @@ WHERE pv.param_id = p.id AND p.param_type = 'number';
 --   * text already present inline      -> 2nd sighting: intern it, migrate the inline row(s),
 --                                         return (NULL, id, NULL),
 --   * text never seen before          -> 1st sighting: keep it inline, return (text, NULL, NULL).
-CREATE OR REPLACE FUNCTION store_param_value(p_param_id BIGINT, p_value TEXT,
+-- The OUT signature gains value_num, so the V43 function must be dropped before redefining it
+-- (CREATE OR REPLACE can't change a function's return row type).
+DROP FUNCTION store_param_value(BIGINT, TEXT);
+CREATE FUNCTION store_param_value(p_param_id BIGINT, p_value TEXT,
                                   OUT value TEXT, OUT value_id BIGINT, OUT value_num DOUBLE PRECISION)
     LANGUAGE plpgsql AS $$
 DECLARE
