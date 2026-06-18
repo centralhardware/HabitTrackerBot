@@ -309,6 +309,8 @@ object Strings {
     fun btnTimerStart(l: Lang) = pick(l, "▶️ Start", "▶️ Старт")
     fun btnTimerStop(l: Lang) = pick(l, "⏹ Stop", "⏹ Стоп")
     fun btnTimerStopComment(l: Lang) = pick(l, "⏹💬 Stop + note", "⏹💬 Стоп + заметка")
+    fun btnTimerPause(l: Lang) = pick(l, "⏸ Pause", "⏸ Пауза")
+    fun btnTimerResume(l: Lang) = pick(l, "▶️ Resume", "▶️ Продолжить")
 
     fun sendTimerComment(l: Lang) = pick(l,
         "Send a note for this session:",
@@ -338,10 +340,11 @@ object Strings {
         "«$name» должно быть числом (например 1.5). Попробуйте ещё раз или отправьте «-», чтобы пропустить:")
 
     /** A timer habit's line: shows running-since elapsed time, or today's accumulated total when idle. */
-    fun timerLine(l: Lang, h: Habit, running: Boolean, elapsedSeconds: Double, todaySeconds: Double): String {
+    fun timerLine(l: Lang, h: Habit, running: Boolean, elapsedSeconds: Double, todaySeconds: Double, paused: Boolean = false): String {
         val target = h.dailyTarget
         return if (running) {
-            "⏱ ${h.name} — ${pick(l, "running", "идёт")}: ${formatElapsed(elapsedSeconds)}"
+            val state = if (paused) pick(l, "paused", "пауза") else pick(l, "running", "идёт")
+            "⏱ ${h.name} — $state: ${formatElapsed(elapsedSeconds)}"
         } else {
             val todayPart = pick(l, "today: ${formatDuration(l, todaySeconds)}", "сегодня: ${formatDuration(l, todaySeconds)}")
             val targetPart = target?.let { " / ${formatDuration(l, it)}" } ?: ""
@@ -354,6 +357,8 @@ object Strings {
     fun cbTimerStopped(l: Lang, seconds: Double) =
         pick(l, "Logged ${formatDuration(l, seconds)}", "Записано ${formatDuration(l, seconds)}")
     fun cbTimerNotRunning(l: Lang) = pick(l, "Timer wasn't running", "Таймер не был запущен")
+    fun cbTimerPaused(l: Lang) = pick(l, "Paused", "Пауза")
+    fun cbTimerResumed(l: Lang) = pick(l, "Resumed", "Продолжено")
 
     fun habitTypeLabel(l: Lang, h: Habit): String = when (h.type) {
         HabitType.CHECK -> pick(l, "check", "отметка")

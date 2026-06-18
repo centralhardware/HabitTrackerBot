@@ -34,7 +34,9 @@ object TimerTicker {
     suspend fun BehaviourContext.tickRunningTimers() {
         TimerService.dueTicks().forEach { t ->
             runCatching {
-                val elapsed = TimerService.elapsedSeconds(t.startedAt)
+                // A paused timer is frozen — nothing to repaint until the user resumes or stops it.
+                if (t.paused) return@forEach
+                val elapsed = TimerService.elapsedSeconds(t.startedAt, t.accumulatedSeconds, t.pausedAt)
                 if (elapsed.toLong() % tickInterval(elapsed.toLong()) != 0L) return@forEach
                 val lang = t.langCode?.let { runCatching { Lang.valueOf(it) }.getOrNull() } ?: Lang.EN
                 val zone = t.tzId?.let { runCatching { ZoneId.of(it) }.getOrNull() }

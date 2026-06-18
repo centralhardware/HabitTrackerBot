@@ -266,16 +266,18 @@ private suspend fun BehaviourContext.handleTimer(query: MessageDataCallbackQuery
         return
     }
 
-    // Repaints the timer message to reflect its current running/idle state.
+    // Repaints the timer message to reflect its current running/idle (and paused) state.
     suspend fun refresh(running: Boolean) {
-        val elapsed = TimerService.find(habitId, userId)?.let { TimerService.elapsedSeconds(it.startedAt) } ?: 0.0
+        val timer = TimerService.find(habitId, userId)
+        val elapsed = timer?.let { TimerService.elapsedSeconds(it) } ?: 0.0
+        val paused = timer?.paused == true
         val todaySeconds = CheckInService.timerSecondsOn(habitId, date)
         runCatching {
             editMessageText(
                 chatId = query.message.chat.id,
                 messageId = query.message.messageId,
-                text = Strings.timerLine(lang, habit, running, elapsed, todaySeconds),
-                replyMarkup = Keyboards.timerControl(habitId, running, date, lang)
+                text = Strings.timerLine(lang, habit, running, elapsed, todaySeconds, paused),
+                replyMarkup = Keyboards.timerControl(habitId, running, date, lang, paused)
             )
         }
     }
@@ -312,7 +314,7 @@ private suspend fun BehaviourContext.handleTimer(query: MessageDataCallbackQuery
                     // post a fresh live one at the bottom so the ticking timer is the last message.
                     runCatching { deleteMessage(chatId = chatId, messageId = query.message.messageId) }
                     sendMessage(chatId, Strings.cbTimerStarted(lang))
-                    val elapsed = TimerService.find(habitId, userId)?.let { TimerService.elapsedSeconds(it.startedAt) } ?: 0.0
+                    val elapsed = TimerService.find(habitId, userId)?.let { TimerService.elapsedSeconds(it) } ?: 0.0
                     val todaySeconds = CheckInService.timerSecondsOn(habitId, date)
                     val live = sendMessage(
                         chatId,
@@ -324,6 +326,16 @@ private suspend fun BehaviourContext.handleTimer(query: MessageDataCallbackQuery
                 TimerService.StartOutcome.AlreadyRunning -> sendMessage(chatId, Strings.cbTimerAlreadyRunning(lang))
                 TimerService.StartOutcome.NotFound -> sendMessage(chatId, Strings.cbNotFound(lang))
             }
+        }
+        "pause" -> {
+            val ok = TimerService.pause(habitId, userId)
+            refresh(running = TimerService.find(habitId, userId) != null)
+            answerCallbackQuery(query, text = if (ok) Strings.cbTimerPaused(lang) else Strings.cbTimerNotRunning(lang))
+        }
+        "resume" -> {
+            val ok = TimerService.resume(habitId, userId)
+            refresh(running = TimerService.find(habitId, userId) != null)
+            answerCallbackQuery(query, text = if (ok) Strings.cbTimerResumed(lang) else Strings.cbTimerNotRunning(lang))
         }
         // Stop (optionally + note): stop first (so the elapsed time is frozen and safely recorded),
         // then collect the "after"-phase fields and attach them — together with the "before" values

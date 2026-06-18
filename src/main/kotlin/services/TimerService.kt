@@ -45,13 +45,24 @@ object TimerService {
     fun stop(habitId: Long, userId: Long, today: LocalDate, zone: ZoneId?): StopOutcome {
         val habit = HabitService.findById(habitId, userId) ?: return StopOutcome.NotFound
         if (habit.type != HabitType.TIMER) return StopOutcome.NotFound
-        val (startedAt, pendingJson) = TimerRepository.stop(habitId, userId) ?: return StopOutcome.NotRunning
-        val beforeValues = pendingJson?.let {
+        val row = TimerRepository.stop(habitId, userId) ?: return StopOutcome.NotRunning
+        val beforeValues = row.pendingValuesJson?.let {
             runCatching { Json.decodeFromString<Map<Long, String>>(it) }.getOrDefault(emptyMap())
         } ?: emptyMap()
         val stoppedAt = Instant.now()
-        val totalSeconds = Duration.between(startedAt, stoppedAt).seconds.coerceAtLeast(1).toDouble()
-        val segments = if (zone != null) splitByLocalDay(startedAt, stoppedAt, zone) else listOf(today to totalSeconds)
+        // The live segment only counts when not paused; everything earlier sits in accumulated_seconds.
+        val liveSeconds = if (row.paused) 0.0 else Duration.between(row.startedAt, stoppedAt).seconds.toDouble()
+        val totalSeconds = (row.accumulatedSeconds + liveSeconds).coerceAtLeast(1.0)
+        // Split the live segment across local days; banked (paused) time lands on the segment's
+        // first day, or on `today` when paused at stop with no live segment to attribute it to.
+        val segments = if (zone != null && !row.paused) {
+            val live = splitByLocalDay(row.startedAt, stoppedAt, zone).toMutableList()
+            if (live.isEmpty()) live.add((LocalDate.now(zone)) to 0.0)
+            if (row.accumulatedSeconds > 0) live[0] = live[0].first to (live[0].second + row.accumulatedSeconds)
+            live
+        } else {
+            listOf(today to totalSeconds)
+        }
         var lastCheckinId = 0L
         for ((day, seconds) in segments) {
             val id = CheckInService.recordTimer(habitId, userId, day, seconds)
@@ -78,6 +89,12 @@ object TimerService {
         return segments
     }
 
+    /** Pauses a running timer; false if it wasn't running or was already paused. */
+    fun pause(habitId: Long, userId: Long): Boolean = TimerRepository.pause(habitId, userId)
+
+    /** Resumes a paused timer; false if it wasn't running or wasn't paused. */
+    fun resume(habitId: Long, userId: Long): Boolean = TimerRepository.resume(habitId, userId)
+
     fun running(userId: Long): List<RunningTimer> = TimerRepository.running(userId)
 
     fun find(habitId: Long, userId: Long): RunningTimer? = TimerRepository.find(habitId, userId)
@@ -90,7 +107,13 @@ object TimerService {
     /** Running timers (with a tracked message) the ticker should repaint. */
     fun dueTicks(): List<RunningTimerTick> = TimerRepository.dueTicks()
 
-    /** Whole seconds elapsed since [startedAt] (never below a recordable second). */
-    fun elapsedSeconds(startedAt: Instant): Double =
-        Duration.between(startedAt, Instant.now()).seconds.coerceAtLeast(1).toDouble()
+    /** Whole seconds a timer has run so far: banked time plus the live segment (frozen while paused). */
+    fun elapsedSeconds(timer: RunningTimer): Double =
+        elapsedSeconds(timer.startedAt, timer.accumulatedSeconds, timer.pausedAt)
+
+    /** Whole seconds elapsed for the given start/accumulated/paused state (never below a recordable second). */
+    fun elapsedSeconds(startedAt: Instant, accumulatedSeconds: Double = 0.0, pausedAt: Instant? = null): Double {
+        val live = if (pausedAt != null) 0.0 else Duration.between(startedAt, Instant.now()).seconds.toDouble()
+        return (accumulatedSeconds + live).coerceAtLeast(1.0)
+    }
 }

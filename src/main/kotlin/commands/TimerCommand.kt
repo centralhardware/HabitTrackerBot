@@ -34,12 +34,13 @@ fun BehaviourContext.registerTimerCommand() {
         sendMessage(message.chat.id, Strings.yourTimers(data.lang))
         timers.forEach { habit ->
             val timer = running[habit.id]
-            val elapsed = timer?.let { TimerService.elapsedSeconds(it.startedAt) } ?: 0.0
+            val elapsed = timer?.let { TimerService.elapsedSeconds(it) } ?: 0.0
+            val paused = timer?.paused == true
             val todaySeconds = CheckInService.timerSecondsOn(habit.id, today)
             val sent = sendMessage(
                 chatId = message.chat.id,
-                text = Strings.timerLine(data.lang, habit, timer != null, elapsed, todaySeconds),
-                replyMarkup = Keyboards.timerControl(habit.id, timer != null, today, data.lang)
+                text = Strings.timerLine(data.lang, habit, timer != null, elapsed, todaySeconds, paused),
+                replyMarkup = Keyboards.timerControl(habit.id, timer != null, today, data.lang, paused)
             )
             // Make this the message the background ticker keeps live for a running timer.
             if (timer != null) TimerService.setMessage(habit.id, data.userId, sent.messageId.long)
