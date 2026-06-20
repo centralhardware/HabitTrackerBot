@@ -281,6 +281,7 @@ object CheckInRepository {
                       AND e.reminder_id IS NULL
                       AND e.deleted = false
                       AND read_param_value(v.value, v.value_id, v.value_num) IS NOT NULL
+                    ORDER BY p.position, v.param_id
                     """.trimIndent(),
                     checkinId, userId
                 ).map { row ->
