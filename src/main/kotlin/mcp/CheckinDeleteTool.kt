@@ -13,7 +13,6 @@ import io.modelcontextprotocol.kotlin.sdk.types.ToolSchema
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonObject
-import java.time.LocalDate
 import java.time.ZoneId
 
 object CheckinDeleteTool : TypedMcpTool<CheckinDeleteArgs>(CheckinDeleteArgs.serializer()) {
@@ -22,7 +21,7 @@ object CheckinDeleteTool : TypedMcpTool<CheckinDeleteArgs>(CheckinDeleteArgs.ser
         "Soft-delete a previously logged quantity check-in by its 'checkinId' (the id each row carries in " +
             "checkins_list). Removes the whole event at once — a multi-field quantity entry has all its values dropped " +
             "together. Only quantity entries can be deleted (not counter or scheduled reminder check-ins), and only " +
-            "those dated within the last 7 days — older entries cannot be deleted. Use this to retract a mistake, e.g. " +
+            "those dated within the last month — older entries cannot be deleted. Use this to retract a mistake, e.g. " +
             "a quantity logged just after midnight that belonged to the previous day: delete it, then re-record with " +
             "quantity_record passing the correct 'date'."
     override val inputSchema: ToolSchema = buildSchema()
@@ -34,14 +33,14 @@ object CheckinDeleteTool : TypedMcpTool<CheckinDeleteArgs>(CheckinDeleteArgs.ser
     )
 
     override fun handle(userId: Long, lang: Lang, tz: ZoneId, args: CheckinDeleteArgs): CallToolResult {
-        // Window is "within the last 7 days": today back through today-7 inclusive.
-        val weekAgo = LocalDate.now(tz).minusDays(7)
-        val deleted = when (val outcome = CheckInService.deleteCheckin(args.checkinId, userId, weekAgo)) {
+        // Window is "within the last month": today back through one month ago inclusive.
+        val cutoff = checkinEditCutoff(tz)
+        val deleted = when (val outcome = CheckInService.deleteCheckin(args.checkinId, userId, cutoff)) {
             is CheckInService.DeleteOutcome.Deleted -> outcome.checkin
             CheckInService.DeleteOutcome.NotFound ->
                 return err("Check-in ${args.checkinId} not found, already deleted, or not a quantity entry")
             is CheckInService.DeleteOutcome.TooOld ->
-                return err("Cannot delete check-ins older than 7 days ($weekAgo); ${outcome.date} is too old")
+                return err("Cannot delete check-ins older than a $CHECKIN_EDIT_WINDOW ($cutoff); ${outcome.date} is too old")
         }
 
         val habit = HabitService.findById(deleted.habitId, userId)

@@ -18,14 +18,13 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
 import kotlinx.serialization.json.putJsonObject
-import java.time.LocalDate
 import java.time.ZoneId
 
 object CheckinUpdateTool : TypedMcpTool<CheckinUpdateArgs>(CheckinUpdateArgs.serializer()) {
     override val name = "checkin_update"
     override val description =
         "Edit a quantity check-in by its checkinId (same id returned by quantity_record or listed in checkins_list). " +
-            "Only entries dated within the last 7 days can be edited. Editable fields: " +
+            "Only entries dated within the last month can be edited. Editable fields: " +
             "'comment' (string or omit to leave unchanged), 'clearComment' (true to remove the comment), " +
             "'values' (array of { paramId, value } — same string format as quantity_record; only listed params are updated). " +
             "At least one of 'comment'/'clearComment' or 'values' must be provided."
@@ -66,16 +65,16 @@ object CheckinUpdateTool : TypedMcpTool<CheckinUpdateArgs>(CheckinUpdateArgs.ser
             }
         }
 
-        // Window is "within the last 7 days": today back through today-7 inclusive.
-        val weekAgo = LocalDate.now(tz).minusDays(7)
+        // Window is "within the last month": today back through one month ago inclusive.
+        val cutoff = checkinEditCutoff(tz)
         val updated = when (val outcome = CheckInService.updateCheckin(
-            args.checkinId, userId, weekAgo, hasComment, newComment, valuePatch
+            args.checkinId, userId, cutoff, hasComment, newComment, valuePatch
         )) {
             is CheckInService.UpdateOutcome.Updated -> outcome.checkin
             CheckInService.UpdateOutcome.NotFound ->
                 return err("Check-in ${args.checkinId} not found, already deleted, or not a quantity entry")
             is CheckInService.UpdateOutcome.TooOld ->
-                return err("Cannot edit check-ins older than 7 days ($weekAgo); ${outcome.date} is too old")
+                return err("Cannot edit check-ins older than a $CHECKIN_EDIT_WINDOW ($cutoff); ${outcome.date} is too old")
         }
 
         val habit = HabitService.findById(updated.habitId, userId)
