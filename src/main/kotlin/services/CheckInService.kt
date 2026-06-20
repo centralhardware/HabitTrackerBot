@@ -160,6 +160,10 @@ object CheckInService {
     fun counterCountOn(habitId: Long, date: LocalDate): Int =
         CheckinAnalytics.countOn(CheckInRepository.loadForHabit(habitId), date)
 
+    /** The id of the most recent check-in for [habitId]/[userId], or 0 if none. */
+    fun latestCheckin(habitId: Long, userId: Long): Long =
+        CheckInRepository.latestCheckin(habitId, userId)
+
     /** Total seconds recorded for a timer [habitId] on [date]. */
     fun timerSecondsOn(habitId: Long, date: LocalDate): Double =
         CheckinAnalytics.quantitySumsPerDay(CheckInRepository.loadForHabit(habitId))[date] ?: 0.0

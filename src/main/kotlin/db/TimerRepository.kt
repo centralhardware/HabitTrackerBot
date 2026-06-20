@@ -63,22 +63,24 @@ object TimerRepository {
         }
 
     /**
-     * Pauses a running timer: banks the live segment into accumulated_seconds and marks it paused.
-     * No-op (returns false) if the timer is missing or already paused.
+     * Pauses a running timer: banks the live segment into accumulated_seconds (kept only for the
+     * live session display) and marks it paused. Returns the `started_at` of the just-ended live
+     * segment so the caller can record it as a check-in, or null if it wasn't running / already paused.
      */
-    fun pause(habitId: Long, userId: Long): Boolean =
-        using(sessionOf(DatabaseService.dataSource)) { session ->
-            session.update(
+    fun pause(habitId: Long, userId: Long): Instant? =
+        sessionOf(DatabaseService.dataSource).use { session ->
+            session.run(
                 queryOf(
                     """
                     UPDATE running_timers
                     SET accumulated_seconds = accumulated_seconds + EXTRACT(EPOCH FROM (now() - started_at)),
                         paused_at = now()
                     WHERE habit_id = ? AND user_id = ? AND paused_at IS NULL
+                    RETURNING started_at
                     """.trimIndent(),
                     habitId, userId
-                )
-            ) > 0
+                ).map { it.instant("started_at") }.asSingle
+            )
         }
 
     /**

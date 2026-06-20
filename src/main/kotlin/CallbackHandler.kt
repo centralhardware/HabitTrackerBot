@@ -328,7 +328,7 @@ private suspend fun BehaviourContext.handleTimer(query: MessageDataCallbackQuery
             }
         }
         "pause" -> {
-            val ok = TimerService.pause(habitId, userId)
+            val ok = TimerService.pause(habitId, userId, date, data.tz)
             refresh(running = TimerService.find(habitId, userId) != null)
             answerCallbackQuery(query, text = if (ok) Strings.cbTimerPaused(lang) else Strings.cbTimerNotRunning(lang))
         }

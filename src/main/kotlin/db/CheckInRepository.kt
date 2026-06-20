@@ -134,6 +134,17 @@ object CheckInRepository {
         }
     }
 
+    /** The id of the most recently recorded check-in for [habitId]/[userId], or 0 if none. */
+    fun latestCheckin(habitId: Long, userId: Long): Long =
+        using(sessionOf(DatabaseService.dataSource)) { session ->
+            session.run(
+                queryOf(
+                    "SELECT id FROM checkins WHERE habit_id = ? AND user_id = ? ORDER BY id DESC LIMIT 1",
+                    habitId, userId
+                ).map { it.long("id") }.asSingle
+            ) ?: 0L
+        }
+
     /**
      * Inserts a bare event with no values (a counter tap). Returns the new `checkins.id`.
      * The CTE-wrapped RETURNING mirrors [insertEventWithValues] to dodge the PG JDBC 42.7.4

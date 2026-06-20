@@ -36,11 +36,12 @@ object TimerService {
     }
 
     /**
-     * Stops a running timer and records the elapsed seconds as a check-in. A timer that ran across
+     * Stops a running timer and records its final live segment as a check-in (each earlier segment
+     * was already recorded when the timer was paused, see [pause]). A segment that ran across
      * midnight is split into one check-in per local day (in [zone]) so each day shows only the time
      * actually spent in it. [today] is the fallback day used when no timezone is known.
-     * Returns the total elapsed seconds and the id of the check-in on the final (most recent) day,
-     * so a follow-up comment can be attached to it.
+     * Returns the total elapsed seconds of the whole session and the id of the check-in to which a
+     * follow-up comment / annotation fields should be attached.
      */
     fun stop(habitId: Long, userId: Long, today: LocalDate, zone: ZoneId?): StopOutcome {
         val habit = HabitService.findById(habitId, userId) ?: return StopOutcome.NotFound
@@ -50,29 +51,36 @@ object TimerService {
             runCatching { Json.decodeFromString<Map<Long, String>>(it) }.getOrDefault(emptyMap())
         } ?: emptyMap()
         val stoppedAt = Instant.now()
-        // The live segment only counts when not paused; everything earlier sits in accumulated_seconds.
+        // The live segment only counts when not paused; everything earlier was already recorded at pause.
         val liveSeconds = if (row.paused) 0.0 else Duration.between(row.startedAt, stoppedAt).seconds.toDouble()
         val totalSeconds = (row.accumulatedSeconds + liveSeconds).coerceAtLeast(1.0)
-        // Split the live segment across local days; banked (paused) time lands on the segment's
-        // first day, or on `today` when paused at stop with no live segment to attribute it to.
-        val segments = if (zone != null && !row.paused) {
-            val live = splitByLocalDay(row.startedAt, stoppedAt, zone).toMutableList()
-            if (live.isEmpty()) live.add((LocalDate.now(zone)) to 0.0)
-            if (row.accumulatedSeconds > 0) live[0] = live[0].first to (live[0].second + row.accumulatedSeconds)
-            live
-        } else {
-            listOf(today to totalSeconds)
+        // Record only the final live segment (split across days); banked segments are already in the DB.
+        var checkinId = if (row.paused) 0L else recordSegment(habitId, userId, row.startedAt, stoppedAt, today, zone)
+        if (checkinId == 0L) {
+            checkinId = if (row.accumulatedSeconds > 0.0)
+                // Paused at stop, or a sub-second final segment after earlier ones: attach to the
+                // last segment we already banked rather than writing a phantom check-in.
+                CheckInService.latestCheckin(habitId, userId)
+            else
+                // Never lose a sub-second timer that banked nothing: record at least one second.
+                CheckInService.recordTimer(habitId, userId, today, 1.0)
         }
+        return StopOutcome.Stopped(totalSeconds, checkinId, beforeValues)
+    }
+
+    /**
+     * Records the [start, end] interval as one check-in per local day it spans (in [zone], falling
+     * back to [today] when no timezone is known). Returns the id of the check-in on the final day.
+     */
+    private fun recordSegment(habitId: Long, userId: Long, start: Instant, end: Instant, today: LocalDate, zone: ZoneId?): Long {
+        val segments = if (zone != null) splitByLocalDay(start, end, zone)
+        else listOf(today to Duration.between(start, end).seconds.toDouble())
         var lastCheckinId = 0L
         for ((day, seconds) in segments) {
             val id = CheckInService.recordTimer(habitId, userId, day, seconds)
             if (id > 0) lastCheckinId = id
         }
-        // Never lose a sub-second timer: record at least one second on the final day.
-        if (lastCheckinId == 0L) {
-            lastCheckinId = CheckInService.recordTimer(habitId, userId, segments.lastOrNull()?.first ?: today, 1.0)
-        }
-        return StopOutcome.Stopped(totalSeconds, lastCheckinId, beforeValues)
+        return lastCheckinId
     }
 
     /** Splits the [start, end] interval into the whole seconds falling within each local day of [zone]. */
@@ -89,8 +97,16 @@ object TimerService {
         return segments
     }
 
-    /** Pauses a running timer; false if it wasn't running or was already paused. */
-    fun pause(habitId: Long, userId: Long): Boolean = TimerRepository.pause(habitId, userId)
+    /**
+     * Pauses a running timer and records the just-ended live segment as a check-in (split per local
+     * day in [zone]), so the day-by-day breakdown stays correct even when a segment crosses midnight.
+     * [today] is the fallback day when no timezone is known. False if it wasn't running or was paused.
+     */
+    fun pause(habitId: Long, userId: Long, today: LocalDate, zone: ZoneId?): Boolean {
+        val startedAt = TimerRepository.pause(habitId, userId) ?: return false
+        recordSegment(habitId, userId, startedAt, Instant.now(), today, zone)
+        return true
+    }
 
     /** Resumes a paused timer; false if it wasn't running or wasn't paused. */
     fun resume(habitId: Long, userId: Long): Boolean = TimerRepository.resume(habitId, userId)
