@@ -62,12 +62,17 @@ object TimerRepository {
             )
         }
 
+    /** Result of pausing a timer: the just-ended live-segment start and the stashed
+     * "before"-phase values JSON, so the caller can record the segment with its annotation fields. */
+    data class PauseRow(val startedAt: Instant, val pendingValuesJson: String?)
+
     /**
      * Pauses a running timer: banks the live segment into accumulated_seconds (kept only for the
      * live session display) and marks it paused. Returns the `started_at` of the just-ended live
-     * segment so the caller can record it as a check-in, or null if it wasn't running / already paused.
+     * segment and its stashed "before"-phase values so the caller can record it as a check-in,
+     * or null if it wasn't running / already paused.
      */
-    fun pause(habitId: Long, userId: Long): Instant? =
+    fun pause(habitId: Long, userId: Long): PauseRow? =
         sessionOf(DatabaseService.dataSource).use { session ->
             session.run(
                 queryOf(
@@ -76,10 +81,10 @@ object TimerRepository {
                     SET accumulated_seconds = accumulated_seconds + EXTRACT(EPOCH FROM (now() - started_at)),
                         paused_at = now()
                     WHERE habit_id = ? AND user_id = ? AND paused_at IS NULL
-                    RETURNING started_at
+                    RETURNING started_at, pending_values
                     """.trimIndent(),
                     habitId, userId
-                ).map { it.instant("started_at") }.asSingle
+                ).map { PauseRow(it.instant("started_at"), it.stringOrNull("pending_values")) }.asSingle
             )
         }
 

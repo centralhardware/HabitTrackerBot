@@ -55,7 +55,7 @@ object TimerService {
         val liveSeconds = if (row.paused) 0.0 else Duration.between(row.startedAt, stoppedAt).seconds.toDouble()
         val totalSeconds = (row.accumulatedSeconds + liveSeconds).coerceAtLeast(1.0)
         // Record only the final live segment (split across days); banked segments are already in the DB.
-        var checkinId = if (row.paused) 0L else recordSegment(habitId, userId, row.startedAt, stoppedAt, today, zone)
+        var checkinId = if (row.paused) 0L else recordSegment(habitId, userId, row.startedAt, stoppedAt, today, zone, beforeValues)
         if (checkinId == 0L) {
             checkinId = if (row.accumulatedSeconds > 0.0)
                 // Paused at stop, or a sub-second final segment after earlier ones: attach to the
@@ -70,15 +70,23 @@ object TimerService {
 
     /**
      * Records the [start, end] interval as one check-in per local day it spans (in [zone], falling
-     * back to [today] when no timezone is known). Returns the id of the check-in on the final day.
+     * back to [today] when no timezone is known). Each created check-in also gets the timer's
+     * "before"-phase annotation [beforeValues] so every segment carries them, not just the last one.
+     * Returns the id of the check-in on the final day.
      */
-    private fun recordSegment(habitId: Long, userId: Long, start: Instant, end: Instant, today: LocalDate, zone: ZoneId?): Long {
+    private fun recordSegment(
+        habitId: Long, userId: Long, start: Instant, end: Instant, today: LocalDate, zone: ZoneId?,
+        beforeValues: Map<Long, String> = emptyMap(),
+    ): Long {
         val segments = if (zone != null) splitByLocalDay(start, end, zone)
         else listOf(today to Duration.between(start, end).seconds.toDouble())
         var lastCheckinId = 0L
         for ((day, seconds) in segments) {
             val id = CheckInService.recordTimer(habitId, userId, day, seconds)
-            if (id > 0) lastCheckinId = id
+            if (id > 0) {
+                CheckInService.attachTimerFieldValues(id, userId, habitId, beforeValues)
+                lastCheckinId = id
+            }
         }
         return lastCheckinId
     }
@@ -103,8 +111,11 @@ object TimerService {
      * [today] is the fallback day when no timezone is known. False if it wasn't running or was paused.
      */
     fun pause(habitId: Long, userId: Long, today: LocalDate, zone: ZoneId?): Boolean {
-        val startedAt = TimerRepository.pause(habitId, userId) ?: return false
-        recordSegment(habitId, userId, startedAt, Instant.now(), today, zone)
+        val row = TimerRepository.pause(habitId, userId) ?: return false
+        val beforeValues = row.pendingValuesJson?.let {
+            runCatching { Json.decodeFromString<Map<Long, String>>(it) }.getOrDefault(emptyMap())
+        } ?: emptyMap()
+        recordSegment(habitId, userId, row.startedAt, Instant.now(), today, zone, beforeValues)
         return true
     }
 
