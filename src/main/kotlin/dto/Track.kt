@@ -7,8 +7,8 @@ import kotlinx.serialization.Transient
 import kotliquery.Row
 
 @Serializable
-enum class HabitType(val value: String) {
-    // A "did I do the thing?" habit. Its behavior is the product of two facts: whether it has
+enum class TrackType(val value: String) {
+    // A "did I do the thing?" track. Its behavior is the product of two facts: whether it has
     // reminders (schedule -> markable done/skip slots) and whether it allows ad-hoc check-ins
     // (allowAdHoc -> a "+1" event any time). Merges the former `scheduled` and `counter` types.
     @SerialName("check") CHECK("check"),
@@ -16,7 +16,7 @@ enum class HabitType(val value: String) {
     @SerialName("timer") TIMER("timer");
 
     companion object {
-        fun parse(s: String?): HabitType = entries.firstOrNull { it.value == s } ?: CHECK
+        fun parse(s: String?): TrackType = entries.firstOrNull { it.value == s } ?: CHECK
     }
 }
 
@@ -31,13 +31,13 @@ enum class Direction(val value: String) {
 }
 
 @Serializable
-enum class HabitStatus(val value: String) {
+enum class TrackStatus(val value: String) {
     @SerialName("active") ACTIVE("active"),
     @SerialName("paused") PAUSED("paused"),
     @SerialName("deleted") DELETED("deleted");
 
     companion object {
-        fun parse(s: String?): HabitStatus = entries.firstOrNull { it.value == s } ?: ACTIVE
+        fun parse(s: String?): TrackStatus = entries.firstOrNull { it.value == s } ?: ACTIVE
     }
 }
 
@@ -66,14 +66,14 @@ enum class TimerPhase(val value: String) {
 }
 
 /**
- * A "field" of a habit, in its own `habit_params` row. Only quantity habits carry params now
+ * A "field" of a track, in its own `track_params` row. Only quantity tracks carry params now
  * (scheduled/counter events store everything on the `checkins` row), one per tracked field.
  * `paramType` is NUMBER for regular decimal fields, TEXT for free-text fields.
  */
 @Serializable
-data class HabitParam(
+data class TrackParam(
     val id: Long,
-    @Transient val habitId: Long = 0,
+    @Transient val trackId: Long = 0,
     @EncodeDefault(EncodeDefault.Mode.NEVER) val name: String? = null,
     @EncodeDefault(EncodeDefault.Mode.NEVER) val unit: String? = null,
     @EncodeDefault(EncodeDefault.Mode.NEVER) val direction: Direction? = null,
@@ -85,59 +85,59 @@ data class HabitParam(
     @EncodeDefault(EncodeDefault.Mode.NEVER) val timerPhase: TimerPhase? = null,
 )
 
-/** A habit that an expired pause just flipped back to active, with enough to notify its owner. */
-data class ResumedHabit(val userId: Long, val name: String, val langCode: String?)
+/** A track that an expired pause just flipped back to active, with enough to notify its owner. */
+data class ResumedTrack(val userId: Long, val name: String, val langCode: String?)
 
 @Serializable
-data class Habit(
+data class Track(
     val id: Long = 0L,
     @Transient val userId: Long = 0,
     val name: String,
-    val type: HabitType,
+    val type: TrackType,
     @EncodeDefault(EncodeDefault.Mode.NEVER) val dailyTarget: Double? = null,
     @EncodeDefault(EncodeDefault.Mode.NEVER) val unit: String? = null,
     @EncodeDefault(EncodeDefault.Mode.NEVER) val direction: Direction? = null,
-    val reminders: List<HabitReminder> = emptyList(),
-    val status: HabitStatus = HabitStatus.ACTIVE,
-    @EncodeDefault(EncodeDefault.Mode.NEVER) val params: List<HabitParam> = emptyList(),
+    val reminders: List<TrackReminder> = emptyList(),
+    val status: TrackStatus = TrackStatus.ACTIVE,
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val params: List<TrackParam> = emptyList(),
     @EncodeDefault(EncodeDefault.Mode.NEVER) val logOnly: Boolean = false,
-    /** CHECK habits only: whether arbitrary "+1" check-ins may be logged any time, independent
-     *  of any schedule. A check habit must have a schedule and/or this flag (never neither). */
+    /** CHECK tracks only: whether arbitrary "+1" check-ins may be logged any time, independent
+     *  of any schedule. A check track must have a schedule and/or this flag (never neither). */
     @EncodeDefault(EncodeDefault.Mode.NEVER) val allowAdHoc: Boolean = false,
 ) {
-    /** A multi-field quantity habit: more than one param. Single-field habits hoist their
-     *  param's metadata onto the habit row, so callers can treat them as plain habits.
+    /** A multi-field quantity track: more than one param. Single-field tracks hoist their
+     *  param's metadata onto the track row, so callers can treat them as plain tracks.
      *  Timers may carry several params too (their extra annotation fields), but those are
-     *  pure annotations — a timer is never a multi-field habit for stats/rendering. */
-    val multiField: Boolean get() = type == HabitType.QUANTITY && params.size > 1
+     *  pure annotations — a timer is never a multi-field track for stats/rendering. */
+    val multiField: Boolean get() = type == TrackType.QUANTITY && params.size > 1
 
-    /** A check habit with reminders marks each fired occurrence as a done/skip slot. */
-    val scheduled: Boolean get() = type == HabitType.CHECK && reminders.isNotEmpty()
+    /** A check track with reminders marks each fired occurrence as a done/skip slot. */
+    val scheduled: Boolean get() = type == TrackType.CHECK && reminders.isNotEmpty()
 }
 
-/** Maps a `habits` row. Reminders and params are loaded separately and filled in by the repository. */
-fun Row.toHabit(): Habit = Habit(
+/** Maps a `tracks` row. Reminders and params are loaded separately and filled in by the repository. */
+fun Row.toTrack(): Track = Track(
     id = long("id"),
     userId = long("user_id"),
     name = string("name"),
-    type = HabitType.parse(stringOrNull("habit_type")),
+    type = TrackType.parse(stringOrNull("track_type")),
     dailyTarget = doubleOrNull("daily_target"),
     unit = stringOrNull("unit"),
     direction = Direction.parse(stringOrNull("direction")),
-    status = HabitStatus.parse(stringOrNull("status")),
+    status = TrackStatus.parse(stringOrNull("status")),
     logOnly = boolean("log_only"),
     allowAdHoc = boolean("allow_adhoc"),
 )
 
-fun Row.toHabitParam(): HabitParam = HabitParam(
+fun Row.toTrackParam(): TrackParam = TrackParam(
     id = long("id"),
-    habitId = long("habit_id"),
+    trackId = long("track_id"),
     name = stringOrNull("name"),
     unit = stringOrNull("unit"),
     direction = Direction.parse(stringOrNull("direction")),
     dailyTarget = doubleOrNull("daily_target"),
     position = int("position"),
-    paramType = ParamType.parse(string("param_type")) ?: error("habit_params.param_type is NULL"),
+    paramType = ParamType.parse(string("param_type")) ?: error("track_params.param_type is NULL"),
     timerPhase = TimerPhase.parse(stringOrNull("timer_phase")),
 )
 

@@ -2,7 +2,7 @@ package mcp
 
 import Lang
 import dto.ParamValuesMergeArgs
-import services.HabitService
+import services.TrackService
 import services.ParamValueService
 import io.modelcontextprotocol.kotlin.sdk.types.CallToolResult
 import io.modelcontextprotocol.kotlin.sdk.types.ToolAnnotations
@@ -19,9 +19,9 @@ object ParamValuesMergeTool : TypedMcpTool<ParamValuesMergeArgs>(ParamValuesMerg
     override val description =
         "Fold near-duplicate values of a param into one canonical value — e.g. merge " +
             "[\"brew method\",\"Brew method\"] into \"V60\", or fix a typo. Every check-in using a 'from' value is " +
-            "repointed to 'into', and the emptied 'from' entries are dropped from the dictionary. 'into' may be an " +
-            "existing value or a brand-new label (it's created if needed). 'habitId'/'paramId' come from habits_list. " +
-            "Only values that have recurred have a dictionary entry; read the exact strings from checkins_list " +
+            "repointed to 'into', and the emptied 'from' tracks are dropped from the dictionary. 'into' may be an " +
+            "existing value or a brand-new label (it's created if needed). 'trackId'/'paramId' come from tracks_list. " +
+            "Only values that have recurred have a dictionary track; read the exact strings from checkins_list " +
             "paramValues[] first. Returns the number of check-ins repointed."
     override val inputSchema: ToolSchema = buildSchema()
     override val annotations = ToolAnnotations(
@@ -32,10 +32,10 @@ object ParamValuesMergeTool : TypedMcpTool<ParamValuesMergeArgs>(ParamValuesMerg
     )
 
     override fun handle(userId: Long, lang: Lang, tz: ZoneId, args: ParamValuesMergeArgs): CallToolResult {
-        val habit = HabitService.findById(args.habitId, userId)
-            ?: return err("Habit ${args.habitId} not found")
-        habit.params.firstOrNull { it.id == args.paramId }
-            ?: return err("Param ${args.paramId} is not a field of habit ${args.habitId}")
+        val track = TrackService.findById(args.trackId, userId)
+            ?: return err("Track ${args.trackId} not found")
+        track.params.firstOrNull { it.id == args.paramId }
+            ?: return err("Param ${args.paramId} is not a field of track ${args.trackId}")
 
         val into = args.into.trim()
         if (into.isEmpty()) return err("'into' must be non-blank")
@@ -64,13 +64,13 @@ object ParamValuesMergeTool : TypedMcpTool<ParamValuesMergeArgs>(ParamValuesMerg
 
     private fun buildSchema(): ToolSchema {
         val props = buildJsonObject {
-            putJsonObject("habitId") {
+            putJsonObject("trackId") {
                 put("type", "integer")
-                put("description", "The habit's id (from habits_list).")
+                put("description", "The track's id (from tracks_list).")
             }
             putJsonObject("paramId") {
                 put("type", "integer")
-                put("description", "A param id from habits_list params[].id of this habit.")
+                put("description", "A param id from tracks_list params[].id of this track.")
             }
             putJsonObject("from") {
                 put("type", "array")
@@ -83,6 +83,6 @@ object ParamValuesMergeTool : TypedMcpTool<ParamValuesMergeArgs>(ParamValuesMerg
                 put("description", "The canonical value to keep. May be an existing value or a new label.")
             }
         }
-        return ToolSchema(properties = props, required = listOf("habitId", "paramId", "from", "into"))
+        return ToolSchema(properties = props, required = listOf("trackId", "paramId", "from", "into"))
     }
 }

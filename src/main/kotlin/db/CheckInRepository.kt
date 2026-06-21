@@ -38,14 +38,14 @@ object CheckInRepository {
                 queryOf(
                     """
                     WITH upsert_event AS (
-                        INSERT INTO checkins (user_id, check_date, reminder_id, habit_id, comment, checked_at)
+                        INSERT INTO checkins (user_id, check_date, reminder_id, track_id, comment, checked_at)
                         VALUES (?, ?, ?, ?, NULL, ?)
                         ON CONFLICT (reminder_id, check_date)
                             WHERE reminder_id IS NOT NULL
                         DO UPDATE SET checked_at = COALESCE(EXCLUDED.checked_at, checkins.checked_at)
                         RETURNING id
                     )
-                    -- Scheduled habits have no param, so the status row carries a NULL param_id
+                    -- Scheduled tracks have no param, so the status row carries a NULL param_id
                     -- (deduped one-per-event by checkin_values_noparam_uniq).
                     INSERT INTO checkin_values (checkin_id, param_id, status, value)
                     SELECT id, NULL, ?::checkin_status, NULL
@@ -53,7 +53,7 @@ object CheckInRepository {
                     ON CONFLICT (checkin_id) WHERE param_id IS NULL
                     DO UPDATE SET status = EXCLUDED.status
                     """.trimIndent(),
-                    event.userId, event.checkDate, event.reminderId, event.habitId, checkedAt,
+                    event.userId, event.checkDate, event.reminderId, event.trackId, checkedAt,
                     status.value
                 )
             )
@@ -74,7 +74,7 @@ object CheckInRepository {
         // 42.7.4 (see upsertScheduledValue) and stays atomic in one round-trip.
         val valuesSql = values.joinToString(", ") { "(?, ?::checkin_status, ?)" }
         val params = buildList<Any?> {
-            add(event.userId); add(event.checkDate); add(event.habitId); add(event.comment)
+            add(event.userId); add(event.checkDate); add(event.trackId); add(event.comment)
             values.forEach { add(it.paramId); add(it.status?.value); add(it.value?.asString) }
         }
         return using(sessionOf(DatabaseService.dataSource)) { session ->
@@ -82,7 +82,7 @@ object CheckInRepository {
                 queryOf(
                     """
                     WITH new_event AS (
-                        INSERT INTO checkins (user_id, check_date, reminder_id, habit_id, comment, checked_at)
+                        INSERT INTO checkins (user_id, check_date, reminder_id, track_id, comment, checked_at)
                         VALUES (?, ?, NULL, ?, ?, now())
                         RETURNING id
                     ),
@@ -134,13 +134,13 @@ object CheckInRepository {
         }
     }
 
-    /** The id of the most recently recorded check-in for [habitId]/[userId], or 0 if none. */
-    fun latestCheckin(habitId: Long, userId: Long): Long =
+    /** The id of the most recently recorded check-in for [trackId]/[userId], or 0 if none. */
+    fun latestCheckin(trackId: Long, userId: Long): Long =
         using(sessionOf(DatabaseService.dataSource)) { session ->
             session.run(
                 queryOf(
-                    "SELECT id FROM checkins WHERE habit_id = ? AND user_id = ? ORDER BY id DESC LIMIT 1",
-                    habitId, userId
+                    "SELECT id FROM checkins WHERE track_id = ? AND user_id = ? ORDER BY id DESC LIMIT 1",
+                    trackId, userId
                 ).map { it.long("id") }.asSingle
             ) ?: 0L
         }
@@ -156,13 +156,13 @@ object CheckInRepository {
                 queryOf(
                     """
                     WITH new_event AS (
-                        INSERT INTO checkins (user_id, check_date, reminder_id, habit_id, comment, checked_at)
+                        INSERT INTO checkins (user_id, check_date, reminder_id, track_id, comment, checked_at)
                         VALUES (?, ?, NULL, ?, ?, now())
                         RETURNING id
                     )
                     SELECT id FROM new_event
                     """.trimIndent(),
-                    event.userId, event.checkDate, event.habitId, event.comment
+                    event.userId, event.checkDate, event.trackId, event.comment
                 ).map { it.long("id") }.asSingle
             ) ?: 0L
         }
@@ -170,7 +170,7 @@ object CheckInRepository {
 
     /**
      * Marks a scheduled slot pending (creating its checkin row) and, in the same statement,
-     * skips every older still-pending check-in of the same habit — the previous reminder
+     * skips every older still-pending check-in of the same track — the previous reminder
      * occurrences the user never resolved. Returns the (reminder, date) of each flipped row,
      * for message updates.
      *
@@ -187,15 +187,15 @@ object CheckInRepository {
                 queryOf(
                     """
                     WITH upsert_event AS (
-                        INSERT INTO checkins (user_id, check_date, reminder_id, habit_id, comment, checked_at)
+                        INSERT INTO checkins (user_id, check_date, reminder_id, track_id, comment, checked_at)
                         VALUES (?, ?, ?, ?, NULL, NULL)
                         ON CONFLICT (reminder_id, check_date)
                             WHERE reminder_id IS NOT NULL
                         DO UPDATE SET checked_at = COALESCE(EXCLUDED.checked_at, checkins.checked_at)
-                        RETURNING id, user_id, habit_id, reminder_id, check_date
+                        RETURNING id, user_id, track_id, reminder_id, check_date
                     ),
                     upsert_value AS (
-                        -- Scheduled habits have no param, so the status row carries a NULL param_id.
+                        -- Scheduled tracks have no param, so the status row carries a NULL param_id.
                         INSERT INTO checkin_values (checkin_id, param_id, status, value)
                         SELECT id, NULL, 'pending'::checkin_status, NULL
                         FROM upsert_event
@@ -203,13 +203,13 @@ object CheckInRepository {
                         DO UPDATE SET status = EXCLUDED.status
                     ),
                     new_slot AS (
-                        SELECT ue.id, ue.habit_id,
+                        SELECT ue.id, ue.track_id,
                                (ue.check_date::date
                                 + CASE WHEN r.reminder_time >= 1440 THEN INTERVAL '1 day' ELSE INTERVAL '0' END
                                 + (r.reminder_time % 1440) * INTERVAL '1 minute'
                                ) AT TIME ZONE us.timezone AS fired_at
                         FROM upsert_event ue
-                        JOIN habit_reminders r ON r.id = ue.reminder_id
+                        JOIN track_reminders r ON r.id = ue.reminder_id
                         JOIN user_settings us ON us.user_id = ue.user_id
                         WHERE us.timezone IS NOT NULL
                     ),
@@ -217,13 +217,13 @@ object CheckInRepository {
                         UPDATE checkin_values v
                         SET status = 'skip'
                         FROM checkins e
-                        JOIN habit_reminders r2 ON r2.id = e.reminder_id
+                        JOIN track_reminders r2 ON r2.id = e.reminder_id
                         JOIN user_settings us2 ON us2.user_id = e.user_id
                         CROSS JOIN new_slot ns
                         WHERE v.checkin_id = e.id
                           AND v.status = 'pending'
                           AND e.id <> ns.id
-                          AND e.habit_id = ns.habit_id
+                          AND e.track_id = ns.track_id
                           AND e.deleted = false
                           AND us2.timezone IS NOT NULL
                           AND (e.check_date::date
@@ -238,18 +238,18 @@ object CheckInRepository {
                     )
                     SELECT reminder_id, check_date FROM flipped
                     """.trimIndent(),
-                    event.userId, event.checkDate, event.reminderId, event.habitId
+                    event.userId, event.checkDate, event.reminderId, event.trackId
                 ).map { it.toResolvedCheckin() }.asList
             )
         }
     }
 
     /**
-     * Loads the full check-in history of a single habit as raw rows (one per param value).
-     * All per-habit stats (counts, sums, streaks, weekly totals) are computed over this list
+     * Loads the full check-in history of a single track as raw rows (one per param value).
+     * All per-track stats (counts, sums, streaks, weekly totals) are computed over this list
      * in Kotlin (see CheckinAnalytics) instead of via specialized aggregate queries.
      */
-    fun loadForHabit(habitId: Long): List<CheckinValueRow> {
+    fun loadForTrack(trackId: Long): List<CheckinValueRow> {
         return sessionOf(DatabaseService.dataSource).use { session ->
             session.run(
                 queryOf(
@@ -260,13 +260,13 @@ object CheckInRepository {
                     -- LEFT JOIN: counter events have no checkin_values row, but still
                     -- need to appear (one row per event) so they're counted.
                     LEFT JOIN checkin_values v ON v.checkin_id = e.id
-                    LEFT JOIN habit_params p ON p.id = v.param_id
-                    LEFT JOIN habit_reminders r ON r.id = e.reminder_id
-                    WHERE e.habit_id = ?
+                    LEFT JOIN track_params p ON p.id = v.param_id
+                    LEFT JOIN track_reminders r ON r.id = e.reminder_id
+                    WHERE e.track_id = ?
                       AND e.deleted = false
                     ORDER BY e.check_date, r.reminder_time NULLS FIRST, e.id, v.param_id
                     """.trimIndent(),
-                    habitId
+                    trackId
                 ).map { it.toCheckinValueRow() }.asList
             )
         }
@@ -282,11 +282,11 @@ object CheckInRepository {
             val rows = session.run(
                 queryOf(
                     """
-                    SELECT e.habit_id, e.check_date, e.comment,
+                    SELECT e.track_id, e.check_date, e.comment,
                            v.param_id, p.param_type, v.status, read_param_value(v.value, v.value_id, v.value_num) AS value
                     FROM checkins e
                     JOIN checkin_values v ON v.checkin_id = e.id
-                    JOIN habit_params p ON p.id = v.param_id
+                    JOIN track_params p ON p.id = v.param_id
                     WHERE e.id = ?
                       AND e.user_id = ?
                       AND e.reminder_id IS NULL
@@ -299,7 +299,7 @@ object CheckInRepository {
                     val pt = ParamType.parse(row.stringOrNull("param_type"))
                     val rawValue = row.stringOrNull("value")
                     Triple(
-                        Pair(row.long("habit_id"), row.localDate("check_date")),
+                        Pair(row.long("track_id"), row.localDate("check_date")),
                         row.stringOrNull("comment"),
                         CheckinValue(
                             paramId = row.long("param_id"),
@@ -335,7 +335,7 @@ object CheckInRepository {
 
     /**
      * Inserts or updates a single param [value] on a check-in the user owns. The edit path may set a
-     * param the entry doesn't carry yet (e.g. a book name added after the fact), so this is an upsert,
+     * param the track doesn't carry yet (e.g. a book name added after the fact), so this is an upsert,
      * not a plain UPDATE. The INSERT is gated on ownership via the SELECT; the ON CONFLICT predicate
      * matches the partial unique index checkin_values_param_uniq (V30, WHERE param_id IS NOT NULL).
      */
@@ -388,6 +388,92 @@ object CheckInRepository {
         }
     }
 
+    /**
+     * Loads a page of the user's most recent check-in events across all their non-deleted tracks,
+     * newest first, with the values recorded on each. Pages by event ([limit]/[offset]); a follow-up
+     * query fans the values out so each event keeps its full value set regardless of the page cut.
+     */
+    fun loadRecentForUser(userId: Long, limit: Int, offset: Int): List<dto.RecentCheckin> {
+        return sessionOf(DatabaseService.dataSource).use { session ->
+            val events = session.run(
+                queryOf(
+                    """
+                    SELECT e.id, e.track_id, e.check_date, e.comment, e.reminder_id
+                    FROM checkins e
+                    JOIN tracks h ON h.id = e.track_id AND h.status <> 'deleted'
+                    WHERE e.user_id = ?
+                      AND e.deleted = false
+                    ORDER BY e.check_date DESC, e.id DESC
+                    LIMIT ? OFFSET ?
+                    """.trimIndent(),
+                    userId, limit, offset
+                ).map { row ->
+                    RecentEventRow(
+                        id = row.long("id"),
+                        trackId = row.long("track_id"),
+                        date = row.localDate("check_date"),
+                        comment = row.stringOrNull("comment"),
+                        reminderId = row.longOrNull("reminder_id"),
+                    )
+                }.asList
+            )
+            if (events.isEmpty()) return@use emptyList()
+
+            val ids = events.map { it.id }
+            val placeholders = ids.joinToString(", ") { "?" }
+            // checkin_id -> (status from the status-only row, list of real param values)
+            val statusById = HashMap<Long, CheckinStatus?>()
+            val valuesById = HashMap<Long, MutableList<CheckinValue>>()
+            session.run(
+                queryOf(
+                    """
+                    SELECT v.checkin_id, v.param_id, p.param_type, v.status,
+                           read_param_value(v.value, v.value_id, v.value_num) AS value
+                    FROM checkin_values v
+                    LEFT JOIN track_params p ON p.id = v.param_id
+                    WHERE v.checkin_id IN ($placeholders)
+                    ORDER BY p.position NULLS FIRST, v.param_id
+                    """.trimIndent(),
+                    *ids.toTypedArray()
+                ).map { row ->
+                    val checkinId = row.long("checkin_id")
+                    val paramId = row.longOrNull("param_id")
+                    val status = row.stringOrNull("status")?.let { s -> CheckinStatus.entries.firstOrNull { it.value == s } }
+                    if (paramId == null) {
+                        // The status-only row of a scheduled slot (no param): carries done/skip/pending.
+                        statusById[checkinId] = status
+                    } else {
+                        val pt = ParamType.parse(row.stringOrNull("param_type"))
+                        val rawValue = row.stringOrNull("value")
+                        val value = if (pt == ParamType.NUMBER) rawValue?.toDoubleOrNull()?.let { FieldValue.Numeric(it) }
+                        else rawValue?.let { FieldValue.Text(it) }
+                        if (value != null) valuesById.getOrPut(checkinId) { mutableListOf() }
+                            .add(CheckinValue(paramId, status, value))
+                    }
+                }.asList
+            )
+            events.map { e ->
+                dto.RecentCheckin(
+                    checkinId = e.id,
+                    trackId = e.trackId,
+                    date = e.date,
+                    comment = e.comment,
+                    reminderId = e.reminderId,
+                    status = statusById[e.id],
+                    values = valuesById[e.id].orEmpty(),
+                )
+            }
+        }
+    }
+
+    private data class RecentEventRow(
+        val id: Long,
+        val trackId: Long,
+        val date: LocalDate,
+        val comment: String?,
+        val reminderId: Long?,
+    )
+
     fun pendingCheckIns(userId: Long, fromDate: LocalDate, toDate: LocalDate): List<PendingCheckIn> {
         return sessionOf(DatabaseService.dataSource).use { session ->
             session.run(
@@ -395,8 +481,8 @@ object CheckInRepository {
                     """
                     SELECT e.reminder_id, h.name, r.reminder_time, e.check_date
                     FROM checkins e
-                    JOIN habits h ON h.id = e.habit_id
-                    JOIN habit_reminders r ON r.id = e.reminder_id
+                    JOIN tracks h ON h.id = e.track_id
+                    JOIN track_reminders r ON r.id = e.reminder_id
                     JOIN checkin_values v ON v.checkin_id = e.id
                     WHERE h.user_id = ?
                       AND h.status = 'active'

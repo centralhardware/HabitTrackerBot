@@ -1,41 +1,41 @@
 package commands
 
-import services.HabitService
+import services.TrackService
 import Keyboards
 import Strings
 import dev.inmo.tgbotapi.extensions.api.send.sendMessage
 import dev.inmo.tgbotapi.extensions.behaviour_builder.BehaviourContext
 import dev.inmo.tgbotapi.extensions.behaviour_builder.triggers_handling.onCommand
-import dto.HabitStatus
+import dto.TrackStatus
 import lang
 import userId
 
 fun BehaviourContext.registerPauseCommand() {
     onCommand("pause") { message ->
-        val active = HabitService.listActive(data.userId).filter { it.status == HabitStatus.ACTIVE }
+        val active = TrackService.listActive(data.userId).filter { it.status == TrackStatus.ACTIVE }
         if (active.isEmpty()) {
             sendMessage(message.chat.id, Strings.noActiveToPause(data.lang))
             return@onCommand
         }
         sendMessage(
             chatId = message.chat.id,
-            text = Strings.pickHabitToPause(data.lang),
-            replyMarkup = Keyboards.pickHabit("ps", active, "⏸")
+            text = Strings.pickTrackToPause(data.lang),
+            replyMarkup = Keyboards.pickTrack("ps", active, "⏸")
         )
     }
 }
 
 fun BehaviourContext.registerResumeCommand() {
     onCommand("resume") { message ->
-        val paused = HabitService.listActive(data.userId).filter { it.status == HabitStatus.PAUSED }
+        val paused = TrackService.listActive(data.userId).filter { it.status == TrackStatus.PAUSED }
         if (paused.isEmpty()) {
             sendMessage(message.chat.id, Strings.noPaused(data.lang))
             return@onCommand
         }
         sendMessage(
             chatId = message.chat.id,
-            text = Strings.pickHabitToResume(data.lang),
-            replyMarkup = Keyboards.pickHabit("rs", paused, "▶️")
+            text = Strings.pickTrackToResume(data.lang),
+            replyMarkup = Keyboards.pickTrack("rs", paused, "▶️")
         )
     }
 }

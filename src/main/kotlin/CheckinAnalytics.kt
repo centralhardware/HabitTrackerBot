@@ -6,8 +6,8 @@ import dto.WeekTotals
 import java.time.LocalDate
 
 /**
- * Pure computations over a habit's raw check-in rows ([CheckinValueRow]), loaded once via
- * `CheckInRepository.loadForHabit`. This replaces the former specialized aggregate SQL queries:
+ * Pure computations over a track's raw check-in rows ([CheckinValueRow]), loaded once via
+ * `CheckInRepository.loadForTrack`. This replaces the former specialized aggregate SQL queries:
  * the database just returns rows, all counting/summing lives here in Kotlin.
  *
  * Conventions mirror the old SQL: manual events have `isScheduled == false`; counter events
@@ -49,7 +49,7 @@ object CheckinAnalytics {
      */
     fun inRange(rows: List<CheckinValueRow>, from: LocalDate, to: LocalDate, isTimer: Boolean = false): List<CheckinRecord> =
         rows.filter { it.date in from..to }
-            // status is meaningful only for scheduled habits; never surface it for quantity/counter rows.
+            // status is meaningful only for scheduled tracks; never surface it for quantity/counter rows.
             .map { row ->
                 val value = row.quantity?.let { FieldValue.Numeric(it) } ?: row.textValue?.let { FieldValue.Text(it) }
                 // A timer's duration row (the elapsed-seconds value, not a before/after annotation):

@@ -4,19 +4,19 @@ import dev.inmo.tgbotapi.extensions.api.send.sendMessage
 import dev.inmo.tgbotapi.extensions.behaviour_builder.BehaviourContext
 import dev.inmo.tgbotapi.types.toChatId
 import dto.DueReminder
-import dto.HabitType
+import dto.TrackType
 import dto.CheckinStatus
 import services.CheckInService
-import services.HabitService
+import services.TrackService
 import services.ReminderMessageService
 
 object ReminderScheduler {
 
     suspend fun BehaviourContext.sendDueReminders() {
-        HabitService.backfillMissedScheduled().forEach { reminder ->
+        TrackService.backfillMissedScheduled().forEach { reminder ->
             deliver(reminder, markPending = false, withDate = true)
         }
-        HabitService.findDue().forEach { reminder ->
+        TrackService.findDue().forEach { reminder ->
             deliver(reminder, markPending = true, withDate = reminder.offsetMinutes >= 1440)
         }
     }
@@ -27,10 +27,10 @@ object ReminderScheduler {
         withDate: Boolean
     ) {
         runCatching {
-            if (markPending && reminder.habitType == HabitType.CHECK) {
+            if (markPending && reminder.trackType == TrackType.CHECK) {
                 // Creating this slot's pending row also skips the previous unresolved
-                // occurrence of the same habit; settle those messages now.
-                CheckInService.markPending(reminder.habitId, reminder.userId, reminder.reminderId, reminder.userDate)
+                // occurrence of the same track; settle those messages now.
+                CheckInService.markPending(reminder.trackId, reminder.userId, reminder.reminderId, reminder.userDate)
                     .forEach { resolved ->
                         resolveCheckInMessages(resolved.reminderId, resolved.checkDate, CheckinStatus.SKIP)
                     }
@@ -38,20 +38,20 @@ object ReminderScheduler {
             val lang = reminder.langCode?.let { runCatching { Lang.valueOf(it) }.getOrNull() } ?: Lang.EN
             val datePrefix = if (withDate) "📅 ${reminder.userDate} " else ""
             val text = "$datePrefix⏳ ${Strings.formatDisplayTime(reminder.offsetMinutes)} — ${reminder.name}"
-            val keyboard = when (reminder.habitType) {
-                // A check habit's reminder is a markable slot now (done/skip), never a "+1" nudge.
-                HabitType.CHECK ->
+            val keyboard = when (reminder.trackType) {
+                // A check track's reminder is a markable slot now (done/skip), never a "+1" nudge.
+                TrackType.CHECK ->
                     Keyboards.checkIn(reminder.reminderId, reminder.userDate, lang)
-                HabitType.TIMER ->
-                    Keyboards.timerControl(reminder.habitId, running = false, reminder.userDate, lang)
-                HabitType.QUANTITY -> null
+                TrackType.TIMER ->
+                    Keyboards.timerControl(reminder.trackId, running = false, reminder.userDate, lang)
+                TrackType.QUANTITY -> null
             }
             val sent = sendMessage(
                 chatId = reminder.userId.toChatId(),
                 text = text,
                 replyMarkup = keyboard
             )
-            if (reminder.habitType == HabitType.CHECK) {
+            if (reminder.trackType == TrackType.CHECK) {
                 ReminderMessageService.remember(
                     reminder.userId, sent.messageId.long, reminder.reminderId, reminder.userDate, text
                 )

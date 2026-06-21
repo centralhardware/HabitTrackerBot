@@ -20,12 +20,12 @@ fun Row.toCalendarSubscription(): CalendarSubscription = CalendarSubscription(
     lastUsedAt = instantOrNull("last_used_at"),
 )
 
-/** A logged check-in value flattened for the calendar feed, carrying its habit and field metadata. */
+/** A logged check-in value flattened for the calendar feed, carrying its track and field metadata. */
 data class CalendarCheckin(
     val checkinId: Long,
-    val habitName: String,
+    val trackName: String,
     val date: java.time.LocalDate,
-    val habitType: String?,
+    val trackType: String?,
     val status: String?,
     val value: String?,
     val paramType: String?,
@@ -37,9 +37,9 @@ data class CalendarCheckin(
 
 fun Row.toCalendarCheckin(): CalendarCheckin = CalendarCheckin(
     checkinId = long("checkin_id"),
-    habitName = string("name"),
+    trackName = string("name"),
     date = localDate("check_date"),
-    habitType = stringOrNull("habit_type"),
+    trackType = stringOrNull("track_type"),
     status = stringOrNull("status"),
     value = stringOrNull("value"),
     paramType = stringOrNull("param_type"),
@@ -49,17 +49,17 @@ fun Row.toCalendarCheckin(): CalendarCheckin = CalendarCheckin(
     checkedAt = instantOrNull("checked_at"),
 )
 
-/** A habit reminder flattened for the calendar feed: time-of-day and ISO weekdays (Mon=1..Sun=7). */
+/** A track reminder flattened for the calendar feed: time-of-day and ISO weekdays (Mon=1..Sun=7). */
 data class CalendarReminder(
     val reminderId: Long,
-    val habitName: String,
+    val trackName: String,
     val offsetMinutes: Int,
     val days: List<Int>,
 )
 
 fun Row.toCalendarReminder(): CalendarReminder = CalendarReminder(
     reminderId = long("id"),
-    habitName = string("name"),
+    trackName = string("name"),
     offsetMinutes = int("reminder_time"),
     days = intArray("reminder_days"),
 )

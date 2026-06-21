@@ -1,21 +1,21 @@
-package commands.addhabit
+package commands.addtrack
 
 import Strings
 import dev.inmo.tgbotapi.extensions.api.send.sendMessage
 import dev.inmo.tgbotapi.extensions.behaviour_builder.BehaviourContext
 import dev.inmo.tgbotapi.types.IdChatIdentifier
-import dto.HabitParam
+import dto.TrackParam
 import dto.ParamType
 import dto.TimerPhase
 import lang
 
 /**
- * Timer habit: an optional integer daily target in minutes (timers only measure elapsed time, so
+ * Timer track: an optional integer daily target in minutes (timers only measure elapsed time, so
  * there's no direction), plus any number of extra annotation fields ("comment" params). Each extra
  * field is NUMBER or free TEXT and is filled in either before the timer starts or after it stops.
  * Returns null (after sending a message) on cancel/invalid input.
  */
-suspend fun BehaviourContext.timerFlow(chatId: IdChatIdentifier, logOnly: Boolean): HabitDraft? {
+suspend fun BehaviourContext.timerFlow(chatId: IdChatIdentifier, logOnly: Boolean): TrackDraft? {
     var dailyTarget: Double? = null
     if (!logOnly) {
         sendMessage(chatId, Strings.sendTimerTarget(data.lang))
@@ -34,13 +34,13 @@ suspend fun BehaviourContext.timerFlow(chatId: IdChatIdentifier, logOnly: Boolea
     }
 
     val extras = collectTimerFields(chatId) ?: return null
-    if (extras.isEmpty()) return HabitDraft(dailyTarget = dailyTarget)
+    if (extras.isEmpty()) return TrackDraft(dailyTarget = dailyTarget)
 
     // The duration param (elapsed seconds) is the timer's primary, phase-less NUMBER param; the
     // extra annotation fields follow it. Once we supply params explicitly, the repository no longer
     // auto-creates the duration param, so we add it here.
-    val durationParam = HabitParam(id = 0, paramType = ParamType.NUMBER)
-    return HabitDraft(dailyTarget = dailyTarget, params = listOf(durationParam) + extras)
+    val durationParam = TrackParam(id = 0, paramType = ParamType.NUMBER)
+    return TrackDraft(dailyTarget = dailyTarget, params = listOf(durationParam) + extras)
 }
 
 /**
@@ -48,8 +48,8 @@ suspend fun BehaviourContext.timerFlow(chatId: IdChatIdentifier, logOnly: Boolea
  * (number/text) and a phase (before start / after stop). The loop stops when the user signals
  * "done" or skips. Returns null (after sending a message) only on cancel.
  */
-private suspend fun BehaviourContext.collectTimerFields(chatId: IdChatIdentifier): List<HabitParam>? {
-    val fields = mutableListOf<HabitParam>()
+private suspend fun BehaviourContext.collectTimerFields(chatId: IdChatIdentifier): List<TrackParam>? {
+    val fields = mutableListOf<TrackParam>()
     while (true) {
         val prompt = if (fields.isEmpty()) Strings.sendFirstTimerFieldNameOrSkip(data.lang)
                      else Strings.sendNextTimerFieldNameOrDone(data.lang)
@@ -71,7 +71,7 @@ private suspend fun BehaviourContext.collectTimerFields(chatId: IdChatIdentifier
         ) ?: run { sendMessage(chatId, Strings.cancelled(data.lang)); return null }
         val phase = if (phaseChoice == PHASE_AFTER) TimerPhase.AFTER else TimerPhase.BEFORE
 
-        fields.add(HabitParam(id = 0, name = fname.take(64), paramType = paramType, timerPhase = phase))
+        fields.add(TrackParam(id = 0, name = fname.take(64), paramType = paramType, timerPhase = phase))
     }
     return fields
 }

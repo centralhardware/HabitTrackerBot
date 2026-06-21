@@ -1,13 +1,14 @@
 import ReminderScheduler.sendDueReminders
 import TimerTicker.tickRunningTimers
-import commands.addhabit.registerAddHabitCommand
+import commands.addtrack.registerAddTrackCommand
 import commands.registerCalendarCommand
 import commands.registerCheckInCommand
 import commands.registerDeleteParamCommand
-import commands.registerHabitsCommand
+import commands.registerLogCommand
+import commands.registerTracksCommand
 import commands.registerMcpCommands
 import commands.registerPauseCommand
-import commands.registerRemoveHabitCommand
+import commands.registerRemoveTrackCommand
 import commands.registerResumeCommand
 import commands.registerLangCommand
 import commands.registerStartCommand
@@ -27,7 +28,7 @@ import dev.inmo.tgbotapi.types.commands.BotCommandScope.Companion.Default
 import kotlinx.coroutines.launch
 import mcp.McpServer
 import services.DatabaseService
-import services.HabitService
+import services.TrackService
 
 @OptIn(Warning::class)
 suspend fun main() {
@@ -35,7 +36,7 @@ suspend fun main() {
 
     McpServer.start()
 
-    longPolling("HabitTrackerBot", subcontextInitialAction = populateUserContext) {
+    longPolling("TrackAll", subcontextInitialAction = populateUserContext) {
         BotNotifier.bind(this)
         Lang.entries.forEach { lang ->
             val code = if (lang == Lang.RU) "ru" else "en"
@@ -49,13 +50,14 @@ suspend fun main() {
         setDefaultChatMenuButton(MenuButton.Commands)
 
         registerStartCommand()
-        registerAddHabitCommand()
-        registerHabitsCommand()
-        registerRemoveHabitCommand()
+        registerAddTrackCommand()
+        registerTracksCommand()
+        registerRemoveTrackCommand()
         registerDeleteParamCommand()
         registerPauseCommand()
         registerResumeCommand()
         registerCheckInCommand()
+        registerLogCommand()
         registerTimerCommand()
         registerStatsCommand()
         registerTzCommand()
@@ -67,7 +69,7 @@ suspend fun main() {
         launch {
             doInfinity("0 /1 * * *") {
                 runCatching {
-                    HabitService.autoResumeExpired().forEach { resumed ->
+                    TrackService.autoResumeExpired().forEach { resumed ->
                         val lang = resumed.langCode?.let { runCatching { Lang.valueOf(it) }.getOrNull() } ?: Lang.EN
                         BotNotifier.notify(resumed.userId, Strings.autoResumed(lang, resumed.name))
                     }

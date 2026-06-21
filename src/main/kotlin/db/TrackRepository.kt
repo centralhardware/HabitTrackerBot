@@ -1,15 +1,15 @@
 package db
 
 import services.DatabaseService
-import dto.Habit
-import dto.HabitParam
-import dto.HabitType
+import dto.Track
+import dto.TrackParam
+import dto.TrackType
 import dto.RawDue
 import dto.RawMissed
-import dto.ResumedHabit
-import dto.toHabit
-import dto.toHabitParam
-import dto.toHabitReminder
+import dto.ResumedTrack
+import dto.toTrack
+import dto.toTrackParam
+import dto.toTrackReminder
 import dto.toRawDue
 import dto.toRawMissed
 import kotliquery.queryOf
@@ -17,60 +17,60 @@ import kotliquery.sessionOf
 import kotliquery.using
 import java.time.OffsetDateTime
 
-object HabitRepository {
+object TrackRepository {
 
-    fun find(habitId: Long, userId: Long): Habit? =
-        listRawActive(userId).firstOrNull { it.id == habitId }
+    fun find(trackId: Long, userId: Long): Track? =
+        listRawActive(userId).firstOrNull { it.id == trackId }
 
-    fun listActive(userId: Long): List<Habit> = listRawActive(userId)
+    fun listActive(userId: Long): List<Track> = listRawActive(userId)
 
-    private fun listRawActive(userId: Long): List<Habit> {
+    private fun listRawActive(userId: Long): List<Track> {
         return sessionOf(DatabaseService.dataSource).use { session ->
-            val habits = session.run(
+            val tracks = session.run(
                 queryOf(
                     """
-                    SELECT h.id, h.user_id, h.name, h.habit_type, h.daily_target,
+                    SELECT h.id, h.user_id, h.name, h.track_type, h.daily_target,
                            h.unit, h.direction, h.status, h.log_only, h.allow_adhoc
-                    FROM habits h
+                    FROM tracks h
                     WHERE h.user_id = ? AND h.status <> 'deleted'
                     ORDER BY h.created_at
                     """.trimIndent(),
                     userId
-                ).map { it.toHabit() }.asList
+                ).map { it.toTrack() }.asList
             )
-            if (habits.isEmpty()) return@use habits
+            if (tracks.isEmpty()) return@use tracks
 
-            val remindersByHabit = session.run(
+            val remindersByTrack = session.run(
                 queryOf(
                     """
-                    SELECT r.id, r.habit_id, r.reminder_time, r.reminder_days
-                    FROM habit_reminders r
-                    JOIN habits h ON h.id = r.habit_id
+                    SELECT r.id, r.track_id, r.reminder_time, r.reminder_days
+                    FROM track_reminders r
+                    JOIN tracks h ON h.id = r.track_id
                     WHERE h.user_id = ? AND h.status <> 'deleted'
                     ORDER BY r.reminder_time
                     """.trimIndent(),
                     userId
-                ).map { it.long("habit_id") to it.toHabitReminder() }.asList
+                ).map { it.long("track_id") to it.toTrackReminder() }.asList
             ).groupBy({ it.first }, { it.second })
 
-            val paramsByHabit = session.run(
+            val paramsByTrack = session.run(
                 queryOf(
                     """
-                    SELECT p.id, p.habit_id, p.name, p.unit, p.direction, p.daily_target, p.position, p.param_type, p.timer_phase
-                    FROM habit_params p
-                    JOIN habits h ON h.id = p.habit_id
+                    SELECT p.id, p.track_id, p.name, p.unit, p.direction, p.daily_target, p.position, p.param_type, p.timer_phase
+                    FROM track_params p
+                    JOIN tracks h ON h.id = p.track_id
                     WHERE h.user_id = ? AND h.status <> 'deleted' AND p.deleted = false
-                    ORDER BY p.habit_id, p.position, p.id
+                    ORDER BY p.track_id, p.position, p.id
                     """.trimIndent(),
                     userId
-                ).map { it.long("habit_id") to it.toHabitParam() }.asList
+                ).map { it.long("track_id") to it.toTrackParam() }.asList
             ).groupBy({ it.first }, { it.second })
 
-            habits.map { h ->
-                val params = paramsByHabit[h.id].orEmpty()
-                // Single-field quantity habits keep their metadata on the param row; hoist it onto
-                // the habit so every single-field habit looks the same to callers.
-                val hoisted = if ((h.type == HabitType.QUANTITY || h.type == HabitType.TIMER) && params.size == 1) {
+            tracks.map { h ->
+                val params = paramsByTrack[h.id].orEmpty()
+                // Single-field quantity tracks keep their metadata on the param row; hoist it onto
+                // the track so every single-field track looks the same to callers.
+                val hoisted = if ((h.type == TrackType.QUANTITY || h.type == TrackType.TIMER) && params.size == 1) {
                     val p = params[0]
                     h.copy(
                         unit = h.unit ?: p.unit,
@@ -79,124 +79,124 @@ object HabitRepository {
                     )
                 } else h
                 hoisted.copy(
-                    reminders = remindersByHabit[h.id].orEmpty(),
+                    reminders = remindersByTrack[h.id].orEmpty(),
                     params = params,
                 )
             }
         }
     }
 
-    fun upsert(habit: Habit): Habit =
-        if (habit.id == 0L) insert(habit) else update(habit)
+    fun upsert(track: Track): Track =
+        if (track.id == 0L) insert(track) else update(track)
 
-    /** Inserts a habit, its reminders and its params (every habit carries >=1 param). */
-    private fun insert(habit: Habit): Habit {
+    /** Inserts a track, its reminders and its params (every track carries >=1 param). */
+    private fun insert(track: Track): Track {
         return using(sessionOf(DatabaseService.dataSource, returnGeneratedKey = true)) { session ->
             session.transaction { tx ->
                 val id = tx.updateAndReturnGeneratedKey(
                     queryOf(
                         """
-                        INSERT INTO habits (user_id, name, habit_type, daily_target, unit, direction, status, log_only, allow_adhoc)
-                        VALUES (?, ?, ?::habit_type, ?, ?, ?::habit_direction, ?::habit_status, ?, ?)
+                        INSERT INTO tracks (user_id, name, track_type, daily_target, unit, direction, status, log_only, allow_adhoc)
+                        VALUES (?, ?, ?::track_type, ?, ?, ?::track_direction, ?::track_status, ?, ?)
                         """.trimIndent(),
-                        habit.userId, habit.name, habit.type.value,
-                        habit.dailyTarget, habit.unit, habit.direction?.value,
-                        habit.status.value, habit.logOnly, habit.allowAdHoc
+                        track.userId, track.name, track.type.value,
+                        track.dailyTarget, track.unit, track.direction?.value,
+                        track.status.value, track.logOnly, track.allowAdHoc
                     )
-                ) ?: error("Failed to insert habit")
+                ) ?: error("Failed to insert track")
 
-                habit.reminders.forEach { rem ->
+                track.reminders.forEach { rem ->
                     tx.execute(
                         queryOf(
-                            "INSERT INTO habit_reminders (habit_id, reminder_time, reminder_days) VALUES (?, ?, ?::int[])",
+                            "INSERT INTO track_reminders (track_id, reminder_time, reminder_days) VALUES (?, ?, ?::int[])",
                             id, rem.offsetMinutes, rem.days.toPgArray()
                         )
                     )
                 }
 
-                val params = habit.params.ifEmpty {
-                    when (habit.type) {
-                        // Quantity habits get a numeric service param; timer habits store their
+                val params = track.params.ifEmpty {
+                    when (track.type) {
+                        // Quantity tracks get a numeric service param; timer tracks store their
                         // elapsed minutes on the same kind of single numeric param.
-                        HabitType.QUANTITY, HabitType.TIMER -> listOf(HabitParam(id = 0, paramType = dto.ParamType.NUMBER))
-                        // Check habits need no param: ad-hoc events are bare checkins rows, and
+                        TrackType.QUANTITY, TrackType.TIMER -> listOf(TrackParam(id = 0, paramType = dto.ParamType.NUMBER))
+                        // Check tracks need no param: ad-hoc events are bare checkins rows, and
                         // scheduled slots keep their done/skip status on the checkins row.
-                        HabitType.CHECK -> emptyList()
+                        TrackType.CHECK -> emptyList()
                     }
                 }
                 val savedParams = params.mapIndexed { i, p ->
                     val pid = tx.updateAndReturnGeneratedKey(
                         queryOf(
                             """
-                            INSERT INTO habit_params (habit_id, name, unit, direction, daily_target, position, param_type, timer_phase)
-                            VALUES (?, ?, ?, ?::habit_direction, ?, ?, ?::param_type, ?)
+                            INSERT INTO track_params (track_id, name, unit, direction, daily_target, position, param_type, timer_phase)
+                            VALUES (?, ?, ?, ?::track_direction, ?, ?, ?::param_type, ?)
                             """.trimIndent(),
                             id, p.name, p.unit, p.direction?.value, p.dailyTarget, i, p.paramType.value, p.timerPhase?.value
                         )
-                    ) ?: error("Failed to insert habit param")
-                    p.copy(id = pid, habitId = id, position = i)
+                    ) ?: error("Failed to insert track param")
+                    p.copy(id = pid, trackId = id, position = i)
                 }
 
-                habit.copy(id = id, params = savedParams)
+                track.copy(id = id, params = savedParams)
             }
         }
     }
 
-    private fun update(habit: Habit): Habit {
+    private fun update(track: Track): Track {
         sessionOf(DatabaseService.dataSource).use { session ->
             session.update(
                 queryOf(
                     """
-                    UPDATE habits
+                    UPDATE tracks
                     SET name         = ?,
-                        habit_type   = ?::habit_type,
+                        track_type   = ?::track_type,
                         daily_target = ?,
                         unit         = ?,
-                        direction    = ?::habit_direction,
-                        status       = ?::habit_status,
+                        direction    = ?::track_direction,
+                        status       = ?::track_status,
                         log_only     = ?,
                         allow_adhoc  = ?,
-                        paused_at    = CASE WHEN ?::habit_status = 'paused'  AND status <> 'paused'  THEN now() ELSE paused_at  END,
-                        deleted_at   = CASE WHEN ?::habit_status = 'deleted' AND status <> 'deleted' THEN now() ELSE deleted_at END,
-                        paused_until = CASE WHEN ?::habit_status <> 'paused' THEN NULL ELSE paused_until END
+                        paused_at    = CASE WHEN ?::track_status = 'paused'  AND status <> 'paused'  THEN now() ELSE paused_at  END,
+                        deleted_at   = CASE WHEN ?::track_status = 'deleted' AND status <> 'deleted' THEN now() ELSE deleted_at END,
+                        paused_until = CASE WHEN ?::track_status <> 'paused' THEN NULL ELSE paused_until END
                     WHERE id = ? AND user_id = ?
                     """.trimIndent(),
-                    habit.name, habit.type.value, habit.dailyTarget, habit.unit, habit.direction?.value,
-                    habit.status.value, habit.logOnly, habit.allowAdHoc,
-                    habit.status.value, habit.status.value, habit.status.value,
-                    habit.id, habit.userId
+                    track.name, track.type.value, track.dailyTarget, track.unit, track.direction?.value,
+                    track.status.value, track.logOnly, track.allowAdHoc,
+                    track.status.value, track.status.value, track.status.value,
+                    track.id, track.userId
                 )
             )
         }
-        return habit
+        return track
     }
 
     /**
-     * Pauses an active habit. [until] is the auto-resume moment, or null for an indefinite pause.
-     * No-op (returns false) if the habit isn't currently active.
+     * Pauses an active track. [until] is the auto-resume moment, or null for an indefinite pause.
+     * No-op (returns false) if the track isn't currently active.
      */
-    fun pauseHabit(habitId: Long, userId: Long, until: OffsetDateTime?): Boolean =
+    fun pauseTrack(trackId: Long, userId: Long, until: OffsetDateTime?): Boolean =
         sessionOf(DatabaseService.dataSource).use { session ->
             session.update(
                 queryOf(
                     """
-                    UPDATE habits
+                    UPDATE tracks
                     SET status = 'paused', paused_at = now(), paused_until = ?
                     WHERE id = ? AND user_id = ? AND status = 'active'
                     """.trimIndent(),
-                    until, habitId, userId
+                    until, trackId, userId
                 )
             ) > 0
         }
 
-    /** Flips every paused habit whose deadline has passed back to active, returning the ones resumed. */
-    fun autoResumeExpired(): List<ResumedHabit> =
+    /** Flips every paused track whose deadline has passed back to active, returning the ones resumed. */
+    fun autoResumeExpired(): List<ResumedTrack> =
         sessionOf(DatabaseService.dataSource).use { session ->
             session.run(
                 queryOf(
                     """
                     WITH resumed AS (
-                        UPDATE habits
+                        UPDATE tracks
                         SET status = 'active', paused_until = NULL
                         WHERE status = 'paused' AND paused_until IS NOT NULL AND paused_until <= now()
                         RETURNING user_id, name
@@ -205,18 +205,18 @@ object HabitRepository {
                     FROM resumed r
                     LEFT JOIN user_settings us ON us.user_id = r.user_id
                     """.trimIndent()
-                ).map { ResumedHabit(it.long("user_id"), it.string("name"), it.stringOrNull("lang")) }.asList
+                ).map { ResumedTrack(it.long("user_id"), it.string("name"), it.stringOrNull("lang")) }.asList
             )
         }
 
-    fun findHabitIdByReminder(reminderId: Long, userId: Long): Long? {
+    fun findTrackIdByReminder(reminderId: Long, userId: Long): Long? {
         return sessionOf(DatabaseService.dataSource).use { session ->
             session.run(
                 queryOf(
                     """
                     SELECT h.id
-                    FROM habit_reminders r
-                    JOIN habits h ON h.id = r.habit_id
+                    FROM track_reminders r
+                    JOIN tracks h ON h.id = r.track_id
                     WHERE r.id = ? AND h.user_id = ? AND h.status <> 'deleted'
                     """.trimIndent(),
                     reminderId, userId
@@ -230,11 +230,11 @@ object HabitRepository {
             session.run(
                 queryOf(
                     """
-                    SELECT r.id AS reminder_id, h.id AS habit_id, h.habit_type,
+                    SELECT r.id AS reminder_id, h.id AS track_id, h.track_type,
                            h.user_id, h.name, r.reminder_time, r.reminder_days,
                            us.timezone AS tz, us.language AS lang
-                    FROM habit_reminders r
-                    JOIN habits h ON h.id = r.habit_id
+                    FROM track_reminders r
+                    JOIN tracks h ON h.id = r.track_id
                     JOIN user_settings us ON us.user_id = h.user_id
                     LEFT JOIN checkins c
                         ON c.reminder_id = r.id
@@ -244,7 +244,7 @@ object HabitRepository {
                        END
                     WHERE h.status = 'active'
                       AND us.timezone IS NOT NULL
-                      AND (h.habit_type <> 'check' OR c.id IS NULL)
+                      AND (h.track_type <> 'check' OR c.id IS NULL)
                     """.trimIndent()
                 ).map { it.toRawDue() }.asList
             )
@@ -253,7 +253,7 @@ object HabitRepository {
 
     /**
      * Backfills checkin rows for every scheduled reminder slot that has fired
-     * but has no checkin yet (going back to habit creation). Slots whose firing
+     * but has no checkin yet (going back to track creation). Slots whose firing
      * moment is older than 24h are inserted as `skip` immediately; recent slots
      * are inserted as `pending` and returned so the caller can
      * send a catch-up notification.
@@ -268,17 +268,17 @@ object HabitRepository {
                 queryOf(
                     """
                     WITH missed AS (
-                        SELECT r.id AS reminder_id, r.habit_id, h.user_id,
+                        SELECT r.id AS reminder_id, r.track_id, h.user_id,
                                d::date AS missed_date,
                                (d::date
                                 + CASE WHEN r.reminder_time >= 1440 THEN INTERVAL '1 day' ELSE INTERVAL '0' END
                                 + (r.reminder_time % 1440) * INTERVAL '1 minute'
                                ) AT TIME ZONE us.timezone AS fired_at,
                                us.language AS lang_code,
-                               h.name AS habit_name,
+                               h.name AS track_name,
                                r.reminder_time
-                        FROM habit_reminders r
-                        JOIN habits h ON h.id = r.habit_id
+                        FROM track_reminders r
+                        JOIN tracks h ON h.id = r.track_id
                         JOIN user_settings us ON us.user_id = h.user_id
                         CROSS JOIN LATERAL generate_series(
                             (h.created_at AT TIME ZONE us.timezone)::date,
@@ -289,7 +289,7 @@ object HabitRepository {
                             ON c.reminder_id = r.id
                            AND c.check_date  = d::date
                         WHERE h.status = 'active'
-                          AND h.habit_type = 'check'
+                          AND h.track_type = 'check'
                           AND us.timezone IS NOT NULL
                           AND c.id IS NULL
                           AND (r.reminder_days IS NULL
@@ -304,8 +304,8 @@ object HabitRepository {
                               ) AT TIME ZONE us.timezone < now() - INTERVAL '1 minute'
                     ),
                     ins_events AS (
-                        INSERT INTO checkins (user_id, check_date, reminder_id, habit_id, comment, checked_at)
-                        SELECT user_id, missed_date, reminder_id, habit_id, NULL,
+                        INSERT INTO checkins (user_id, check_date, reminder_id, track_id, comment, checked_at)
+                        SELECT user_id, missed_date, reminder_id, track_id, NULL,
                                CASE WHEN now() - fired_at > INTERVAL '24 hours'
                                     THEN now()
                                     ELSE NULL END
@@ -315,7 +315,7 @@ object HabitRepository {
                         RETURNING id, reminder_id, check_date
                     ),
                     ins_values AS (
-                        -- Scheduled habits have no param: the status row carries a NULL param_id.
+                        -- Scheduled tracks have no param: the status row carries a NULL param_id.
                         INSERT INTO checkin_values (checkin_id, param_id, status, value)
                         SELECT ie.id,
                                NULL,
@@ -329,7 +329,7 @@ object HabitRepository {
                          AND m.missed_date  = ie.check_date
                         RETURNING checkin_id
                     )
-                    SELECT m.reminder_id, m.habit_id, m.user_id, m.habit_name AS name,
+                    SELECT m.reminder_id, m.track_id, m.user_id, m.track_name AS name,
                            m.reminder_time, m.lang_code AS lang, m.missed_date
                     FROM ins_events ie
                     JOIN missed m
@@ -344,22 +344,22 @@ object HabitRepository {
     }
 
     /**
-     * Soft-deletes a single habit param owned by [userId]: the row (and its checkin_values) stay so
-     * historical records still resolve its name, but it's hidden from the active habit. Refuses
-     * (returns false) when it's the habit's only live param, since every habit must keep >=1.
+     * Soft-deletes a single track param owned by [userId]: the row (and its checkin_values) stay so
+     * historical records still resolve its name, but it's hidden from the active track. Refuses
+     * (returns false) when it's the track's only live param, since every track must keep >=1.
      */
     fun deleteParam(paramId: Long, userId: Long): Boolean =
         sessionOf(DatabaseService.dataSource).use { session ->
             session.update(
                 queryOf(
                     """
-                    UPDATE habit_params p
+                    UPDATE track_params p
                     SET deleted = true, deleted_at = now()
-                    FROM habits h
-                    WHERE p.id = ? AND p.habit_id = h.id AND h.user_id = ?
+                    FROM tracks h
+                    WHERE p.id = ? AND p.track_id = h.id AND h.user_id = ?
                       AND p.deleted = false
-                      AND (SELECT count(*) FROM habit_params p2
-                           WHERE p2.habit_id = p.habit_id AND p2.deleted = false) > 1
+                      AND (SELECT count(*) FROM track_params p2
+                           WHERE p2.track_id = p.track_id AND p2.deleted = false) > 1
                     """.trimIndent(),
                     paramId, userId
                 )

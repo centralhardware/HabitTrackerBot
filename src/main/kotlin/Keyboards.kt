@@ -1,6 +1,6 @@
 import dev.inmo.tgbotapi.types.buttons.InlineKeyboardButtons.CallbackDataInlineKeyboardButton
 import dev.inmo.tgbotapi.types.buttons.InlineKeyboardMarkup
-import dto.Habit
+import dto.Track
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 
@@ -17,69 +17,69 @@ object Keyboards {
         )
     }
 
-    fun logPlus(habitId: Long, date: LocalDate, lang: Lang): InlineKeyboardMarkup {
+    fun logPlus(trackId: Long, date: LocalDate, lang: Lang): InlineKeyboardMarkup {
         return InlineKeyboardMarkup(
             listOf(
                 listOf(
-                    CallbackDataInlineKeyboardButton(Strings.btnPlusOne(lang), "lg|$habitId|$date|1"),
-                    CallbackDataInlineKeyboardButton(Strings.btnPlusComment(lang), "lg|$habitId|$date|c"),
-                    CallbackDataInlineKeyboardButton(Strings.btnDelete(lang), "lg|$habitId|$date|del")
+                    CallbackDataInlineKeyboardButton(Strings.btnPlusOne(lang), "lg|$trackId|$date|1"),
+                    CallbackDataInlineKeyboardButton(Strings.btnPlusComment(lang), "lg|$trackId|$date|c"),
+                    CallbackDataInlineKeyboardButton(Strings.btnDelete(lang), "lg|$trackId|$date|del")
                 )
             )
         )
     }
 
-    /** Start/stop/pause control for a timer habit. Payload: `tm|<habitId>|<date>|start|stop|stopc|pause|resume`. */
-    fun timerControl(habitId: Long, running: Boolean, date: LocalDate, lang: Lang, paused: Boolean = false): InlineKeyboardMarkup {
+    /** Start/stop/pause control for a timer track. Payload: `tm|<trackId>|<date>|start|stop|stopc|pause|resume`. */
+    fun timerControl(trackId: Long, running: Boolean, date: LocalDate, lang: Lang, paused: Boolean = false): InlineKeyboardMarkup {
         if (!running)
             return InlineKeyboardMarkup(listOf(listOf(
-                CallbackDataInlineKeyboardButton(Strings.btnTimerStart(lang), "tm|$habitId|$date|start")
+                CallbackDataInlineKeyboardButton(Strings.btnTimerStart(lang), "tm|$trackId|$date|start")
             )))
         val pauseBtn = if (paused)
-            CallbackDataInlineKeyboardButton(Strings.btnTimerResume(lang), "tm|$habitId|$date|resume")
+            CallbackDataInlineKeyboardButton(Strings.btnTimerResume(lang), "tm|$trackId|$date|resume")
         else
-            CallbackDataInlineKeyboardButton(Strings.btnTimerPause(lang), "tm|$habitId|$date|pause")
+            CallbackDataInlineKeyboardButton(Strings.btnTimerPause(lang), "tm|$trackId|$date|pause")
         return InlineKeyboardMarkup(listOf(
             listOf(
                 pauseBtn,
-                CallbackDataInlineKeyboardButton(Strings.btnTimerStop(lang), "tm|$habitId|$date|stop"),
-                CallbackDataInlineKeyboardButton(Strings.btnTimerStopComment(lang), "tm|$habitId|$date|stopc"),
+                CallbackDataInlineKeyboardButton(Strings.btnTimerStop(lang), "tm|$trackId|$date|stop"),
+                CallbackDataInlineKeyboardButton(Strings.btnTimerStopComment(lang), "tm|$trackId|$date|stopc"),
             )
         ))
     }
 
-    /** Duration choices shown after a habit is picked for pausing. Payload: `pd|<habitId>|<days>` (0 = indefinite). */
-    fun pauseDurations(habitId: Long, lang: Lang): InlineKeyboardMarkup {
+    /** Duration choices shown after a track is picked for pausing. Payload: `pd|<trackId>|<days>` (0 = indefinite). */
+    fun pauseDurations(trackId: Long, lang: Lang): InlineKeyboardMarkup {
         return InlineKeyboardMarkup(
             listOf(
                 listOf(
-                    CallbackDataInlineKeyboardButton(Strings.btnPauseDay(lang), "pd|$habitId|1"),
-                    CallbackDataInlineKeyboardButton(Strings.btnPause3Days(lang), "pd|$habitId|3"),
-                    CallbackDataInlineKeyboardButton(Strings.btnPauseWeek(lang), "pd|$habitId|7"),
+                    CallbackDataInlineKeyboardButton(Strings.btnPauseDay(lang), "pd|$trackId|1"),
+                    CallbackDataInlineKeyboardButton(Strings.btnPause3Days(lang), "pd|$trackId|3"),
+                    CallbackDataInlineKeyboardButton(Strings.btnPauseWeek(lang), "pd|$trackId|7"),
                 ),
                 listOf(
-                    CallbackDataInlineKeyboardButton(Strings.btnPauseMonth(lang), "pd|$habitId|30"),
-                    CallbackDataInlineKeyboardButton(Strings.btnPauseForever(lang), "pd|$habitId|0"),
+                    CallbackDataInlineKeyboardButton(Strings.btnPauseMonth(lang), "pd|$trackId|30"),
+                    CallbackDataInlineKeyboardButton(Strings.btnPauseForever(lang), "pd|$trackId|0"),
                 ),
                 listOf(
-                    CallbackDataInlineKeyboardButton(Strings.btnPauseCustom(lang), "pc|$habitId"),
+                    CallbackDataInlineKeyboardButton(Strings.btnPauseCustom(lang), "pc|$trackId"),
                 ),
             )
         )
     }
 
-    fun pickHabit(prefix: String, habits: List<Habit>, icon: String): InlineKeyboardMarkup {
+    fun pickTrack(prefix: String, tracks: List<Track>, icon: String): InlineKeyboardMarkup {
         return InlineKeyboardMarkup(
-            habits.map { habit ->
+            tracks.map { track ->
                 listOf(
-                    CallbackDataInlineKeyboardButton("$icon ${habit.name}", "$prefix|${habit.id}")
+                    CallbackDataInlineKeyboardButton("$icon ${track.name}", "$prefix|${track.id}")
                 )
             }
         )
     }
 
-    /** Field choices shown after a habit is picked for param deletion. Payload: `dp|<paramId>`. */
-    fun pickParam(params: List<dto.HabitParam>, lang: Lang): InlineKeyboardMarkup {
+    /** Field choices shown after a track is picked for param deletion. Payload: `dp|<paramId>`. */
+    fun pickParam(params: List<dto.TrackParam>, lang: Lang): InlineKeyboardMarkup {
         return InlineKeyboardMarkup(
             params.map { p ->
                 listOf(
@@ -87,6 +87,18 @@ object Keyboards {
                 )
             }
         )
+    }
+
+    /**
+     * Prev/next pager for the /log recent-check-ins listing. Payload: `rc|<page>`.
+     * Returns null when neither direction is available (so the single page shows no buttons).
+     */
+    fun recentPager(page: Int, hasPrev: Boolean, hasNext: Boolean, lang: Lang): InlineKeyboardMarkup? {
+        val row = buildList {
+            if (hasPrev) add(CallbackDataInlineKeyboardButton(Strings.btnPrevPage(lang), "rc|${page - 1}"))
+            if (hasNext) add(CallbackDataInlineKeyboardButton(Strings.btnNextPage(lang), "rc|${page + 1}"))
+        }
+        return if (row.isEmpty()) null else InlineKeyboardMarkup(listOf(row))
     }
 
     /** Content toggles + relink control for the calendar feed. Payload: `cal|tc|tr|new`. */

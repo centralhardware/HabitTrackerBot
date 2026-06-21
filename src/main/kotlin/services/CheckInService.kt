@@ -1,7 +1,7 @@
 package services
 
 import db.CheckInRepository
-import db.HabitRepository
+import db.TrackRepository
 import dto.CheckinEvent
 import dto.CheckinRecord
 import dto.CheckinStatus
@@ -10,11 +10,11 @@ import dto.CheckinValueRow
 import dto.DeletableCheckin
 import dto.Direction
 import dto.FieldValue
-import dto.Habit
-import dto.HabitParam
-import dto.HabitStat
-import dto.HabitStatus
-import dto.HabitType
+import dto.Track
+import dto.TrackParam
+import dto.TrackStat
+import dto.TrackStatus
+import dto.TrackType
 import dto.ParamType
 import dto.QuantityTrend
 import org.apache.commons.math3.stat.descriptive.moment.Mean
@@ -24,56 +24,56 @@ import java.time.temporal.ChronoUnit
 object CheckInService {
 
     fun record(reminderId: Long, userId: Long, date: LocalDate, status: CheckinStatus): Boolean {
-        val habitId = HabitRepository.findHabitIdByReminder(reminderId, userId) ?: return false
+        val trackId = TrackRepository.findTrackIdByReminder(reminderId, userId) ?: return false
         return CheckInRepository.upsertScheduledValue(
-            CheckinEvent(userId, date, reminderId, habitId, comment = null),
+            CheckinEvent(userId, date, reminderId, trackId, comment = null),
             status,
         )
     }
 
-    fun checkInCounter(habitId: Long, userId: Long, date: LocalDate, comment: String? = null): Boolean {
-        val habit = HabitService.findById(habitId, userId) ?: return false
-        if (habit.type != HabitType.CHECK || !habit.allowAdHoc) return false
+    fun checkInCounter(trackId: Long, userId: Long, date: LocalDate, comment: String? = null): Boolean {
+        val track = TrackService.findById(trackId, userId) ?: return false
+        if (track.type != TrackType.CHECK || !track.allowAdHoc) return false
         // An ad-hoc check-in is just a bare checkins row — no param, status or value to store.
         return CheckInRepository.insertEvent(
-            CheckinEvent(userId, date, reminderId = null, habitId = habitId, comment = comment?.trim()?.ifEmpty { null }),
+            CheckinEvent(userId, date, reminderId = null, trackId = trackId, comment = comment?.trim()?.ifEmpty { null }),
         ) > 0
     }
 
     fun recordQuantity(
-        habitId: Long,
+        trackId: Long,
         userId: Long,
         date: LocalDate,
         values: Map<Long, FieldValue> = emptyMap(),
         comment: String? = null
     ): Long {
         if (values.isEmpty()) return 0
-        val habit = HabitService.findById(habitId, userId) ?: return 0
-        if (habit.type != HabitType.QUANTITY) return 0
-        val valueRows = habit.params.mapNotNull { p ->
+        val track = TrackService.findById(trackId, userId) ?: return 0
+        if (track.type != TrackType.QUANTITY) return 0
+        val valueRows = track.params.mapNotNull { p ->
             values[p.id]?.let { CheckinValue(p.id, CheckinStatus.DONE, it) }
         }
         if (valueRows.isEmpty()) return 0
         return CheckInRepository.insertEventWithValues(
-            CheckinEvent(userId, date, reminderId = null, habitId = habitId, comment = comment),
+            CheckinEvent(userId, date, reminderId = null, trackId = trackId, comment = comment),
             valueRows,
         )
     }
 
     /**
-     * Records [seconds] of elapsed time as a check-in for a timer habit, stored on its single
-     * NUMBER param. Returns the new `checkins.id`, or 0 if the habit isn't a timer / has no param.
+     * Records [seconds] of elapsed time as a check-in for a timer track, stored on its single
+     * NUMBER param. Returns the new `checkins.id`, or 0 if the track isn't a timer / has no param.
      */
-    fun recordTimer(habitId: Long, userId: Long, date: LocalDate, seconds: Double, comment: String? = null): Long {
+    fun recordTimer(trackId: Long, userId: Long, date: LocalDate, seconds: Double, comment: String? = null): Long {
         if (seconds <= 0.0) return 0
-        val habit = HabitService.findById(habitId, userId) ?: return 0
-        if (habit.type != HabitType.TIMER) return 0
+        val track = TrackService.findById(trackId, userId) ?: return 0
+        if (track.type != TrackType.TIMER) return 0
         // The elapsed time lives on the duration param (a NUMBER param with no timer phase);
         // extra annotation fields are skipped here and attached separately.
-        val param = habit.params.firstOrNull { it.timerPhase == null && it.paramType == ParamType.NUMBER }
-            ?: habit.params.firstOrNull() ?: return 0
+        val param = track.params.firstOrNull { it.timerPhase == null && it.paramType == ParamType.NUMBER }
+            ?: track.params.firstOrNull() ?: return 0
         return CheckInRepository.insertEventWithValues(
-            CheckinEvent(userId, date, reminderId = null, habitId = habitId, comment = comment?.trim()?.ifEmpty { null }),
+            CheckinEvent(userId, date, reminderId = null, trackId = trackId, comment = comment?.trim()?.ifEmpty { null }),
             listOf(CheckinValue(param.id, CheckinStatus.DONE, FieldValue.Numeric(seconds))),
         )
     }
@@ -84,14 +84,14 @@ object CheckInService {
 
     /**
      * Attaches a timer's extra annotation fields ([values]: paramId → entered text) to the
-     * elapsed-time check-in [checkinId]. Only params that actually belong to the habit are kept;
+     * elapsed-time check-in [checkinId]. Only params that actually belong to the track are kept;
      * each value is stored verbatim (numbers as their numeric text, free text as-is) and never
      * counts toward any statistic.
      */
-    fun attachTimerFieldValues(checkinId: Long, userId: Long, habitId: Long, values: Map<Long, String>) {
+    fun attachTimerFieldValues(checkinId: Long, userId: Long, trackId: Long, values: Map<Long, String>) {
         if (checkinId <= 0 || values.isEmpty()) return
-        val habit = HabitService.findById(habitId, userId) ?: return
-        val paramIds = habit.params.mapTo(mutableSetOf()) { it.id }
+        val track = TrackService.findById(trackId, userId) ?: return
+        val paramIds = track.params.mapTo(mutableSetOf()) { it.id }
         val rows = values.mapNotNull { (paramId, text) ->
             val clean = text.trim()
             if (paramId !in paramIds || clean.isEmpty()) null
@@ -116,7 +116,7 @@ object CheckInService {
 
     /**
      * Patches a quantity check-in: optionally updates the comment and/or individual param quantities.
-     * Only entries dated on or after [notBefore] may be edited.
+     * Only tracks dated on or after [notBefore] may be edited.
      * [updateComment] must be true to touch the comment field (allows setting it to null).
      * [valuePatch] maps paramId → new quantity (only listed params are updated).
      */
@@ -130,79 +130,92 @@ object CheckInService {
     ): UpdateOutcome {
         val event = CheckInRepository.loadEventForDelete(checkinId, userId) ?: return UpdateOutcome.NotFound
         if (event.date.isBefore(notBefore)) return UpdateOutcome.TooOld(event.date)
-        // Validate against the habit's params, not just the values already on the entry: a patch may
-        // set a param the entry doesn't carry yet (e.g. a book name never filled in at the time), so
+        // Validate against the track's params, not just the values already on the track: a patch may
+        // set a param the track doesn't carry yet (e.g. a book name never filled in at the time), so
         // we upsert it rather than silently dropping it.
-        val habitParamIds = HabitService.findById(event.habitId, userId)?.params?.mapTo(mutableSetOf()) { it.id }
+        val trackParamIds = TrackService.findById(event.trackId, userId)?.params?.mapTo(mutableSetOf()) { it.id }
             ?: return UpdateOutcome.NotFound
         if (updateComment) CheckInRepository.updateCheckinComment(checkinId, userId, comment)
         for ((paramId, value) in valuePatch) {
-            if (paramId !in habitParamIds) continue
+            if (paramId !in trackParamIds) continue
             CheckInRepository.upsertCheckinValue(checkinId, userId, paramId, value)
         }
-        return UpdateOutcome.Updated(CheckInRepository.loadEventForDelete(checkinId, userId) ?: event)
+        // `event` is the pre-patch snapshot (loaded above); reload for the post-patch state so the
+        // caller can render a before→after diff rather than just the new values.
+        return UpdateOutcome.Updated(before = event, checkin = CheckInRepository.loadEventForDelete(checkinId, userId) ?: event)
     }
 
     sealed interface UpdateOutcome {
-        data class Updated(val checkin: DeletableCheckin) : UpdateOutcome
+        data class Updated(val before: DeletableCheckin, val checkin: DeletableCheckin) : UpdateOutcome
         data object NotFound : UpdateOutcome
         data class TooOld(val date: LocalDate) : UpdateOutcome
     }
 
-    fun listInRange(habitId: Long, userId: Long, from: LocalDate, to: LocalDate): List<CheckinRecord>? {
-        val habit = HabitService.findById(habitId, userId) ?: return null
+    /** A page of recent check-ins plus whether a further (older) page exists. */
+    data class RecentPage(val items: List<dto.RecentCheckin>, val hasNext: Boolean, val page: Int)
+
+    /** Loads page [page] (0-based) of the user's recent check-ins, newest first, [pageSize] per page. */
+    fun recentCheckins(userId: Long, page: Int, pageSize: Int): RecentPage {
+        val safePage = page.coerceAtLeast(0)
+        // Fetch one extra row to detect whether an older page follows, then drop it.
+        val rows = CheckInRepository.loadRecentForUser(userId, pageSize + 1, safePage * pageSize)
+        return RecentPage(rows.take(pageSize), rows.size > pageSize, safePage)
+    }
+
+    fun listInRange(trackId: Long, userId: Long, from: LocalDate, to: LocalDate): List<CheckinRecord>? {
+        val track = TrackService.findById(trackId, userId) ?: return null
         return CheckinAnalytics.inRange(
-            CheckInRepository.loadForHabit(habitId), from, to, isTimer = habit.type == HabitType.TIMER,
+            CheckInRepository.loadForTrack(trackId), from, to, isTimer = track.type == TrackType.TIMER,
         )
     }
 
-    /** Number of counter/manual events logged for [habitId] on [date]. */
-    fun counterCountOn(habitId: Long, date: LocalDate): Int =
-        CheckinAnalytics.countOn(CheckInRepository.loadForHabit(habitId), date)
+    /** Number of counter/manual events logged for [trackId] on [date]. */
+    fun counterCountOn(trackId: Long, date: LocalDate): Int =
+        CheckinAnalytics.countOn(CheckInRepository.loadForTrack(trackId), date)
 
-    /** The id of the most recent check-in for [habitId]/[userId], or 0 if none. */
-    fun latestCheckin(habitId: Long, userId: Long): Long =
-        CheckInRepository.latestCheckin(habitId, userId)
+    /** The id of the most recent check-in for [trackId]/[userId], or 0 if none. */
+    fun latestCheckin(trackId: Long, userId: Long): Long =
+        CheckInRepository.latestCheckin(trackId, userId)
 
-    /** Total seconds recorded for a timer [habitId] on [date]. */
-    fun timerSecondsOn(habitId: Long, date: LocalDate): Double =
-        CheckinAnalytics.quantitySumsPerDay(CheckInRepository.loadForHabit(habitId))[date] ?: 0.0
+    /** Total seconds recorded for a timer [trackId] on [date]. */
+    fun timerSecondsOn(trackId: Long, date: LocalDate): Double =
+        CheckinAnalytics.quantitySumsPerDay(CheckInRepository.loadForTrack(trackId))[date] ?: 0.0
 
-    fun userStats(userId: Long, today: LocalDate): List<HabitStat> {
-        // Log-only habits are pure journals — normally omitted — but timers track elapsed time
+    fun userStats(userId: Long, today: LocalDate): List<TrackStat> {
+        // Log-only tracks are pure journals — normally omitted — but timers track elapsed time
         // worth surfacing, so a log-only timer still shows up (just its recorded time, no verdict).
-        // Paused habits are excluded too: listActive() really returns all non-deleted habits.
-        return HabitService.listActive(userId)
-            .filter { it.status == HabitStatus.ACTIVE && (!it.logOnly || it.type == HabitType.TIMER) }
-            .map { habitStat(it, today) }
+        // Paused tracks are excluded too: listActive() really returns all non-deleted tracks.
+        return TrackService.listActive(userId)
+            .filter { it.status == TrackStatus.ACTIVE && (!it.logOnly || it.type == TrackType.TIMER) }
+            .map { trackStat(it, today) }
     }
 
-    private fun habitStat(h: Habit, today: LocalDate): HabitStat {
-        val rows = CheckInRepository.loadForHabit(h.id)
+    private fun trackStat(h: Track, today: LocalDate): TrackStat {
+        val rows = CheckInRepository.loadForTrack(h.id)
         val loggedDates = CheckinAnalytics.loggedDates(rows)
         val skipDates = CheckinAnalytics.skipDates(rows)
         val pastLogged = loggedDates.count { it < today }
-        return HabitStat(
-            habitId = h.id,
+        return TrackStat(
+            trackId = h.id,
             name = h.name,
             streak = streak(loggedDates, skipDates, today),
             loggedDays = pastLogged,
             totalDays = pastDaysSince(rows, today),
-            trend = if ((h.type == HabitType.QUANTITY || h.type == HabitType.TIMER) && !h.multiField)
-                quantityTrend(h.unit, h.direction, rows, today, target = h.dailyTarget, isDuration = h.type == HabitType.TIMER)
+            trend = if ((h.type == TrackType.QUANTITY || h.type == TrackType.TIMER) && !h.multiField)
+                quantityTrend(h.unit, h.direction, rows, today, target = h.dailyTarget, isDuration = h.type == TrackType.TIMER)
             else null,
             groupFields = if (h.multiField) h.params.map { paramStat(h, it, rows, today) } else emptyList(),
             logOnly = h.logOnly,
         )
     }
 
-    /** Per-param sub-stat of a multi-field quantity habit, over rows of just that param. */
-    private fun paramStat(h: Habit, p: HabitParam, allRows: List<CheckinValueRow>, today: LocalDate): HabitStat {
+    /** Per-param sub-stat of a multi-field quantity track, over rows of just that param. */
+    private fun paramStat(h: Track, p: TrackParam, allRows: List<CheckinValueRow>, today: LocalDate): TrackStat {
         val rows = allRows.filter { it.paramId == p.id }
         val loggedDates = CheckinAnalytics.loggedDates(rows)
         val skipDates = CheckinAnalytics.skipDates(rows)
-        return HabitStat(
-            habitId = h.id,
+        return TrackStat(
+            trackId = h.id,
             name = p.name ?: h.name,
             streak = streak(loggedDates, skipDates, today),
             loggedDays = loggedDates.count { it < today },
@@ -258,12 +271,12 @@ object CheckInService {
 
     /**
      * Marks a scheduled slot pending and skips any older still-pending check-in of the same
-     * habit (the previous reminder occurrence the user never resolved). Returns the flipped
+     * track (the previous reminder occurrence the user never resolved). Returns the flipped
      * ones, for message updates.
      */
-    fun markPending(habitId: Long, userId: Long, reminderId: Long, date: LocalDate): List<dto.ResolvedCheckin> {
+    fun markPending(trackId: Long, userId: Long, reminderId: Long, date: LocalDate): List<dto.ResolvedCheckin> {
         return CheckInRepository.markPendingSkippingPrevious(
-            CheckinEvent(userId, date, reminderId, habitId, comment = null),
+            CheckinEvent(userId, date, reminderId, trackId, comment = null),
         )
     }
 }

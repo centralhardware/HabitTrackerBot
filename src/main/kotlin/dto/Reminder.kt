@@ -7,13 +7,13 @@ import kotliquery.Row
 import java.time.LocalDate
 
 @Serializable
-data class HabitReminder(
+data class TrackReminder(
     @Transient val id: Long = 0,
     val offsetMinutes: Int,
     @EncodeDefault(EncodeDefault.Mode.NEVER) val days: List<Int> = emptyList(),
 )
 
-fun Row.toHabitReminder(): HabitReminder = HabitReminder(
+fun Row.toTrackReminder(): TrackReminder = TrackReminder(
     id = long("id"),
     offsetMinutes = int("reminder_time"),
     days = intArray("reminder_days"),
@@ -21,8 +21,8 @@ fun Row.toHabitReminder(): HabitReminder = HabitReminder(
 
 data class DueReminder(
     val reminderId: Long,
-    val habitId: Long,
-    val habitType: HabitType,
+    val trackId: Long,
+    val trackType: TrackType,
     val userId: Long,
     val name: String,
     val offsetMinutes: Int,
@@ -32,8 +32,8 @@ data class DueReminder(
 
 data class RawDue(
     val reminderId: Long,
-    val habitId: Long,
-    val habitType: HabitType,
+    val trackId: Long,
+    val trackType: TrackType,
     val userId: Long,
     val name: String,
     val offsetMinutes: Int,
@@ -44,7 +44,7 @@ data class RawDue(
 
 data class RawMissed(
     val reminderId: Long,
-    val habitId: Long,
+    val trackId: Long,
     val userId: Long,
     val name: String,
     val offsetMinutes: Int,
@@ -60,8 +60,8 @@ data class DueUser(
 
 fun Row.toRawDue(): RawDue = RawDue(
     reminderId = long("reminder_id"),
-    habitId = long("habit_id"),
-    habitType = HabitType.parse(stringOrNull("habit_type")),
+    trackId = long("track_id"),
+    trackType = TrackType.parse(stringOrNull("track_type")),
     userId = long("user_id"),
     name = string("name"),
     offsetMinutes = int("reminder_time"),
@@ -72,7 +72,7 @@ fun Row.toRawDue(): RawDue = RawDue(
 
 fun Row.toRawMissed(): RawMissed = RawMissed(
     reminderId = long("reminder_id"),
-    habitId = long("habit_id"),
+    trackId = long("track_id"),
     userId = long("user_id"),
     name = string("name"),
     offsetMinutes = int("reminder_time"),

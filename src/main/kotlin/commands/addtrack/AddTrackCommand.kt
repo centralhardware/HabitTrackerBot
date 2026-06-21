@@ -1,42 +1,42 @@
-package commands.addhabit
+package commands.addtrack
 
-import services.HabitService
+import services.TrackService
 import Strings
 import dev.inmo.tgbotapi.extensions.api.send.sendMessage
 import dev.inmo.tgbotapi.extensions.behaviour_builder.BehaviourContext
 import dev.inmo.tgbotapi.extensions.behaviour_builder.triggers_handling.onCommand
 import dev.inmo.tgbotapi.types.IdChatIdentifier
-import dto.Habit
-import dto.HabitReminder
-import dto.HabitType
+import dto.Track
+import dto.TrackReminder
+import dto.TrackType
 import lang
 import tz
 import userId
 
 /**
- * /addhabit dialog: collects the habit name, type and log mode, delegates the type-specific
+ * /addtrack dialog: collects the track name, type and log mode, delegates the type-specific
  * fields to the matching flow (see [checkFlow] / [timerFlow] / [quantityFlow]), then gathers
  * reminders and saves. Each flow returns null when the user cancelled (having sent its own
  * message), which aborts the whole dialog.
  */
-fun BehaviourContext.registerAddHabitCommand() {
-    onCommand("addhabit") { message ->
+fun BehaviourContext.registerAddTrackCommand() {
+    onCommand("addtrack") { message ->
         val chatId = message.chat.id
         if (data.tz == null) {
-            sendMessage(chatId, Strings.tzRequiredAddHabit(data.lang))
+            sendMessage(chatId, Strings.tzRequiredAddTrack(data.lang))
             return@onCommand
         }
 
-        sendMessage(chatId, Strings.sendHabitName(data.lang))
+        sendMessage(chatId, Strings.sendTrackName(data.lang))
         val nameText = nextText()
         if (nameText.isBlank() || nameText.startsWith("/")) {
             sendMessage(chatId, Strings.cancelled(data.lang))
             return@onCommand
         }
 
-        val typeChoice = pickFromKeyboard(chatId, Strings.pickHabitType(data.lang), typeKeyboard(data.lang), TYPE_PREFIX)
+        val typeChoice = pickFromKeyboard(chatId, Strings.pickTrackType(data.lang), typeKeyboard(data.lang), TYPE_PREFIX)
             ?: run { sendMessage(chatId, Strings.cancelled(data.lang)); return@onCommand }
-        val type = HabitType.entries.firstOrNull { it.value == typeChoice }
+        val type = TrackType.entries.firstOrNull { it.value == typeChoice }
             ?: run { sendMessage(chatId, Strings.cancelled(data.lang)); return@onCommand }
 
         val logChoice = pickFromKeyboard(chatId, Strings.pickLogMode(data.lang), logModeKeyboard(data.lang), LOG_PREFIX)
@@ -44,22 +44,22 @@ fun BehaviourContext.registerAddHabitCommand() {
         val logOnly = logChoice == LOG_ON
 
         val draft = when (type) {
-            HabitType.CHECK -> checkFlow(chatId, logOnly)
-            HabitType.TIMER -> timerFlow(chatId, logOnly)
-            HabitType.QUANTITY -> quantityFlow(chatId, logOnly)
+            TrackType.CHECK -> checkFlow(chatId, logOnly)
+            TrackType.TIMER -> timerFlow(chatId, logOnly)
+            TrackType.QUANTITY -> quantityFlow(chatId, logOnly)
         } ?: return@onCommand
 
-        val reminders = if (type == HabitType.TIMER) emptyList()
+        val reminders = if (type == TrackType.TIMER) emptyList()
         else collectReminders(chatId) ?: return@onCommand
 
-        // A check habit must have something to track: a schedule and/or ad-hoc check-ins.
-        if (type == HabitType.CHECK && reminders.isEmpty() && !draft.allowAdHoc) {
+        // A check track must have something to track: a schedule and/or ad-hoc check-ins.
+        if (type == TrackType.CHECK && reminders.isEmpty() && !draft.allowAdHoc) {
             sendMessage(chatId, Strings.checkNeedsScheduleOrAdHoc(data.lang))
             return@onCommand
         }
 
-        val habit = HabitService.addHabit(
-            Habit(
+        val track = TrackService.addTrack(
+            Track(
                 userId = data.userId,
                 name = nameText,
                 type = type,
@@ -72,17 +72,17 @@ fun BehaviourContext.registerAddHabitCommand() {
                 allowAdHoc = draft.allowAdHoc,
             )
         )
-        sendMessage(chatId, Strings.habitAddedDetailed(data.lang, habit))
+        sendMessage(chatId, Strings.trackAddedDetailed(data.lang, track))
     }
 }
 
 /**
  * Reminder-collection loop, shared by all types. Reminders are always optional here; a check
- * habit's "must have a schedule and/or ad-hoc" rule is enforced by the caller after this returns.
+ * track's "must have a schedule and/or ad-hoc" rule is enforced by the caller after this returns.
  * Returns null (after sending a message) on cancel/error.
  */
-private suspend fun BehaviourContext.collectReminders(chatId: IdChatIdentifier): List<HabitReminder>? {
-    val reminders = mutableListOf<HabitReminder>()
+private suspend fun BehaviourContext.collectReminders(chatId: IdChatIdentifier): List<TrackReminder>? {
+    val reminders = mutableListOf<TrackReminder>()
     while (true) {
         val firstOne = reminders.isEmpty()
         val prompt = if (firstOne) Strings.sendFirstReminderTimeOptional(data.lang)
@@ -117,7 +117,7 @@ private suspend fun BehaviourContext.collectReminders(chatId: IdChatIdentifier):
             }
         }
 
-        reminders += HabitReminder(offsetMinutes = offsetMinutes, days = days)
+        reminders += TrackReminder(offsetMinutes = offsetMinutes, days = days)
     }
     return reminders
 }

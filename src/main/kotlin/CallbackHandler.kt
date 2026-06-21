@@ -10,35 +10,36 @@ import dev.inmo.tgbotapi.types.IdChatIdentifier
 import dev.inmo.tgbotapi.types.MessageId
 import kotlinx.coroutines.flow.first
 import dto.CheckinStatus
-import dto.HabitType
+import dto.TrackType
 import dto.TimerPhase
 import services.CheckInService
-import services.HabitService
+import services.TrackService
 import services.TimerService
 import java.time.LocalDate
 
 fun BehaviourContext.registerCallbackHandler() {
     onMessageDataCallbackQuery(Regex("^ci\\|.*")) { handleCheckIn(it) }
     onMessageDataCallbackQuery(Regex("^lg\\|.*")) { handleLog(it) }
+    onMessageDataCallbackQuery(Regex("^rc\\|.*")) { handleRecent(it) }
     onMessageDataCallbackQuery(Regex("^tm\\|.*")) { handleTimer(it) }
-    onMessageDataCallbackQuery(Regex("^rm\\|.*")) { handleHabitAction(it, "rm|", HabitService::softDelete, Strings::cbRemovedShort, Strings::cbRemovedFull) }
+    onMessageDataCallbackQuery(Regex("^rm\\|.*")) { handleTrackAction(it, "rm|", TrackService::softDelete, Strings::cbRemovedShort, Strings::cbRemovedFull) }
     onMessageDataCallbackQuery(Regex("^ps\\|.*")) { handlePausePick(it) }
     onMessageDataCallbackQuery(Regex("^pd\\|.*")) { handlePauseDuration(it) }
     onMessageDataCallbackQuery(Regex("^pc\\|.*")) { handlePauseCustom(it) }
-    onMessageDataCallbackQuery(Regex("^rs\\|.*")) { handleHabitAction(it, "rs|", HabitService::resume, Strings::cbResumedShort, Strings::cbResumedFull) }
-    onMessageDataCallbackQuery(Regex("^dh\\|.*")) { handleParamHabitPick(it) }
+    onMessageDataCallbackQuery(Regex("^rs\\|.*")) { handleTrackAction(it, "rs|", TrackService::resume, Strings::cbResumedShort, Strings::cbResumedFull) }
+    onMessageDataCallbackQuery(Regex("^dh\\|.*")) { handleParamTrackPick(it) }
     onMessageDataCallbackQuery(Regex("^dp\\|.*")) { handleParamDelete(it) }
 }
 
-/** A habit was picked for field deletion — swap the message for its deletable fields. */
-private suspend fun BehaviourContext.handleParamHabitPick(query: MessageDataCallbackQuery) {
-    val habitId = query.data.removePrefix("dh|").toLongOrNull() ?: run {
+/** A track was picked for field deletion — swap the message for its deletable fields. */
+private suspend fun BehaviourContext.handleParamTrackPick(query: MessageDataCallbackQuery) {
+    val trackId = query.data.removePrefix("dh|").toLongOrNull() ?: run {
         answerCallbackQuery(query, text = Strings.cbError(data.lang))
         return
     }
-    val habit = HabitService.findById(habitId, data.userId)
-    val params = habit?.params?.filter { it.name != null }.orEmpty()
-    if (habit == null || params.isEmpty() || habit.params.size <= 1) {
+    val track = TrackService.findById(trackId, data.userId)
+    val params = track?.params?.filter { it.name != null }.orEmpty()
+    if (track == null || params.isEmpty() || track.params.size <= 1) {
         answerCallbackQuery(query, text = Strings.cbNotFound(data.lang))
         return
     }
@@ -59,7 +60,7 @@ private suspend fun BehaviourContext.handleParamDelete(query: MessageDataCallbac
         answerCallbackQuery(query, text = Strings.cbError(data.lang))
         return
     }
-    if (HabitService.deleteParam(paramId, data.userId)) {
+    if (TrackService.deleteParam(paramId, data.userId)) {
         runCatching {
             editMessageText(
                 chatId = query.message.chat.id,
@@ -73,9 +74,9 @@ private suspend fun BehaviourContext.handleParamDelete(query: MessageDataCallbac
     }
 }
 
-/** A habit was picked for pausing — swap the message for the duration choices. */
+/** A track was picked for pausing — swap the message for the duration choices. */
 private suspend fun BehaviourContext.handlePausePick(query: MessageDataCallbackQuery) {
-    val habitId = query.data.removePrefix("ps|").toLongOrNull() ?: run {
+    val trackId = query.data.removePrefix("ps|").toLongOrNull() ?: run {
         answerCallbackQuery(query, text = Strings.cbError(data.lang))
         return
     }
@@ -85,28 +86,28 @@ private suspend fun BehaviourContext.handlePausePick(query: MessageDataCallbackQ
             chatId = msg.chat.id,
             messageId = msg.messageId,
             text = Strings.pickPauseDuration(data.lang),
-            replyMarkup = Keyboards.pauseDurations(habitId, data.lang),
+            replyMarkup = Keyboards.pauseDurations(trackId, data.lang),
         )
     }
     answerCallbackQuery(query)
 }
 
-/** A pause duration was chosen — apply it (`pd|<habitId>|<days>`, 0 = indefinite). */
+/** A pause duration was chosen — apply it (`pd|<trackId>|<days>`, 0 = indefinite). */
 private suspend fun BehaviourContext.handlePauseDuration(query: MessageDataCallbackQuery) {
     val parts = query.data.split("|")
-    val habitId = parts.getOrNull(1)?.toLongOrNull()
+    val trackId = parts.getOrNull(1)?.toLongOrNull()
     val days = parts.getOrNull(2)?.toIntOrNull()
-    if (parts.size != 3 || habitId == null || days == null) {
+    if (parts.size != 3 || trackId == null || days == null) {
         answerCallbackQuery(query, text = Strings.cbError(data.lang))
         return
     }
-    applyPause(query.message.chat.id, query.message.messageId, habitId, days)
+    applyPause(query.message.chat.id, query.message.messageId, trackId, days)
     answerCallbackQuery(query, text = Strings.cbPausedShort(data.lang))
 }
 
-/** "Other…" was chosen — ask for a free-text duration, then apply it (`pc|<habitId>`). */
+/** "Other…" was chosen — ask for a free-text duration, then apply it (`pc|<trackId>`). */
 private suspend fun BehaviourContext.handlePauseCustom(query: MessageDataCallbackQuery) {
-    val habitId = query.data.removePrefix("pc|").toLongOrNull() ?: run {
+    val trackId = query.data.removePrefix("pc|").toLongOrNull() ?: run {
         answerCallbackQuery(query, text = Strings.cbError(data.lang))
         return
     }
@@ -117,17 +118,17 @@ private suspend fun BehaviourContext.handlePauseCustom(query: MessageDataCallbac
         sendMessage(query.message.chat.id, Strings.cbBadDuration(data.lang))
         return
     }
-    applyPause(query.message.chat.id, query.message.messageId, habitId, days)
+    applyPause(query.message.chat.id, query.message.messageId, trackId, days)
 }
 
-/** Pauses [habitId] for [days] (>0) and replaces [messageId] with a confirmation. */
+/** Pauses [trackId] for [days] (>0) and replaces [messageId] with a confirmation. */
 private suspend fun BehaviourContext.applyPause(
     chatId: IdChatIdentifier,
     messageId: MessageId,
-    habitId: Long,
+    trackId: Long,
     days: Int,
 ) {
-    if (!HabitService.pause(habitId, data.userId, days)) {
+    if (!TrackService.pause(trackId, data.userId, days)) {
         sendMessage(chatId, Strings.cbNotFound(data.lang))
         return
     }
@@ -210,7 +211,7 @@ private suspend fun BehaviourContext.handleCheckIn(query: MessageDataCallbackQue
 }
 
 private suspend fun BehaviourContext.handleLog(query: MessageDataCallbackQuery) {
-    val (userId, lang, habitId, date, action) = parseCallback(query) ?: return
+    val (userId, lang, trackId, date, action) = parseCallback(query) ?: return
     if (action == "del") {
         val msg = query.message
         runCatching { deleteMessage(chatId = msg.chat.id, messageId = msg.messageId) }
@@ -232,17 +233,17 @@ private suspend fun BehaviourContext.handleLog(query: MessageDataCallbackQuery) 
         }
     }
 
-    if (!CheckInService.checkInCounter(habitId, userId, date, comment)) {
+    if (!CheckInService.checkInCounter(trackId, userId, date, comment)) {
         if (action != "c") answerCallbackQuery(query, text = Strings.cbNotFound(lang))
         return
     }
 
-    val habit = HabitService.findById(habitId, userId)
-    val total = CheckInService.counterCountOn(habitId, date)
+    val track = TrackService.findById(trackId, userId)
+    val total = CheckInService.counterCountOn(trackId, date)
     val msg = query.message
     val originalText = (msg.content as? dev.inmo.tgbotapi.types.message.content.TextContent)?.text.orEmpty()
-    val newText = if (habit != null && habit.type == HabitType.CHECK) {
-        Strings.counterLine(lang, habit, total, date)
+    val newText = if (track != null && track.type == TrackType.CHECK) {
+        Strings.counterLine(lang, track, total, date)
     } else {
         originalText
     }
@@ -252,89 +253,107 @@ private suspend fun BehaviourContext.handleLog(query: MessageDataCallbackQuery) 
             chatId = msg.chat.id,
             messageId = msg.messageId,
             text = newText,
-            replyMarkup = Keyboards.logPlus(habitId, date, lang)
+            replyMarkup = Keyboards.logPlus(trackId, date, lang)
         )
     }
     if (action != "c") answerCallbackQuery(query, text = Strings.cbLogged(lang))
 }
 
+/** Pages the /log recent-check-ins listing in place. Payload: `rc|<page>`. */
+private suspend fun BehaviourContext.handleRecent(query: MessageDataCallbackQuery) {
+    val page = query.data.removePrefix("rc|").toIntOrNull() ?: run {
+        answerCallbackQuery(query, text = Strings.cbError(data.lang))
+        return
+    }
+    val (text, keyboard) = commands.recentLogView(data.lang, data.userId, page)
+    runCatching {
+        editMessageText(
+            chatId = query.message.chat.id,
+            messageId = query.message.messageId,
+            text = text,
+            replyMarkup = keyboard,
+        )
+    }
+    answerCallbackQuery(query)
+}
+
 private suspend fun BehaviourContext.handleTimer(query: MessageDataCallbackQuery) {
-    val (userId, lang, habitId, date, action) = parseCallback(query) ?: return
-    val habit = HabitService.findById(habitId, userId)
-    if (habit == null || habit.type != HabitType.TIMER) {
+    val (userId, lang, trackId, date, action) = parseCallback(query) ?: return
+    val track = TrackService.findById(trackId, userId)
+    if (track == null || track.type != TrackType.TIMER) {
         answerCallbackQuery(query, text = Strings.cbNotFound(lang))
         return
     }
 
     // Repaints the timer message to reflect its current running/idle (and paused) state.
     suspend fun refresh(running: Boolean) {
-        val timer = TimerService.find(habitId, userId)
+        val timer = TimerService.find(trackId, userId)
         val elapsed = timer?.let { TimerService.elapsedSeconds(it) } ?: 0.0
         val paused = timer?.paused == true
-        val todaySeconds = CheckInService.timerSecondsOn(habitId, date)
+        val todaySeconds = CheckInService.timerSecondsOn(trackId, date)
         runCatching {
             editMessageText(
                 chatId = query.message.chat.id,
                 messageId = query.message.messageId,
-                text = Strings.timerLine(lang, habit, running, elapsed, todaySeconds, paused),
-                replyMarkup = Keyboards.timerControl(habitId, running, date, lang, paused)
+                text = Strings.timerLine(lang, track, running, elapsed, todaySeconds, paused),
+                replyMarkup = Keyboards.timerControl(trackId, running, date, lang, paused)
             )
         }
     }
 
-    val beforeFields = habit.params.filter { it.timerPhase == TimerPhase.BEFORE }
-    val afterFields = habit.params.filter { it.timerPhase == TimerPhase.AFTER }
+    val beforeFields = track.params.filter { it.timerPhase == TimerPhase.BEFORE }
+    val afterFields = track.params.filter { it.timerPhase == TimerPhase.AFTER }
     val chatId = query.message.chat.id
 
     when (action) {
         // No "before" fields: the original one-tap start (toast only). Otherwise we must collect
         // the "before"-phase fields first and only start the timer once they're answered.
         "start" -> if (beforeFields.isEmpty()) {
-            val toast = when (TimerService.start(habitId, userId)) {
+            val toast = when (TimerService.start(trackId, userId)) {
                 TimerService.StartOutcome.Started -> Strings.cbTimerStarted(lang)
                 TimerService.StartOutcome.AlreadyRunning -> Strings.cbTimerAlreadyRunning(lang)
                 TimerService.StartOutcome.NotFound -> { answerCallbackQuery(query, text = Strings.cbNotFound(lang)); return }
             }
             refresh(running = true)
             // This edited message becomes the live display the background ticker updates.
-            TimerService.setMessage(habitId, userId, query.message.messageId.long)
+            TimerService.setMessage(trackId, userId, query.message.messageId.long)
             answerCallbackQuery(query, text = toast)
         } else {
             answerCallbackQuery(query)
-            if (TimerService.find(habitId, userId) != null) {
+            if (TimerService.find(trackId, userId) != null) {
                 sendMessage(chatId, Strings.cbTimerAlreadyRunning(lang)); return
             }
             val before = collectTimerFieldValues(chatId, beforeFields) ?: run {
                 sendMessage(chatId, Strings.cancelled(lang)); return
             }
-            when (TimerService.start(habitId, userId, before)) {
+            when (TimerService.start(trackId, userId, before)) {
                 TimerService.StartOutcome.Started -> {
                     // The before-field Q&A pushed messages below the original timer card, so a
                     // ticker edited in place would be stranded above them. Drop the old card and
                     // post a fresh live one at the bottom so the ticking timer is the last message.
                     runCatching { deleteMessage(chatId = chatId, messageId = query.message.messageId) }
                     sendMessage(chatId, Strings.cbTimerStarted(lang))
-                    val elapsed = TimerService.find(habitId, userId)?.let { TimerService.elapsedSeconds(it) } ?: 0.0
-                    val todaySeconds = CheckInService.timerSecondsOn(habitId, date)
+                    val elapsed = TimerService.find(trackId, userId)?.let { TimerService.elapsedSeconds(it) } ?: 0.0
+                    val todaySeconds = CheckInService.timerSecondsOn(trackId, date)
                     val live = sendMessage(
                         chatId,
-                        Strings.timerLine(lang, habit, running = true, elapsed, todaySeconds),
-                        replyMarkup = Keyboards.timerControl(habitId, running = true, date, lang),
+                        Strings.timerLine(lang, track, running = true, elapsed, todaySeconds),
+                        replyMarkup = Keyboards.timerControl(trackId, running = true, date, lang),
                     )
-                    TimerService.setMessage(habitId, userId, live.messageId.long)
+                    TimerService.setMessage(trackId, userId, live.messageId.long)
                 }
                 TimerService.StartOutcome.AlreadyRunning -> sendMessage(chatId, Strings.cbTimerAlreadyRunning(lang))
                 TimerService.StartOutcome.NotFound -> sendMessage(chatId, Strings.cbNotFound(lang))
             }
         }
         "pause" -> {
-            val ok = TimerService.pause(habitId, userId, date, data.tz)
-            refresh(running = TimerService.find(habitId, userId) != null)
+            val ok = TimerService.pause(trackId, userId, date, data.tz)
+            refresh(running = TimerService.find(trackId, userId) != null)
             answerCallbackQuery(query, text = if (ok) Strings.cbTimerPaused(lang) else Strings.cbTimerNotRunning(lang))
         }
         "resume" -> {
-            val ok = TimerService.resume(habitId, userId)
-            refresh(running = TimerService.find(habitId, userId) != null)
+            val ok = TimerService.resume(trackId, userId)
+            refresh(running = TimerService.find(trackId, userId) != null)
             answerCallbackQuery(query, text = if (ok) Strings.cbTimerResumed(lang) else Strings.cbTimerNotRunning(lang))
         }
         // Stop (optionally + note): stop first (so the elapsed time is frozen and safely recorded),
@@ -342,7 +361,7 @@ private suspend fun BehaviourContext.handleTimer(query: MessageDataCallbackQuery
         // stashed at start — to the just-written check-in.
         "stop", "stopc" -> {
             answerCallbackQuery(query)
-            when (val o = TimerService.stop(habitId, userId, date, data.tz)) {
+            when (val o = TimerService.stop(trackId, userId, date, data.tz)) {
                 is TimerService.StopOutcome.Stopped -> {
                     refresh(running = false)
                     if (action == "stopc") {
@@ -351,7 +370,7 @@ private suspend fun BehaviourContext.handleTimer(query: MessageDataCallbackQuery
                         if (o.checkinId > 0) CheckInService.setComment(o.checkinId, userId, note)
                     }
                     val after = collectTimerFieldValues(chatId, afterFields) ?: emptyMap()
-                    CheckInService.attachTimerFieldValues(o.checkinId, userId, habitId, o.beforeValues + after)
+                    CheckInService.attachTimerFieldValues(o.checkinId, userId, trackId, o.beforeValues + after)
                     sendMessage(chatId, Strings.cbTimerStopped(lang, o.seconds))
                 }
                 TimerService.StopOutcome.NotRunning -> { refresh(running = false); sendMessage(chatId, Strings.cbTimerNotRunning(lang)) }
@@ -369,7 +388,7 @@ private suspend fun BehaviourContext.handleTimer(query: MessageDataCallbackQuery
  */
 private suspend fun BehaviourContext.collectTimerFieldValues(
     chatId: IdChatIdentifier,
-    fields: List<dto.HabitParam>,
+    fields: List<dto.TrackParam>,
 ): Map<Long, String>? {
     if (fields.isEmpty()) return emptyMap()
     val result = LinkedHashMap<Long, String>()
@@ -398,18 +417,18 @@ private suspend fun BehaviourContext.collectTimerFieldValues(
     return result
 }
 
-private suspend fun BehaviourContext.handleHabitAction(
+private suspend fun BehaviourContext.handleTrackAction(
     query: MessageDataCallbackQuery,
     prefix: String,
     action: (Long, Long) -> Boolean,
     shortText: (Lang) -> String,
     fullText: (Lang) -> String
 ) {
-    val habitId = query.data.removePrefix(prefix).toLongOrNull() ?: run {
+    val trackId = query.data.removePrefix(prefix).toLongOrNull() ?: run {
         answerCallbackQuery(query, text = Strings.cbError(data.lang))
         return
     }
-    if (action(habitId, data.userId)) {
+    if (action(trackId, data.userId)) {
         val msg = query.message
         runCatching {
             editMessageText(chatId = msg.chat.id, messageId = msg.messageId, text = fullText(data.lang))

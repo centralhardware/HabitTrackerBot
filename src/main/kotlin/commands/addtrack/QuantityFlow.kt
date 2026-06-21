@@ -1,20 +1,20 @@
-package commands.addhabit
+package commands.addtrack
 
 import Strings
 import dev.inmo.tgbotapi.extensions.api.send.sendMessage
 import dev.inmo.tgbotapi.extensions.behaviour_builder.BehaviourContext
 import dev.inmo.tgbotapi.types.IdChatIdentifier
-import dto.HabitParam
+import dto.TrackParam
 import dto.ParamType
 import lang
 
 /**
- * Quantity habit: one or more fields ("params"). Each field is NUMBER (with optional target,
+ * Quantity track: one or more fields ("params"). Each field is NUMBER (with optional target,
  * unit, direction) or free TEXT. The loop keeps asking for fields until the user signals "done"
  * (only after at least one). Returns null (after sending a message) on cancel/invalid input.
  */
-suspend fun BehaviourContext.quantityFlow(chatId: IdChatIdentifier, logOnly: Boolean): HabitDraft? {
-    val fields = mutableListOf<HabitParam>()
+suspend fun BehaviourContext.quantityFlow(chatId: IdChatIdentifier, logOnly: Boolean): TrackDraft? {
+    val fields = mutableListOf<TrackParam>()
     while (true) {
         val nextLabel = if (fields.isEmpty()) Strings.sendFirstFieldName(data.lang)
                         else Strings.sendNextFieldNameOrDone(data.lang)
@@ -41,7 +41,7 @@ suspend fun BehaviourContext.quantityFlow(chatId: IdChatIdentifier, logOnly: Boo
         val isText = ptypeChoice == PTYPE_TEXT
 
         if (isText) {
-            fields.add(HabitParam(id = 0, name = fname.take(64), paramType = ParamType.TEXT))
+            fields.add(TrackParam(id = 0, name = fname.take(64), paramType = ParamType.TEXT))
         } else {
             var fTarget: Double? = null
             if (!logOnly) {
@@ -74,12 +74,12 @@ suspend fun BehaviourContext.quantityFlow(chatId: IdChatIdentifier, logOnly: Boo
                 }
             }
 
-            fields.add(HabitParam(id = 0, name = fname.take(64), unit = fUnit, direction = fDir, dailyTarget = fTarget, paramType = ParamType.NUMBER))
+            fields.add(TrackParam(id = 0, name = fname.take(64), unit = fUnit, direction = fDir, dailyTarget = fTarget, paramType = ParamType.NUMBER))
         }
     }
 
     if (fields.isEmpty()) {
         sendMessage(chatId, Strings.cancelled(data.lang)); return null
     }
-    return HabitDraft(params = fields)
+    return TrackDraft(params = fields)
 }

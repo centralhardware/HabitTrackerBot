@@ -1,12 +1,12 @@
 package mcp
 
 import services.CheckInService
-import services.HabitService
+import services.TrackService
 import services.ParamValueService
 import Lang
 import dto.CheckinsListArgs
 import dto.CheckinsListResult
-import dto.HabitCheckins
+import dto.TrackCheckins
 import dto.McpJson
 import dto.ParamDictionary
 import io.modelcontextprotocol.kotlin.sdk.types.CallToolResult
@@ -23,19 +23,19 @@ import java.time.temporal.ChronoUnit
 object CheckinsListTool : TypedMcpTool<CheckinsListArgs>(CheckinsListArgs.serializer()) {
     override val name = "checkins_list"
     override val description =
-        "List past check-ins for one or more habits between two dates (inclusive). 'habitIds' is an array of habit ids " +
-            "(batch query); omit it or pass an empty array to fetch all of the user's active habits. The response is " +
-            "{ from, to, habits[] } where from/to echo the resolved window and habits[] " +
-            "has one entry per id. Defaults: from = today - 30 days, to = today (in the user's " +
+        "List past check-ins for one or more tracks between two dates (inclusive). 'trackIds' is an array of track ids " +
+            "(batch query); omit it or pass an empty array to fetch all of the user's active tracks. The response is " +
+            "{ from, to, tracks[] } where from/to echo the resolved window and tracks[] " +
+            "has one track per id. Defaults: from = today - 30 days, to = today (in the user's " +
             "timezone). Maximum range 366 days. Each check-in row has checkinId (pass it to checkin_delete to remove the " +
-            "entry), paramId (which field of a multi-field habit it belongs to; see habits_list params; omitted for counter events), date, status " +
-            "(done/skip/pending for scheduled habits), quantity (for quantity habits), reminderTime (for scheduled habits), " +
-            "recordedAt (ISO-8601 instant the entry was written; for a timer this is when it was stopped, i.e. the session end), " +
+            "track), paramId (which field of a multi-field track it belongs to; see tracks_list params; omitted for counter events), date, status " +
+            "(done/skip/pending for scheduled tracks), quantity (for quantity tracks), reminderTime (for scheduled tracks), " +
+            "recordedAt (ISO-8601 instant the track was written; for a timer this is when it was stopped, i.e. the session end), " +
             "startedAt (ISO-8601 instant; only on a timer's duration row — the session start, derived as recordedAt minus the elapsed seconds), and " +
-            "comment (when set). Unknown habit ids are returned with found=false. Each habit entry also carries " +
+            "comment (when set). Unknown track ids are returned with found=false. Each track track also carries " +
             "paramValues[] — the dictionary of recurring (seen more than once) param values ({ paramId, values:[{ value, uses }] }), " +
             "most-used first; use it with param_values_merge to fold near-duplicate values together (omitted when the " +
-            "habit has no recurring values yet)."
+            "track has no recurring values yet)."
     override val inputSchema: ToolSchema = buildSchema()
     override val annotations = ToolAnnotations(readOnlyHint = true, openWorldHint = false)
 
@@ -55,24 +55,24 @@ object CheckinsListTool : TypedMcpTool<CheckinsListArgs>(CheckinsListArgs.serial
         if (ChronoUnit.DAYS.between(from, to) > 366) {
             return err("Range too large; max 366 days")
         }
-        val habitIds = args.habitIds.ifEmpty { HabitService.listActive(userId).map { it.id } }
-        val habits = habitIds.distinct().map { habitId ->
-            val rows = CheckInService.listInRange(habitId, userId, from, to)
-            val paramValues = HabitService.findById(habitId, userId)?.params
+        val trackIds = args.trackIds.ifEmpty { TrackService.listActive(userId).map { it.id } }
+        val tracks = trackIds.distinct().map { trackId ->
+            val rows = CheckInService.listInRange(trackId, userId, from, to)
+            val paramValues = TrackService.findById(trackId, userId)?.params
                 ?.map { ParamDictionary(it.id, ParamValueService.listValues(it.id)) }
                 ?.filter { it.values.isNotEmpty() }
                 ?: emptyList()
-            HabitCheckins(habitId, found = rows != null, checkins = rows ?: emptyList(), paramValues = paramValues)
+            TrackCheckins(trackId, found = rows != null, checkins = rows ?: emptyList(), paramValues = paramValues)
         }
-        val result = CheckinsListResult(from = from.toString(), to = to.toString(), habits = habits)
+        val result = CheckinsListResult(from = from.toString(), to = to.toString(), tracks = tracks)
         return ok(McpJson.encodeToString(result))
     }
 
     private fun buildSchema(): ToolSchema {
         val props = buildJsonObject {
-            putJsonObject("habitIds") {
+            putJsonObject("trackIds") {
                 put("type", "array")
-                put("description", "Habit ids to fetch (from habits_list); one result entry per id. Omit or leave empty to fetch all active habits.")
+                put("description", "Track ids to fetch (from tracks_list); one result track per id. Omit or leave empty to fetch all active tracks.")
                 putJsonObject("items") { put("type", "integer") }
             }
             putJsonObject("from") {

@@ -1,9 +1,9 @@
 package dto
 
-data class HabitWeekStat(
-    val habitId: Long,
+data class TrackWeekStat(
+    val trackId: Long,
     val name: String,
-    val type: HabitType,
+    val type: TrackType,
     val direction: Direction?,
     val dailyTarget: Double?,
     val unit: String?,
@@ -14,7 +14,7 @@ data class HabitWeekStat(
     val quantityTotal: Double,
     val quantityDays: Int,
     val targetHitDays: Int,
-    // CHECK habits only: whether the habit has reminder slots (done/skip block) and/or
+    // CHECK tracks only: whether the track has reminder slots (done/skip block) and/or
     // allows ad-hoc check-ins (counter block). Both blocks may be rendered.
     val hasSchedule: Boolean = false,
     val allowAdHoc: Boolean = false,

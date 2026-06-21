@@ -2,11 +2,11 @@ package mcp
 
 import BotNotifier
 import services.CheckInService
-import services.HabitService
+import services.TrackService
 import Lang
 import Strings
 import dto.FieldValue
-import dto.HabitType
+import dto.TrackType
 import dto.ParamType
 import dto.QuantityRecordArgs
 import dto.parse
@@ -26,9 +26,9 @@ object QuantityRecordTool : TypedMcpTool<QuantityRecordArgs>(QuantityRecordArgs.
     override val name = "quantity_record"
     override val description =
         "Record a quantity check-in in one call: writes one event row with a shared comment and one value row per " +
-            "entry. 'habitId' is the quantity habit. 'values' is an array of { paramId, value } where 'value' is " +
+            "track. 'trackId' is the quantity track. 'values' is an array of { paramId, value } where 'value' is " +
             "always a string — pass a number string (e.g. \"5.5\") for 'number' params, or any text for 'text' params; " +
-            "check paramType in habits_list params[]. A single-field habit has one param; a multi-field one has several. " +
+            "check paramType in tracks_list params[]. A single-field track has one param; a multi-field one has several. " +
             "Date is optional (YYYY-MM-DD), defaults to today in the user's timezone; future dates are rejected. " +
             "'comment' is optional and applies to the whole event. Returns the new checkinId."
     override val inputSchema: ToolSchema = buildSchema()
@@ -40,9 +40,9 @@ object QuantityRecordTool : TypedMcpTool<QuantityRecordArgs>(QuantityRecordArgs.
     )
 
     override fun handle(userId: Long, lang: Lang, tz: ZoneId, args: QuantityRecordArgs): CallToolResult {
-        val habit = HabitService.findById(args.habitId, userId)
-            ?: return err("Habit ${args.habitId} not found")
-        if (habit.type != HabitType.QUANTITY) return err("Habit ${args.habitId} is not a quantity habit")
+        val track = TrackService.findById(args.trackId, userId)
+            ?: return err("Track ${args.trackId} not found")
+        if (track.type != TrackType.QUANTITY) return err("Track ${args.trackId} is not a quantity track")
         if (args.values.isEmpty()) return err("'values' must be non-empty")
 
         val today = LocalDate.now(tz)
@@ -53,7 +53,7 @@ object QuantityRecordTool : TypedMcpTool<QuantityRecordArgs>(QuantityRecordArgs.
         } ?: today
         if (date.isAfter(today)) return err("Cannot check in for a future date ($date > $today in $tz)")
 
-        val paramById = habit.params.associateBy { it.id }
+        val paramById = track.params.associateBy { it.id }
         val unknown = args.values.map { it.paramId }.filter { it !in paramById }
         if (unknown.isNotEmpty()) {
             return err("Unknown paramId(s) ${unknown.joinToString()}; allowed: ${paramById.keys.joinToString()}")
@@ -74,23 +74,23 @@ object QuantityRecordTool : TypedMcpTool<QuantityRecordArgs>(QuantityRecordArgs.
         val numericMap = parsed.filterValues { it is FieldValue.Numeric }.mapValues { (it.value as FieldValue.Numeric).v }
         val textMap = parsed.filterValues { it is FieldValue.Text }.mapValues { (it.value as FieldValue.Text).v }
         val comment = args.comment?.trim()?.ifEmpty { null }
-        val checkinId = CheckInService.recordQuantity(args.habitId, userId, date, parsed, comment)
-        if (checkinId <= 0) return err("Failed to record check-in for habit ${args.habitId}")
+        val checkinId = CheckInService.recordQuantity(args.trackId, userId, date, parsed, comment)
+        if (checkinId <= 0) return err("Failed to record check-in for track ${args.trackId}")
 
         val note = when {
-            habit.multiField -> Strings.mcpRecordedQuantityGroup(lang, habit, numericMap, textMap, date, comment)
-            numericMap.isNotEmpty() -> Strings.mcpRecordedQuantity(lang, habit.name, numericMap.values.first(), habit.unit, date, comment)
-            else -> Strings.mcpRecordedQuantityText(lang, habit.name, textMap.values.firstOrNull() ?: "", date, comment)
+            track.multiField -> Strings.mcpRecordedQuantityGroup(lang, track, numericMap, textMap, date, comment)
+            numericMap.isNotEmpty() -> Strings.mcpRecordedQuantity(lang, track.name, numericMap.values.first(), track.unit, date, comment)
+            else -> Strings.mcpRecordedQuantityText(lang, track.name, textMap.values.firstOrNull() ?: "", date, comment)
         }
         BotNotifier.notify(userId, note)
-        return ok("""{"recorded":true,"checkinId":$checkinId,"habitId":${args.habitId},"date":"$date","values":${parsed.size}}""")
+        return ok("""{"recorded":true,"checkinId":$checkinId,"trackId":${args.trackId},"date":"$date","values":${parsed.size}}""")
     }
 
     private fun buildSchema(): ToolSchema {
         val props = buildJsonObject {
-            putJsonObject("habitId") {
+            putJsonObject("trackId") {
                 put("type", "integer")
-                put("description", "The quantity habit's id (from habits_list).")
+                put("description", "The quantity track's id (from tracks_list).")
             }
             putJsonObject("values") {
                 put("type", "array")
@@ -101,7 +101,7 @@ object QuantityRecordTool : TypedMcpTool<QuantityRecordArgs>(QuantityRecordArgs.
                     putJsonObject("properties") {
                         putJsonObject("paramId") {
                             put("type", "integer")
-                            put("description", "A param id from habits_list params[].id of this habit.")
+                            put("description", "A param id from tracks_list params[].id of this track.")
                         }
                         putJsonObject("value") {
                             put("type", "string")
@@ -122,6 +122,6 @@ object QuantityRecordTool : TypedMcpTool<QuantityRecordArgs>(QuantityRecordArgs.
                 put("description", "Optional note attached to the whole event.")
             }
         }
-        return ToolSchema(properties = props, required = listOf("habitId", "values"))
+        return ToolSchema(properties = props, required = listOf("trackId", "values"))
     }
 }

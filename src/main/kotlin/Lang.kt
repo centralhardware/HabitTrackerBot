@@ -1,11 +1,14 @@
 import dev.inmo.tgbotapi.types.abstracts.WithOptionalLanguageCode
 import dev.inmo.tgbotapi.types.chat.User
+import dto.CheckinStatus
 import dto.Direction
-import dto.Habit
-import dto.HabitParam
-import dto.HabitStat
-import dto.HabitType
-import dto.HabitWeekStat
+import dto.FieldValue
+import dto.RecentCheckin
+import dto.Track
+import dto.TrackParam
+import dto.TrackStat
+import dto.TrackType
+import dto.TrackWeekStat
 import dto.ParamType
 import java.time.LocalDate
 import kotlin.math.roundToLong
@@ -34,32 +37,34 @@ object Strings {
 
     fun startHelp(l: Lang): String = when (l) {
         Lang.EN -> """
-            Habit tracker bot.
+            TrackAll — track anything: habits, metrics, time.
 
             Commands:
-            /addhabit — add a habit (interactive)
-            /cancel — cancel the current /addhabit dialog
-            /habits — list active habits
-            /removehabit — remove a habit
-            /pause — pause reminders for a habit
-            /resume — resume a paused habit
+            /addtrack — add a track (interactive)
+            /cancel — cancel the current /addtrack dialog
+            /tracks — list active tracks
+            /removetrack — remove a track
+            /pause — pause reminders for a track
+            /resume — resume a paused track
             /checkin — today's check-ins
+            /log — recent check-ins (paged)
             /timer — start/stop time tracking
             /stats — statistics
             /tz — show or set your timezone (e.g. /tz Europe/Moscow)
             /lang — switch language (en/ru)
         """.trimIndent()
         Lang.RU -> """
-            Бот для трекинга привычек.
+            TrackAll — трекай что угодно: привычки, показатели, время.
 
             Команды:
-            /addhabit — добавить привычку (интерактивно)
-            /cancel — отменить текущий диалог /addhabit
-            /habits — список активных привычек
-            /removehabit — удалить привычку
+            /addtrack — добавить трек (интерактивно)
+            /cancel — отменить текущий диалог /addtrack
+            /tracks — список активных треков
+            /removetrack — удалить трек
             /pause — поставить напоминания на паузу
-            /resume — возобновить привычку
+            /resume — возобновить трек
             /checkin — чек-ины за сегодня
+            /log — последние чек-ины (постранично)
             /timer — старт/стоп отслеживания времени
             /stats — статистика
             /tz — показать или задать часовой пояс (например, /tz Europe/Moscow)
@@ -67,7 +72,7 @@ object Strings {
         """.trimIndent()
     }
 
-    fun tzRequiredAddHabit(l: Lang) = pick(l,
+    fun tzRequiredAddTrack(l: Lang) = pick(l,
         "Set your timezone first with /tz <IANA name>, e.g. /tz Europe/Moscow",
         "Сначала задайте часовой пояс через /tz <IANA>, например /tz Europe/Moscow")
 
@@ -75,20 +80,20 @@ object Strings {
         "Set your timezone first with /tz <IANA name>.",
         "Сначала задайте часовой пояс через /tz <IANA>.")
 
-    fun sendHabitName(l: Lang) = pick(l,
-        "Send the habit name:",
-        "Отправьте название привычки:")
+    fun sendTrackName(l: Lang) = pick(l,
+        "Send the track name:",
+        "Отправьте название трека:")
 
     fun cancelled(l: Lang) = pick(l, "Cancelled.", "Отменено.")
 
-    fun pickHabitType(l: Lang) = pick(l,
-        "Pick a habit type:\n• check — done/skip habit: mark scheduled times and/or log check-ins any time\n• quantity — log decimal amounts (optional target, unit, direction)\n• timer — auto-track time spent (start/stop)",
-        "Выберите тип привычки:\n• отметка — привычка готово/пропуск: отмечать по расписанию и/или в любое время\n• количество — вводить вещественные значения (опциональные цель, единица, направление)\n• таймер — автоматически засекать время (старт/стоп)")
+    fun pickTrackType(l: Lang) = pick(l,
+        "Pick a track type:\n• check — done/skip track: mark scheduled times and/or log check-ins any time\n• quantity — log decimal amounts (optional target, unit, direction)\n• timer — auto-track time spent (start/stop)",
+        "Выберите тип трека:\n• отметка — трек готово/пропуск: отмечать по расписанию и/или в любое время\n• количество — вводить вещественные значения (опциональные цель, единица, направление)\n• таймер — автоматически засекать время (старт/стоп)")
 
-    fun typeButtonLabel(l: Lang, t: HabitType): String = when (t) {
-        HabitType.CHECK -> pick(l, "✅ check", "✅ отметка")
-        HabitType.QUANTITY -> pick(l, "⚖️ quantity", "⚖️ количество")
-        HabitType.TIMER -> pick(l, "⏱ timer", "⏱ таймер")
+    fun typeButtonLabel(l: Lang, t: TrackType): String = when (t) {
+        TrackType.CHECK -> pick(l, "✅ check", "✅ отметка")
+        TrackType.QUANTITY -> pick(l, "⚖️ quantity", "⚖️ количество")
+        TrackType.TIMER -> pick(l, "⏱ timer", "⏱ таймер")
     }
 
     fun directionButtonLabel(l: Lang, d: Direction?): String = when (d) {
@@ -173,8 +178,8 @@ object Strings {
 
     fun logBadge(l: Lang): String = pick(l, " · 📒 log", " · 📒 журнал")
 
-    fun habitAddedDetailed(l: Lang, h: Habit): String {
-        val type = habitTypeLabel(l, h) + if (h.logOnly) logBadge(l) else ""
+    fun trackAddedDetailed(l: Lang, h: Track): String {
+        val type = trackTypeLabel(l, h) + if (h.logOnly) logBadge(l) else ""
         val times = h.reminders.joinToString(", ") { rem ->
             val d = if (rem.days.isNotEmpty()) " (${formatDays(l, rem.days)})" else ""
             "${formatDisplayTime(rem.offsetMinutes)}$d"
@@ -197,7 +202,7 @@ object Strings {
         }
         val tail = buildString {
             when (h.type) {
-                HabitType.CHECK -> {
+                TrackType.CHECK -> {
                     if (h.allowAdHoc) {
                         append(" — ${pick(l, "any time", "в любое время")}")
                         h.dailyTarget?.toInt()?.let { append(" — ${pick(l, "target: $it/day", "цель: $it/день")}") }
@@ -205,7 +210,7 @@ object Strings {
                     }
                     if (times.isNotEmpty()) append(" — $times")
                 }
-                HabitType.QUANTITY -> {
+                TrackType.QUANTITY -> {
                     h.dailyTarget?.let {
                         val unit = h.unit?.let { u -> " $u" } ?: ""
                         append(" — ${pick(l, "target: ${formatAmount(it)}$unit/day", "цель: ${formatAmount(it)}$unit/день")}")
@@ -216,7 +221,7 @@ object Strings {
                     h.direction?.let { append(" — ${directionLabel(l, it)}") }
                     if (times.isNotEmpty()) append(" — $times")
                 }
-                HabitType.TIMER -> {
+                TrackType.TIMER -> {
                     h.dailyTarget?.let {
                         append(" — ${pick(l, "target: ${formatDuration(l, it)}/day", "цель: ${formatDuration(l, it)}/день")}")
                     }
@@ -228,27 +233,27 @@ object Strings {
         return pick(l, "Added: \"${h.name}\" [$type]$tail", "Добавлено: «${h.name}» [$type]$tail")
     }
 
-    fun noHabits(l: Lang) = pick(l,
-        "No habits yet. Add one with /addhabit.",
-        "Привычек ещё нет. Добавьте через /addhabit.")
+    fun noTracks(l: Lang) = pick(l,
+        "No tracks yet. Add one with /addtrack.",
+        "Треков ещё нет. Добавьте через /addtrack.")
 
-    fun yourHabits(l: Lang) = pick(l, "Your habits:", "Ваши привычки:")
+    fun yourTracks(l: Lang) = pick(l, "Your tracks:", "Ваши треки:")
 
     fun noReminders(l: Lang) = pick(l, "no reminders", "без напоминаний")
 
     fun nothingToRemove(l: Lang) = pick(l, "Nothing to remove.", "Удалять нечего.")
 
-    fun pickHabitToRemove(l: Lang) = pick(l, "Pick a habit to remove:", "Выберите привычку для удаления:")
+    fun pickTrackToRemove(l: Lang) = pick(l, "Pick a track to remove:", "Выберите трек для удаления:")
 
     fun noParamsToDelete(l: Lang) = pick(l, "No fields to delete.", "Нет полей для удаления.")
 
-    fun pickHabitForParam(l: Lang) = pick(l, "Pick a habit:", "Выберите привычку:")
+    fun pickTrackForParam(l: Lang) = pick(l, "Pick a track:", "Выберите трек:")
 
     fun pickParamToDelete(l: Lang) = pick(l, "Pick a field to delete:", "Выберите поле для удаления:")
 
-    fun noActiveToPause(l: Lang) = pick(l, "No active habits to pause.", "Нет активных привычек для паузы.")
+    fun noActiveToPause(l: Lang) = pick(l, "No active tracks to pause.", "Нет активных треков для паузы.")
 
-    fun pickHabitToPause(l: Lang) = pick(l, "Pick a habit to pause:", "Выберите привычку для паузы:")
+    fun pickTrackToPause(l: Lang) = pick(l, "Pick a track to pause:", "Выберите трек для паузы:")
 
     fun pickPauseDuration(l: Lang) = pick(l, "For how long?", "На сколько?")
 
@@ -272,15 +277,15 @@ object Strings {
         "▶️ «$name» снова активна — пауза закончилась.",
     )
 
-    fun noPaused(l: Lang) = pick(l, "No paused habits.", "Нет привычек на паузе.")
+    fun noPaused(l: Lang) = pick(l, "No paused tracks.", "Нет треков на паузе.")
 
-    fun pickHabitToResume(l: Lang) = pick(l, "Pick a habit to resume:", "Выберите привычку для возобновления:")
+    fun pickTrackToResume(l: Lang) = pick(l, "Pick a track to resume:", "Выберите трек для возобновления:")
 
     fun nothingToCheckIn(l: Lang) = pick(l, "Nothing to check in.", "Чек-инить нечего.")
 
     fun pendingCheckIns(l: Lang) = pick(l, "Pending check-ins:", "Ожидают чек-ина:")
 
-    fun counterLine(l: Lang, h: Habit, current: Int, date: LocalDate): String {
+    fun counterLine(l: Lang, h: Track, current: Int, date: LocalDate): String {
         val target = h.dailyTarget?.toInt()
         val mark = when {
             target != null && current >= target -> "✅"
@@ -294,6 +299,44 @@ object Strings {
         return "$mark $date — ${h.name}: $body"
     }
 
+    // ---- recent check-ins log (/log) ----
+
+    fun recentHeader(l: Lang) = pick(l, "🗒 Recent check-ins:", "🗒 Последние чек-ины:")
+
+    fun noRecentCheckins(l: Lang) = pick(l, "No check-ins yet.", "Чек-инов пока нет.")
+
+    fun btnPrevPage(l: Lang) = pick(l, "◀️ Newer", "◀️ Новее")
+    fun btnNextPage(l: Lang) = pick(l, "Older ▶️", "Старее ▶️")
+
+    /**
+     * One check-in rendered for the /log listing: a "date · track" title, the recorded values
+     * (or a done/skip/pending icon for a scheduled slot), and the comment when present.
+     */
+    fun recentBlock(l: Lang, track: Track?, rc: RecentCheckin): String {
+        val name = track?.name ?: "#${rc.trackId}"
+        val title = "${rc.date} · $name"
+        val comment = rc.comment?.let { "\n  💬 $it" } ?: ""
+        // A scheduled slot carries no values — just its done/skip/pending status.
+        if (rc.reminderId != null) {
+            val icon = when (rc.status) {
+                CheckinStatus.DONE -> "✅"
+                CheckinStatus.SKIP -> "❌"
+                else -> "⏳"
+            }
+            return "$icon $title$comment"
+        }
+        val valueLines = rc.values.mapNotNull { v ->
+            val param = track?.params?.firstOrNull { it.id == v.paramId }
+            val label = param?.name?.let { "$it: " } ?: ""
+            when (val fv = v.value) {
+                is FieldValue.Numeric -> "  – $label${paramAmount(l, track, param, fv.v)}"
+                is FieldValue.Text -> "  – $label${fv.v}"
+                null -> null
+            }
+        }
+        return "• $title" + (if (valueLines.isEmpty()) "" else "\n" + valueLines.joinToString("\n")) + comment
+    }
+
     // ---- timer ----
 
     fun tzRequiredTimer(l: Lang) = pick(l,
@@ -301,8 +344,8 @@ object Strings {
         "Сначала задайте часовой пояс через /tz <IANA>.")
 
     fun noTimers(l: Lang) = pick(l,
-        "No timer habits yet. Add one with /addhabit (type ⏱ timer).",
-        "Таймеров пока нет. Добавьте через /addhabit (тип ⏱ таймер).")
+        "No timer tracks yet. Add one with /addtrack (type ⏱ timer).",
+        "Таймеров пока нет. Добавьте через /addtrack (тип ⏱ таймер).")
 
     fun yourTimers(l: Lang) = pick(l, "Timers:", "Таймеры:")
 
@@ -339,8 +382,8 @@ object Strings {
         "\"$name\" must be a number (e.g. 1.5). Try again, or send \"-\" to skip:",
         "«$name» должно быть числом (например 1.5). Попробуйте ещё раз или отправьте «-», чтобы пропустить:")
 
-    /** A timer habit's line: shows running-since elapsed time, or today's accumulated total when idle. */
-    fun timerLine(l: Lang, h: Habit, running: Boolean, elapsedSeconds: Double, todaySeconds: Double, paused: Boolean = false): String {
+    /** A timer track's line: shows running-since elapsed time, or today's accumulated total when idle. */
+    fun timerLine(l: Lang, h: Track, running: Boolean, elapsedSeconds: Double, todaySeconds: Double, paused: Boolean = false): String {
         val target = h.dailyTarget
         return if (running) {
             val state = if (paused) pick(l, "paused", "пауза") else pick(l, "running", "идёт")
@@ -360,10 +403,10 @@ object Strings {
     fun cbTimerPaused(l: Lang) = pick(l, "Paused", "Пауза")
     fun cbTimerResumed(l: Lang) = pick(l, "Resumed", "Продолжено")
 
-    fun habitTypeLabel(l: Lang, h: Habit): String = when (h.type) {
-        HabitType.CHECK -> pick(l, "check", "отметка")
-        HabitType.QUANTITY -> pick(l, "quantity", "количество")
-        HabitType.TIMER -> pick(l, "timer", "таймер")
+    fun trackTypeLabel(l: Lang, h: Track): String = when (h.type) {
+        TrackType.CHECK -> pick(l, "check", "отметка")
+        TrackType.QUANTITY -> pick(l, "quantity", "количество")
+        TrackType.TIMER -> pick(l, "timer", "таймер")
     }
 
     /** Renders elapsed seconds for a live timer, e.g. "1:05:30" or "12:30". */
@@ -388,14 +431,14 @@ object Strings {
 
     /**
      * Display value of a numeric param. A timer's duration param (the `timerPhase == null` field of a
-     * TIMER habit) stores elapsed seconds, so render it as a duration ("50м") rather than a raw count;
+     * TIMER track) stores elapsed seconds, so render it as a duration ("50м") rather than a raw count;
      * every other numeric param is a plain amount plus its unit.
      */
-    fun paramAmount(l: Lang, habit: Habit?, param: HabitParam?, v: Double): String =
-        if (habit?.type == HabitType.TIMER && param?.timerPhase == null) {
+    fun paramAmount(l: Lang, track: Track?, param: TrackParam?, v: Double): String =
+        if (track?.type == TrackType.TIMER && param?.timerPhase == null) {
             formatDuration(l, v)
         } else {
-            formatAmount(v) + ((param?.unit ?: habit?.unit)?.let { " $it" } ?: "")
+            formatAmount(v) + ((param?.unit ?: track?.unit)?.let { " $it" } ?: "")
         }
 
     fun formatAmount(v: Double): String {
@@ -416,7 +459,7 @@ object Strings {
         Direction.LESS -> pick(l, "less↓", "меньше↓")
     }
 
-    fun noStats(l: Lang) = pick(l, "No habits to report on.", "Не по чем статистику показывать.")
+    fun noStats(l: Lang) = pick(l, "No tracks to report on.", "Не по чем статистику показывать.")
 
     fun statsHeader(l: Lang) = pick(l, "Stats:", "Статистика:")
 
@@ -426,12 +469,12 @@ object Strings {
         "🔥 streak: $days day(s)",
         "🔥 серия: $days дн.")
 
-    fun statsLines(l: Lang, s: HabitStat): List<String> {
+    fun statsLines(l: Lang, s: TrackStat): List<String> {
         val pct = if (s.totalDays > 0) "%.0f%%".format(java.util.Locale.ROOT, s.loggedDays * 100.0 / s.totalDays) else "—"
         val days = pick(l,
             "📅 ${s.loggedDays}/${s.totalDays} days ($pct)",
             "📅 ${s.loggedDays}/${s.totalDays} дн. ($pct)")
-        // Log-only habits (e.g. log-only timers) are journals: skip the streak/completion line and
+        // Log-only tracks (e.g. log-only timers) are journals: skip the streak/completion line and
         // just show their recorded values below.
         val lines = if (s.logOnly) mutableListOf() else mutableListOf("${statsStreak(l, s.streak)}   $days")
         s.trend?.let { lines += trendLine(l, it) }
@@ -465,7 +508,7 @@ object Strings {
     }
 
     /**
-     * Timer trend: values are seconds rendered as durations. When the habit has a daily target
+     * Timer trend: values are seconds rendered as durations. When the track has a daily target
      * ("со статами") it gets a today-vs-target verdict (✅ reached / ⏳ not yet); a log-only timer
      * ("без статов") just shows its recorded time.
      */
@@ -486,7 +529,7 @@ object Strings {
         l: Lang,
         from: LocalDate,
         to: LocalDate,
-        stats: List<HabitWeekStat>
+        stats: List<TrackWeekStat>
     ): String? {
         if (stats.isEmpty()) return null
         val activity = stats.any { s ->
@@ -501,9 +544,9 @@ object Strings {
             stats.forEach { s ->
                 appendLine("• ${s.name}")
                 when (s.type) {
-                    // A check habit shows its scheduled (done/skip) block when it has reminders and
+                    // A check track shows its scheduled (done/skip) block when it has reminders and
                     // its ad-hoc counter block when it allows ad-hoc check-ins; both may appear.
-                    HabitType.CHECK -> {
+                    TrackType.CHECK -> {
                         if (s.hasSchedule) {
                             val total = s.scheduledDone + s.scheduledSkip
                             val rate = if (total > 0) "%.0f%%".format(java.util.Locale.ROOT, s.scheduledDone * 100.0 / total) else "—"
@@ -522,7 +565,7 @@ object Strings {
                             }
                         }
                     }
-                    HabitType.QUANTITY -> {
+                    TrackType.QUANTITY -> {
                         val unit = s.unit?.let { " $it" } ?: ""
                         val avg = if (s.quantityDays > 0) formatAmount(s.quantityTotal / s.quantityDays) else "0"
                         val dirSuffix = s.direction?.let { "   (${directionShort(l, it)})" } ?: ""
@@ -535,7 +578,7 @@ object Strings {
                                 "    🎯 цель достигнута: ${s.targetHitDays}/7"))
                         }
                     }
-                    HabitType.TIMER -> {
+                    TrackType.TIMER -> {
                         val total = formatDuration(l, s.quantityTotal)
                         val avg = if (s.quantityDays > 0) formatDuration(l, s.quantityTotal / s.quantityDays) else formatDuration(l, 0.0)
                         val dirSuffix = s.direction?.let { "   (${directionShort(l, it)})" } ?: ""
@@ -619,7 +662,7 @@ object Strings {
         "Token #$id not found or already revoked.",
         "Токен #$id не найден или уже отозван.")
 
-    fun calTitle(l: Lang) = pick(l, "📅 Habit calendar subscription", "📅 Подписка на календарь привычек")
+    fun calTitle(l: Lang) = pick(l, "📅 Track calendar subscription", "📅 Подписка на календарь треков")
 
     fun calHowTo(l: Lang) = pick(l,
         "Add this URL in your calendar app (Google/Apple/Outlook) as a subscribed calendar:",
@@ -657,7 +700,7 @@ object Strings {
             "🤖 через MCP — $name: ${formatAmount(amount)}$u — $date$c")
     }
 
-    fun mcpRecordedCheck(l: Lang, h: Habit, total: Int, date: LocalDate, comment: String?): String {
+    fun mcpRecordedCheck(l: Lang, h: Track, total: Int, date: LocalDate, comment: String?): String {
         val c = comment?.let { "\n💬 $it" } ?: ""
         return counterLine(l, h, total, date).let { line ->
             pick(l, "🤖 via MCP — $line$c", "🤖 через MCP — $line$c")
@@ -666,7 +709,7 @@ object Strings {
 
     fun mcpRecordedQuantityGroup(
         l: Lang,
-        root: Habit,
+        root: Track,
         numericPerField: Map<Long, Double>,
         textPerField: Map<Long, String> = emptyMap(),
         date: LocalDate,
@@ -724,8 +767,8 @@ object Strings {
     fun btnParamTypeText(l: Lang) = pick(l, "📝 text", "📝 текст")
 
     fun pickLogMode(l: Lang) = pick(l,
-        "Track metrics, or just keep a log?\n• tracked — streaks, completion, trends and weekly summary\n• log only — just a journal of entries, no targets/streaks, hidden from /stats",
-        "Считать метрики или просто вести журнал?\n• с метриками — серии, выполнение, тренды и недельная сводка\n• только журнал — лог записей без целей/серий, скрыт из /stats")
+        "Track metrics, or just keep a log?\n• tracked — streaks, completion, trends and weekly summary\n• log only — just a journal of tracks, no targets/streaks, hidden from /stats",
+        "Считать метрики или просто вести журнал?\n• с метриками — серии, выполнение, тренды и недельная сводка\n• только журнал — лог треков без целей/серий, скрыт из /stats")
 
     fun btnTracked(l: Lang) = pick(l, "📊 tracked", "📊 с метриками")
     fun btnLogOnly(l: Lang) = pick(l, "📒 log only", "📒 только журнал")
@@ -738,8 +781,8 @@ object Strings {
     fun btnAdHocNo(l: Lang) = pick(l, "📅 no, scheduled only", "📅 нет, только по расписанию")
 
     fun checkNeedsScheduleOrAdHoc(l: Lang) = pick(l,
-        "A check habit needs a schedule and/or ad-hoc check-ins — you chose neither. Start over with /addhabit.",
-        "Привычке-отметке нужно расписание и/или отметки в любое время — вы не выбрали ни то, ни другое. Начните заново через /addhabit.")
+        "A check track needs a schedule and/or ad-hoc check-ins — you chose neither. Start over with /addtrack.",
+        "Треку типа «отметка» нужно расписание и/или отметки в любое время — вы не выбрали ни то, ни другое. Начните заново через /addtrack.")
 
     fun sendFirstFieldName(l: Lang) = pick(l,
         "Name of the first field (e.g. \"km\"):",
@@ -758,10 +801,10 @@ object Strings {
     fun cbSkipped(l: Lang) = pick(l, "Skipped ❌", "Пропущено ❌")
     fun cbLogged(l: Lang) = pick(l, "Logged ➕", "Записано ➕")
     fun cbRemovedShort(l: Lang) = pick(l, "Removed", "Удалено")
-    fun cbRemovedFull(l: Lang) = pick(l, "Habit removed.", "Привычка удалена.")
+    fun cbRemovedFull(l: Lang) = pick(l, "Track removed.", "Трек удалён.")
     fun cbParamDeleted(l: Lang) = pick(l, "Field deleted. 🗑", "Поле удалено. 🗑")
     fun cbPausedShort(l: Lang) = pick(l, "Paused", "На паузе")
-    fun cbPausedFull(l: Lang) = pick(l, "Habit paused.", "Привычка на паузе.")
+    fun cbPausedFull(l: Lang) = pick(l, "Track paused.", "Трек на паузе.")
     fun cbPausedForDays(l: Lang, days: Int) = pick(
         l,
         "Paused for $days ${if (days == 1) "day" else "days"} — it'll resume on its own.",
@@ -769,7 +812,7 @@ object Strings {
     )
     fun cbPausedForever(l: Lang) = pick(l, "Paused until you resume it.", "На паузе, пока не возобновите.")
     fun cbResumedShort(l: Lang) = pick(l, "Resumed", "Возобновлено")
-    fun cbResumedFull(l: Lang) = pick(l, "Habit resumed.", "Привычка возобновлена.")
+    fun cbResumedFull(l: Lang) = pick(l, "Track resumed.", "Трек возобновлён.")
 
     private fun pick(l: Lang, en: String, ru: String): String = if (l == Lang.RU) ru else en
 
@@ -790,26 +833,26 @@ object Strings {
 @Suppress("unused")
 object BotProfileI18n {
     fun name(l: Lang): String = when (l) {
-        Lang.EN -> "Habit Tracker"
-        Lang.RU -> "Трекер привычек"
+        Lang.EN -> "TrackAll"
+        Lang.RU -> "TrackAll"
     }
 
     fun description(l: Lang): String = when (l) {
         Lang.EN -> """
-            Habit tracker bot. Set up daily habits, get reminders at the times you choose, and mark each one done or skipped.
+            TrackAll. Set up daily tracks, get reminders at the times you choose, and mark each one done or skipped.
 
-            Tap /start to begin or /addhabit to add your first habit.
+            Tap /start to begin or /addtrack to add your first track.
         """.trimIndent()
         Lang.RU -> """
-            Бот для трекинга привычек. Заведите ежедневные привычки, получайте напоминания в нужное время и отмечайте «готово» или «пропуск».
+            TrackAll. Заводите ежедневные треки, получайте напоминания в нужное время и отмечайте «готово» или «пропуск».
 
-            Нажмите /start, чтобы начать, или /addhabit, чтобы добавить первую привычку.
+            Нажмите /start, чтобы начать, или /addtrack, чтобы добавить первый трек.
         """.trimIndent()
     }
 
     fun shortDescription(l: Lang): String = when (l) {
-        Lang.EN -> "Track daily habits with reminders, check-ins and streaks."
-        Lang.RU -> "Трекинг ежедневных привычек: напоминания, чек-ины и серии."
+        Lang.EN -> "Track anything with reminders, check-ins and streaks."
+        Lang.RU -> "Трекинг чего угодно: напоминания, чек-ины и серии."
     }
 }
 
@@ -817,18 +860,19 @@ object BotCommandsI18n {
     fun list(l: Lang): List<Pair<String, String>> = when (l) {
         Lang.EN -> listOf(
             "checkin" to "today's check-ins",
+            "log" to "recent check-ins",
             "timer" to "start/stop time tracking",
             "stats" to "statistics",
-            "habits" to "list habits",
-            "addhabit" to "add a habit (interactive)",
-            "cancel" to "cancel the current /addhabit dialog",
-            "pause" to "pause a habit",
-            "resume" to "resume a paused habit",
-            "removehabit" to "remove a habit",
-            "deleteparam" to "delete a habit field",
+            "tracks" to "list tracks",
+            "addtrack" to "add a track (interactive)",
+            "cancel" to "cancel the current /addtrack dialog",
+            "pause" to "pause a track",
+            "resume" to "resume a paused track",
+            "removetrack" to "remove a track",
+            "deleteparam" to "delete a track field",
             "tz" to "show or set your timezone",
             "lang" to "switch language (en/ru)",
-            "calendar" to "subscribe to a habit calendar (iCal)",
+            "calendar" to "subscribe to a track calendar (iCal)",
             "calendar_off" to "disable the calendar subscription",
             "mcp_new" to "create an MCP API token",
             "mcp_list" to "list MCP API tokens",
@@ -836,18 +880,19 @@ object BotCommandsI18n {
         )
         Lang.RU -> listOf(
             "checkin" to "чек-ины за сегодня",
+            "log" to "последние чек-ины",
             "timer" to "старт/стоп отслеживания времени",
             "stats" to "статистика",
-            "habits" to "список привычек",
-            "addhabit" to "добавить привычку (интерактивно)",
-            "cancel" to "отменить текущий диалог /addhabit",
-            "pause" to "поставить привычку на паузу",
-            "resume" to "возобновить привычку",
-            "removehabit" to "удалить привычку",
-            "deleteparam" to "удалить поле привычки",
+            "tracks" to "список треков",
+            "addtrack" to "добавить трек (интерактивно)",
+            "cancel" to "отменить текущий диалог /addtrack",
+            "pause" to "поставить трек на паузу",
+            "resume" to "возобновить трек",
+            "removetrack" to "удалить трек",
+            "deleteparam" to "удалить поле трека",
             "tz" to "показать или задать часовой пояс",
             "lang" to "сменить язык (en/ru)",
-            "calendar" to "подписка на календарь привычек (iCal)",
+            "calendar" to "подписка на календарь треков (iCal)",
             "calendar_off" to "отключить подписку на календарь",
             "mcp_new" to "создать токен MCP API",
             "mcp_list" to "список токенов MCP API",

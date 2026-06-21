@@ -3,7 +3,7 @@ package mcp
 import BotNotifier
 import db.CheckInRepository
 import services.CheckInService
-import services.HabitService
+import services.TrackService
 import Lang
 import Strings
 import dto.CheckinUpdateArgs
@@ -24,7 +24,7 @@ object CheckinUpdateTool : TypedMcpTool<CheckinUpdateArgs>(CheckinUpdateArgs.ser
     override val name = "checkin_update"
     override val description =
         "Edit a quantity check-in by its checkinId (same id returned by quantity_record or listed in checkins_list). " +
-            "Only entries dated within the last month can be edited. Editable fields: " +
+            "Only tracks dated within the last month can be edited. Editable fields: " +
             "'comment' (string or omit to leave unchanged), 'clearComment' (true to remove the comment), " +
             "'values' (array of { paramId, value } — same string format as quantity_record; only listed params are updated). " +
             "At least one of 'comment'/'clearComment' or 'values' must be provided."
@@ -47,7 +47,7 @@ object CheckinUpdateTool : TypedMcpTool<CheckinUpdateArgs>(CheckinUpdateArgs.ser
         if (args.values.isNotEmpty()) {
             val checkin = CheckInRepository.loadEventForDelete(args.checkinId, userId)
                 ?: return err("Check-in ${args.checkinId} not found, already deleted, or not editable")
-            val paramById = HabitService.findById(checkin.habitId, userId)?.params?.associateBy { it.id } ?: emptyMap()
+            val paramById = TrackService.findById(checkin.trackId, userId)?.params?.associateBy { it.id } ?: emptyMap()
             for ((i, fv) in args.values.withIndex()) {
                 val paramType = paramById[fv.paramId]?.paramType ?: ParamType.NUMBER
                 when (val parsed = fv.parse(paramType)) {
@@ -67,31 +67,39 @@ object CheckinUpdateTool : TypedMcpTool<CheckinUpdateArgs>(CheckinUpdateArgs.ser
 
         // Window is "within the last month": today back through one month ago inclusive.
         val cutoff = checkinEditCutoff(tz)
-        val updated = when (val outcome = CheckInService.updateCheckin(
+        val outcome = when (val o = CheckInService.updateCheckin(
             args.checkinId, userId, cutoff, hasComment, newComment, valuePatch
         )) {
-            is CheckInService.UpdateOutcome.Updated -> outcome.checkin
+            is CheckInService.UpdateOutcome.Updated -> o
             CheckInService.UpdateOutcome.NotFound ->
-                return err("Check-in ${args.checkinId} not found, already deleted, or not a quantity entry")
+                return err("Check-in ${args.checkinId} not found, already deleted, or not a quantity track")
             is CheckInService.UpdateOutcome.TooOld ->
-                return err("Cannot edit check-ins older than a $CHECKIN_EDIT_WINDOW ($cutoff); ${outcome.date} is too old")
+                return err("Cannot edit check-ins older than a $CHECKIN_EDIT_WINDOW ($cutoff); ${o.date} is too old")
         }
+        val updated = outcome.checkin
 
-        val habit = HabitService.findById(updated.habitId, userId)
+        val track = TrackService.findById(updated.trackId, userId)
+        val beforeByParam = outcome.before.values.associateBy { it.paramId }
+        fun render(param: dto.TrackParam?, fv: FieldValue?): String = when (fv) {
+            is FieldValue.Numeric -> Strings.paramAmount(lang, track, param, fv.v)
+            is FieldValue.Text -> fv.v
+            null -> "—"
+        }
+        // Show a before→after diff for only the params the caller actually patched, plus the comment
+        // when it changed — instead of dumping the whole new value set.
         val lines = buildList {
-            updated.values.forEach { v ->
-                val param = habit?.params?.firstOrNull { it.id == v.paramId }
-                val name = param?.name ?: habit?.name ?: "#${v.paramId}"
-                when (val fv = v.value) {
-                    is FieldValue.Numeric -> add("$name: ${Strings.paramAmount(lang, habit, param, fv.v)}")
-                    is FieldValue.Text -> add("$name: ${fv.v}")
-                    null -> {}
-                }
+            for (paramId in valuePatch.keys) {
+                val param = track?.params?.firstOrNull { it.id == paramId }
+                val name = param?.name ?: track?.name ?: "#$paramId"
+                val old = render(param, beforeByParam[paramId]?.value)
+                val new = render(param, updated.values.firstOrNull { it.paramId == paramId }?.value)
+                if (old != new) add("$name: $old → $new")
             }
-            if (hasComment) add(
-                if (newComment != null) "💬 $newComment"
-                else if (lang == Lang.RU) "комментарий удалён" else "comment cleared"
-            )
+            if (hasComment && outcome.before.comment != newComment) {
+                val old = outcome.before.comment ?: "—"
+                val new = newComment ?: (if (lang == Lang.RU) "комментарий удалён" else "comment cleared")
+                add("💬 $old → $new")
+            }
         }
         BotNotifier.notify(userId, Strings.mcpUpdatedCheckin(lang, lines, updated.date))
         return ok("""{"updated":true,"checkinId":${args.checkinId},"date":"${updated.date}"}""")
@@ -120,7 +128,7 @@ object CheckinUpdateTool : TypedMcpTool<CheckinUpdateArgs>(CheckinUpdateArgs.ser
                     putJsonObject("properties") {
                         putJsonObject("paramId") {
                             put("type", "integer")
-                            put("description", "Param id (from habits_list params[].id).")
+                            put("description", "Param id (from tracks_list params[].id).")
                         }
                         putJsonObject("value") {
                             put("type", "string")

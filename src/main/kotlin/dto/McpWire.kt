@@ -17,16 +17,16 @@ val McpJson: Json = Json {
 
 @Serializable
 data class CheckinsListArgs(
-    val habitIds: List<Long> = emptyList(),
+    val trackIds: List<Long> = emptyList(),
     val from: String? = null,
     val to: String? = null,
 )
 
-/** One habit's check-ins in a batch [CheckinsListArgs] query. [paramValues] carries each param's
- *  dictionary of recurring values (empty/omitted for habits that have none yet). */
+/** One track's check-ins in a batch [CheckinsListArgs] query. [paramValues] carries each param's
+ *  dictionary of recurring values (empty/omitted for tracks that have none yet). */
 @Serializable
-data class HabitCheckins(
-    val habitId: Long,
+data class TrackCheckins(
+    val trackId: Long,
     val found: Boolean,
     val checkins: List<CheckinRecord>,
     @EncodeDefault(EncodeDefault.Mode.NEVER) val paramValues: List<ParamDictionary> = emptyList(),
@@ -44,12 +44,12 @@ data class ParamDictionary(
 data class CheckinsListResult(
     val from: String,
     val to: String,
-    val habits: List<HabitCheckins>,
+    val tracks: List<TrackCheckins>,
 )
 
 @Serializable
 data class QuantityRecordArgs(
-    val habitId: Long,
+    val trackId: Long,
     val values: List<FieldValueArg> = emptyList(),
     val date: String? = null,
     val comment: String? = null,
@@ -99,7 +99,7 @@ fun FieldValueArg.parse(paramType: ParamType): FieldValue? = when (paramType) {
 
 @Serializable
 data class CheckRecordArgs(
-    val habitId: Long,
+    val trackId: Long,
     val date: String? = null,
     val comment: String? = null,
 )
@@ -111,7 +111,7 @@ data class CheckinDeleteArgs(
 
 @Serializable
 data class ParamValuesMergeArgs(
-    val habitId: Long,
+    val trackId: Long,
     val paramId: Long,
     val from: List<String> = emptyList(),
     val into: String,

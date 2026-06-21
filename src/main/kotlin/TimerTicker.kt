@@ -4,8 +4,8 @@ import dev.inmo.tgbotapi.extensions.api.edit.text.editMessageText
 import dev.inmo.tgbotapi.extensions.behaviour_builder.BehaviourContext
 import dev.inmo.tgbotapi.types.MessageId
 import dev.inmo.tgbotapi.types.toChatId
-import dto.Habit
-import dto.HabitType
+import dto.Track
+import dto.TrackType
 import services.TimerService
 import java.time.Duration
 import java.time.Instant
@@ -48,15 +48,15 @@ object TimerTicker {
                 val lang = t.langCode?.let { runCatching { Lang.valueOf(it) }.getOrNull() } ?: Lang.EN
                 val zone = t.tzId?.let { runCatching { ZoneId.of(it) }.getOrNull() }
                 val date = if (zone != null) LocalDate.now(zone) else LocalDate.now()
-                val habit = Habit(id = t.habitId, name = t.name, type = HabitType.TIMER)
+                val track = Track(id = t.trackId, name = t.name, type = TrackType.TIMER)
                 editMessageText(
                     chatId = t.userId.toChatId(),
                     messageId = MessageId(t.messageId),
-                    text = Strings.timerLine(lang, habit, running = true, elapsed, todaySeconds = 0.0),
-                    replyMarkup = Keyboards.timerControl(t.habitId, running = true, date, lang),
+                    text = Strings.timerLine(lang, track, running = true, elapsed, todaySeconds = 0.0),
+                    replyMarkup = Keyboards.timerControl(t.trackId, running = true, date, lang),
                 )
             }.onFailure { e ->
-                KSLog.info("Failed to tick timer ${t.habitId} for ${t.userId}: ${e.message}")
+                KSLog.info("Failed to tick timer ${t.trackId} for ${t.userId}: ${e.message}")
             }
         }
     }

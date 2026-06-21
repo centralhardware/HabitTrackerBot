@@ -15,12 +15,12 @@ enum class CheckinStatus(val value: String) {
     @SerialName("pending") PENDING("pending"),
 }
 
-/** A check-in event: one row in `checkins`, owned by a single habit. */
+/** A check-in event: one row in `checkins`, owned by a single track. */
 data class CheckinEvent(
     val userId: Long,
     val checkDate: LocalDate,
     val reminderId: Long?,
-    val habitId: Long,
+    val trackId: Long,
     val comment: String?,
 )
 
@@ -33,13 +33,28 @@ data class CheckinValue(
     val value: FieldValue? = null,
 )
 
-/** A manual check-in event resolved for soft-deletion or editing: the event id, its habit, date, comment and values. */
+/** A manual check-in event resolved for soft-deletion or editing: the event id, its track, date, comment and values. */
 data class DeletableCheckin(
     val checkinId: Long,
-    val habitId: Long,
+    val trackId: Long,
     val date: LocalDate,
     val values: List<CheckinValue>,
     val comment: String? = null,
+)
+
+/**
+ * One recent check-in event for the `/log` listing: the event, its owning track, and the values
+ * recorded on it. [status] mirrors a scheduled slot's done/skip/pending (null for ad-hoc events);
+ * [values] holds only real per-param values (the status-only row of a scheduled slot is excluded).
+ */
+data class RecentCheckin(
+    val checkinId: Long,
+    val trackId: Long,
+    val date: LocalDate,
+    val comment: String?,
+    val reminderId: Long?,
+    val status: CheckinStatus?,
+    val values: List<CheckinValue>,
 )
 
 data class PendingCheckIn(
@@ -78,7 +93,7 @@ data class CheckinRecord(
     @EncodeDefault(EncodeDefault.Mode.NEVER)
     @Serializable(InstantSerializer::class) val recordedAt: Instant? = null,
     // The timer session's start, derived as recordedAt − elapsed seconds. Only set on a timer's
-    // duration row; omitted for every other habit type and for a timer's annotation fields.
+    // duration row; omitted for every other track type and for a timer's annotation fields.
     @EncodeDefault(EncodeDefault.Mode.NEVER)
     @Serializable(InstantSerializer::class) val startedAt: Instant? = null,
 )
@@ -86,7 +101,7 @@ data class CheckinRecord(
 /**
  * One `checkin_values` row joined with its parent `checkins` event — the raw unit the
  * analytics layer computes over. `isScheduled` mirrors `reminder_id IS NOT NULL`;
- * `paramId` distinguishes the fields of a multi-field habit.
+ * `paramId` distinguishes the fields of a multi-field track.
  */
 data class CheckinValueRow(
     val checkinId: Long,

@@ -3,25 +3,25 @@ package services
 import db.CheckInRepository
 import dto.CheckinValueRow
 import dto.Direction
-import dto.HabitStatus
-import dto.HabitType
-import dto.HabitWeekStat
+import dto.TrackStatus
+import dto.TrackType
+import dto.TrackWeekStat
 import java.time.LocalDate
 
 object WeeklySummaryService {
 
-    fun weeklyStats(userId: Long, from: LocalDate, to: LocalDate): List<HabitWeekStat> {
-        val habits = HabitService.listActive(userId)
-            .filter { it.status == HabitStatus.ACTIVE && !it.logOnly }
-        if (habits.isEmpty()) return emptyList()
+    fun weeklyStats(userId: Long, from: LocalDate, to: LocalDate): List<TrackWeekStat> {
+        val tracks = TrackService.listActive(userId)
+            .filter { it.status == TrackStatus.ACTIVE && !it.logOnly }
+        if (tracks.isEmpty()) return emptyList()
 
-        return habits.flatMap { h ->
-            val rows = CheckInRepository.loadForHabit(h.id)
+        return tracks.flatMap { h ->
+            val rows = CheckInRepository.loadForTrack(h.id)
             if (h.multiField) {
                 h.params.map { p ->
                     weekStat(
                         name = "${h.name} / ${p.name}",
-                        habitId = h.id,
+                        trackId = h.id,
                         type = h.type,
                         direction = p.direction,
                         dailyTarget = p.dailyTarget,
@@ -37,7 +37,7 @@ object WeeklySummaryService {
                 listOf(
                     weekStat(
                         name = h.name,
-                        habitId = h.id,
+                        trackId = h.id,
                         type = h.type,
                         direction = h.direction,
                         dailyTarget = h.dailyTarget,
@@ -55,8 +55,8 @@ object WeeklySummaryService {
 
     private fun weekStat(
         name: String,
-        habitId: Long,
-        type: HabitType,
+        trackId: Long,
+        type: TrackType,
         direction: Direction?,
         dailyTarget: Double?,
         unit: String?,
@@ -65,10 +65,10 @@ object WeeklySummaryService {
         rows: List<CheckinValueRow>,
         from: LocalDate,
         to: LocalDate,
-    ): HabitWeekStat {
+    ): TrackWeekStat {
         val totals = CheckinAnalytics.weekTotals(rows, from, to)
-        return HabitWeekStat(
-            habitId = habitId,
+        return TrackWeekStat(
+            trackId = trackId,
             name = name,
             type = type,
             direction = direction,
@@ -87,7 +87,7 @@ object WeeklySummaryService {
     }
 
     private fun computeTargetHits(
-        type: HabitType,
+        type: TrackType,
         allowAdHoc: Boolean,
         target: Double?,
         direction: Direction?,
@@ -97,8 +97,8 @@ object WeeklySummaryService {
     ): Int {
         if (target == null) return 0
         return when (type) {
-            // A check habit's daily target applies to its ad-hoc counts; no target without ad-hoc.
-            HabitType.CHECK -> {
+            // A check track's daily target applies to its ad-hoc counts; no target without ad-hoc.
+            TrackType.CHECK -> {
                 if (!allowAdHoc) return 0
                 val targetInt = target.toInt()
                 CheckinAnalytics.counterCountsPerDay(rows, from, to).values.count { count ->
@@ -106,7 +106,7 @@ object WeeklySummaryService {
                     else count >= targetInt
                 }
             }
-            HabitType.QUANTITY, HabitType.TIMER -> {
+            TrackType.QUANTITY, TrackType.TIMER -> {
                 CheckinAnalytics.quantitySumsPerDayInRange(rows, from, to).values
                     .count { hits(it, target, direction) }
             }

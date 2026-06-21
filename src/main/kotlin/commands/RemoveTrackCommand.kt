@@ -1,6 +1,6 @@
 package commands
 
-import services.HabitService
+import services.TrackService
 import Keyboards
 import Strings
 import dev.inmo.tgbotapi.extensions.api.send.sendMessage
@@ -9,17 +9,17 @@ import dev.inmo.tgbotapi.extensions.behaviour_builder.triggers_handling.onComman
 import lang
 import userId
 
-fun BehaviourContext.registerRemoveHabitCommand() {
-    onCommand("removehabit") { message ->
-        val habits = HabitService.listActive(data.userId)
-        if (habits.isEmpty()) {
+fun BehaviourContext.registerRemoveTrackCommand() {
+    onCommand("removetrack") { message ->
+        val tracks = TrackService.listActive(data.userId)
+        if (tracks.isEmpty()) {
             sendMessage(message.chat.id, Strings.nothingToRemove(data.lang))
             return@onCommand
         }
         sendMessage(
             chatId = message.chat.id,
-            text = Strings.pickHabitToRemove(data.lang),
-            replyMarkup = Keyboards.pickHabit("rm", habits, "🗑")
+            text = Strings.pickTrackToRemove(data.lang),
+            replyMarkup = Keyboards.pickTrack("rm", tracks, "🗑")
         )
     }
 }

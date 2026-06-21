@@ -11,7 +11,7 @@ import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 
 /**
- * Renders a user's habits as an iCalendar (RFC 5545) document for calendar-app subscriptions:
+ * Renders a user's tracks as an iCalendar (RFC 5545) document for calendar-app subscriptions:
  * logged check-ins as all-day events and reminders as recurring timed events. Read-only.
  */
 object CalendarFeedService {
@@ -25,9 +25,9 @@ object CalendarFeedService {
     private val LOCAL = DateTimeFormatter.ofPattern("yyyyMMdd'T'HHmmss")
     private val BYDAY = arrayOf("MO", "TU", "WE", "TH", "FR", "SA", "SU")
 
-    // CSS3 color names (RFC 7986 COLOR property) — one per habit, picked deterministically by name
-    // so a habit keeps the same color across feed refreshes. Clients that support per-event colors
-    // (e.g. Apple Calendar) tint each habit's events distinctly.
+    // CSS3 color names (RFC 7986 COLOR property) — one per track, picked deterministically by name
+    // so a track keeps the same color across feed refreshes. Clients that support per-event colors
+    // (e.g. Apple Calendar) tint each track's events distinctly.
     private val PALETTE = arrayOf(
         "tomato", "darkorange", "gold", "yellowgreen", "seagreen", "teal",
         "steelblue", "royalblue", "slateblue", "mediumorchid", "hotpink", "sienna",
@@ -40,10 +40,10 @@ object CalendarFeedService {
         val sb = StringBuilder()
         line(sb, "BEGIN:VCALENDAR")
         line(sb, "VERSION:2.0")
-        line(sb, "PRODID:-//HabitTrackerBot//Habits//EN")
+        line(sb, "PRODID:-//TrackAll//Tracks//EN")
         line(sb, "CALSCALE:GREGORIAN")
         line(sb, "METHOD:PUBLISH")
-        line(sb, "X-WR-CALNAME:Habits")
+        line(sb, "X-WR-CALNAME:Tracks")
         line(sb, "X-WR-TIMEZONE:${tz.id}")
 
         if (includeCheckins) {
@@ -73,18 +73,18 @@ object CalendarFeedService {
         val values = rows.mapNotNull { formatValue(it) }
         val details = (values + listOfNotNull(first.comment?.takeIf { it.isNotBlank() }))
             .joinToString("\n").ifBlank { null }
-        return CheckinEvent(first.checkinId, first.habitName, first.date, details)
+        return CheckinEvent(first.checkinId, first.trackName, first.date, details)
     }
 
     private fun formatValue(c: CalendarCheckin): String? {
         val raw = c.value?.takeIf { it.isNotBlank() } ?: return null
         // A timer's unnamed numeric field is its elapsed seconds — show it as a readable duration
         // rather than a bare second count.
-        if (c.habitType == "timer" && c.paramType == "number" && c.paramName.isNullOrBlank()) {
+        if (c.trackType == "timer" && c.paramType == "number" && c.paramName.isNullOrBlank()) {
             return raw.toDoubleOrNull()?.let { humanizeSeconds(it.toLong()) } ?: raw
         }
         val v = if (c.paramType == "number") raw.toDoubleOrNull()?.let(::trimNumber) ?: raw else raw
-        // Numeric fields carry a unit; text fields don't. A field name (multi-field habits) labels
+        // Numeric fields carry a unit; text fields don't. A field name (multi-field tracks) labels
         // the value so bare numbers don't appear context-free in the calendar.
         val withUnit = if (c.paramType == "number" && !c.unit.isNullOrBlank()) "$v ${c.unit}" else v
         return c.paramName?.takeIf { it.isNotBlank() }?.let { "$it: $withUnit" } ?: withUnit
@@ -134,8 +134,8 @@ object CalendarFeedService {
         val rule = if (rem.days.isEmpty()) "FREQ=DAILY"
         else "FREQ=WEEKLY;BYDAY=" + rem.days.sorted().joinToString(",") { BYDAY[it - 1] }
         line(sb, "RRULE:$rule")
-        line(sb, "SUMMARY:${escape(rem.habitName)}")
-        line(sb, "COLOR:${colorFor(rem.habitName)}")
+        line(sb, "SUMMARY:${escape(rem.trackName)}")
+        line(sb, "COLOR:${colorFor(rem.trackName)}")
         line(sb, "END:VEVENT")
     }
 

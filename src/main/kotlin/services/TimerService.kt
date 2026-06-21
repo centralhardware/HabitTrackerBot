@@ -1,7 +1,7 @@
 package services
 
 import db.TimerRepository
-import dto.HabitType
+import dto.TrackType
 import dto.RunningTimer
 import dto.RunningTimerTick
 import kotlinx.serialization.decodeFromString
@@ -28,11 +28,11 @@ object TimerService {
     }
 
     /** [beforeValues] are the "before"-phase annotation fields the user filled in (paramId → text). */
-    fun start(habitId: Long, userId: Long, beforeValues: Map<Long, String> = emptyMap()): StartOutcome {
-        val habit = HabitService.findById(habitId, userId) ?: return StartOutcome.NotFound
-        if (habit.type != HabitType.TIMER) return StartOutcome.NotFound
+    fun start(trackId: Long, userId: Long, beforeValues: Map<Long, String> = emptyMap()): StartOutcome {
+        val track = TrackService.findById(trackId, userId) ?: return StartOutcome.NotFound
+        if (track.type != TrackType.TIMER) return StartOutcome.NotFound
         val json = if (beforeValues.isEmpty()) null else Json.encodeToString(beforeValues)
-        return if (TimerRepository.start(habitId, userId, json)) StartOutcome.Started else StartOutcome.AlreadyRunning
+        return if (TimerRepository.start(trackId, userId, json)) StartOutcome.Started else StartOutcome.AlreadyRunning
     }
 
     /**
@@ -43,10 +43,10 @@ object TimerService {
      * Returns the total elapsed seconds of the whole session and the id of the check-in to which a
      * follow-up comment / annotation fields should be attached.
      */
-    fun stop(habitId: Long, userId: Long, today: LocalDate, zone: ZoneId?): StopOutcome {
-        val habit = HabitService.findById(habitId, userId) ?: return StopOutcome.NotFound
-        if (habit.type != HabitType.TIMER) return StopOutcome.NotFound
-        val row = TimerRepository.stop(habitId, userId) ?: return StopOutcome.NotRunning
+    fun stop(trackId: Long, userId: Long, today: LocalDate, zone: ZoneId?): StopOutcome {
+        val track = TrackService.findById(trackId, userId) ?: return StopOutcome.NotFound
+        if (track.type != TrackType.TIMER) return StopOutcome.NotFound
+        val row = TimerRepository.stop(trackId, userId) ?: return StopOutcome.NotRunning
         val beforeValues = row.pendingValuesJson?.let {
             runCatching { Json.decodeFromString<Map<Long, String>>(it) }.getOrDefault(emptyMap())
         } ?: emptyMap()
@@ -55,15 +55,15 @@ object TimerService {
         val liveSeconds = if (row.paused) 0.0 else Duration.between(row.startedAt, stoppedAt).seconds.toDouble()
         val totalSeconds = (row.accumulatedSeconds + liveSeconds).coerceAtLeast(1.0)
         // Record only the final live segment (split across days); banked segments are already in the DB.
-        var checkinId = if (row.paused) 0L else recordSegment(habitId, userId, row.startedAt, stoppedAt, today, zone, beforeValues)
+        var checkinId = if (row.paused) 0L else recordSegment(trackId, userId, row.startedAt, stoppedAt, today, zone, beforeValues)
         if (checkinId == 0L) {
             checkinId = if (row.accumulatedSeconds > 0.0)
                 // Paused at stop, or a sub-second final segment after earlier ones: attach to the
                 // last segment we already banked rather than writing a phantom check-in.
-                CheckInService.latestCheckin(habitId, userId)
+                CheckInService.latestCheckin(trackId, userId)
             else
                 // Never lose a sub-second timer that banked nothing: record at least one second.
-                CheckInService.recordTimer(habitId, userId, today, 1.0)
+                CheckInService.recordTimer(trackId, userId, today, 1.0)
         }
         return StopOutcome.Stopped(totalSeconds, checkinId, beforeValues)
     }
@@ -75,16 +75,16 @@ object TimerService {
      * Returns the id of the check-in on the final day.
      */
     private fun recordSegment(
-        habitId: Long, userId: Long, start: Instant, end: Instant, today: LocalDate, zone: ZoneId?,
+        trackId: Long, userId: Long, start: Instant, end: Instant, today: LocalDate, zone: ZoneId?,
         beforeValues: Map<Long, String> = emptyMap(),
     ): Long {
         val segments = if (zone != null) splitByLocalDay(start, end, zone)
         else listOf(today to Duration.between(start, end).seconds.toDouble())
         var lastCheckinId = 0L
         for ((day, seconds) in segments) {
-            val id = CheckInService.recordTimer(habitId, userId, day, seconds)
+            val id = CheckInService.recordTimer(trackId, userId, day, seconds)
             if (id > 0) {
-                CheckInService.attachTimerFieldValues(id, userId, habitId, beforeValues)
+                CheckInService.attachTimerFieldValues(id, userId, trackId, beforeValues)
                 lastCheckinId = id
             }
         }
@@ -110,25 +110,25 @@ object TimerService {
      * day in [zone]), so the day-by-day breakdown stays correct even when a segment crosses midnight.
      * [today] is the fallback day when no timezone is known. False if it wasn't running or was paused.
      */
-    fun pause(habitId: Long, userId: Long, today: LocalDate, zone: ZoneId?): Boolean {
-        val row = TimerRepository.pause(habitId, userId) ?: return false
+    fun pause(trackId: Long, userId: Long, today: LocalDate, zone: ZoneId?): Boolean {
+        val row = TimerRepository.pause(trackId, userId) ?: return false
         val beforeValues = row.pendingValuesJson?.let {
             runCatching { Json.decodeFromString<Map<Long, String>>(it) }.getOrDefault(emptyMap())
         } ?: emptyMap()
-        recordSegment(habitId, userId, row.startedAt, Instant.now(), today, zone, beforeValues)
+        recordSegment(trackId, userId, row.startedAt, Instant.now(), today, zone, beforeValues)
         return true
     }
 
     /** Resumes a paused timer; false if it wasn't running or wasn't paused. */
-    fun resume(habitId: Long, userId: Long): Boolean = TimerRepository.resume(habitId, userId)
+    fun resume(trackId: Long, userId: Long): Boolean = TimerRepository.resume(trackId, userId)
 
     fun running(userId: Long): List<RunningTimer> = TimerRepository.running(userId)
 
-    fun find(habitId: Long, userId: Long): RunningTimer? = TimerRepository.find(habitId, userId)
+    fun find(trackId: Long, userId: Long): RunningTimer? = TimerRepository.find(trackId, userId)
 
     /** Remembers the message that shows this running timer, so the background ticker can update it. */
-    fun setMessage(habitId: Long, userId: Long, messageId: Long) {
-        TimerRepository.setMessage(habitId, userId, messageId)
+    fun setMessage(trackId: Long, userId: Long, messageId: Long) {
+        TimerRepository.setMessage(trackId, userId, messageId)
     }
 
     /** Running timers (with a tracked message) the ticker should repaint. */

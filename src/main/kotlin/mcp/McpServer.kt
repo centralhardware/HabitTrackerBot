@@ -37,7 +37,7 @@ private val LangKey = AttributeKey<Lang>("mcpLang")
 private val TzKey = AttributeKey<ZoneId>("mcpTz")
 
 private val tools: List<McpTool> = listOf(
-    HabitsListTool,
+    TracksListTool,
     QuantityRecordTool,
     CheckRecordTool,
     CheckinsListTool,
@@ -84,7 +84,7 @@ object McpServer {
 
     private fun buildServer(userId: Long, lang: Lang, tz: ZoneId): Server {
         val server = Server(
-            serverInfo = Implementation(name = "habit-tracker", version = "1.0.0"),
+            serverInfo = Implementation(name = "track-tracker", version = "1.0.0"),
             options = ServerOptions(
                 capabilities = ServerCapabilities(
                     tools = ServerCapabilities.Tools(listChanged = false),

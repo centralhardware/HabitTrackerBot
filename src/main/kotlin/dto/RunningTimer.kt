@@ -9,7 +9,7 @@ import java.time.Instant
  * which case the live segment is frozen and only [accumulatedSeconds] counts.
  */
 data class RunningTimer(
-    val habitId: Long,
+    val trackId: Long,
     val userId: Long,
     val startedAt: Instant,
     val accumulatedSeconds: Double = 0.0,
@@ -19,7 +19,7 @@ data class RunningTimer(
 }
 
 fun Row.toRunningTimer(): RunningTimer = RunningTimer(
-    habitId = long("habit_id"),
+    trackId = long("track_id"),
     userId = long("user_id"),
     startedAt = instant("started_at"),
     accumulatedSeconds = double("accumulated_seconds"),
@@ -28,7 +28,7 @@ fun Row.toRunningTimer(): RunningTimer = RunningTimer(
 
 /** A running timer plus everything the background ticker needs to repaint its live message. */
 data class RunningTimerTick(
-    val habitId: Long,
+    val trackId: Long,
     val userId: Long,
     val name: String,
     val startedAt: Instant,
@@ -42,7 +42,7 @@ data class RunningTimerTick(
 }
 
 fun Row.toRunningTimerTick(): RunningTimerTick = RunningTimerTick(
-    habitId = long("habit_id"),
+    trackId = long("track_id"),
     userId = long("user_id"),
     name = string("name"),
     startedAt = instant("started_at"),

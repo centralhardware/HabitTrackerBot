@@ -13,10 +13,10 @@ import java.time.ZoneId
 object StatsUserTool : McpTool {
     override val name = "stats_user"
     override val description =
-        "Return per-habit statistics for every active habit, computed for today in the user's timezone. Each entry has " +
-            "habitId, name, streak (consecutive days), loggedDays/totalDays over the window, and for quantity habits a " +
-            "trend (today vs recentAvg vs overallAvg, with unit/direction). Multi-field habits break down into " +
-            "groupFields[]. Use this for progress questions; use habits_list when you only need ids/config."
+        "Return per-track statistics for every active track, computed for today in the user's timezone. Each track has " +
+            "trackId, name, streak (consecutive days), loggedDays/totalDays over the window, and for quantity tracks a " +
+            "trend (today vs recentAvg vs overallAvg, with unit/direction). Multi-field tracks break down into " +
+            "groupFields[]. Use this for progress questions; use tracks_list when you only need ids/config."
     override val inputSchema: ToolSchema = emptyObjectSchema()
     override val annotations = ToolAnnotations(readOnlyHint = true, openWorldHint = false)
 

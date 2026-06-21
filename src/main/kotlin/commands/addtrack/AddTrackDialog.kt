@@ -1,4 +1,4 @@
-package commands.addhabit
+package commands.addtrack
 
 import Lang
 import Strings
@@ -13,21 +13,21 @@ import dev.inmo.tgbotapi.types.MessageId
 import dev.inmo.tgbotapi.types.buttons.InlineKeyboardButtons.CallbackDataInlineKeyboardButton
 import dev.inmo.tgbotapi.types.buttons.InlineKeyboardMarkup
 import dto.Direction
-import dto.HabitParam
-import dto.HabitType
+import dto.TrackParam
+import dto.TrackType
 import kotlinx.coroutines.flow.first
 import lang
 import userId
 
 /**
- * Type-specific fields gathered by an /addhabit flow. The orchestrator combines this with the
- * habit name, type, log mode and reminders to build the final [dto.Habit].
+ * Type-specific fields gathered by an /addtrack flow. The orchestrator combines this with the
+ * track name, type, log mode and reminders to build the final [dto.Track].
  */
-data class HabitDraft(
+data class TrackDraft(
     val dailyTarget: Double? = null,
     val unit: String? = null,
     val direction: Direction? = null,
-    val params: List<HabitParam> = emptyList(),
+    val params: List<TrackParam> = emptyList(),
     val allowAdHoc: Boolean = false,
 )
 
@@ -123,7 +123,7 @@ internal fun logModeKeyboard(lang: Lang) = InlineKeyboardMarkup(
 )
 
 internal fun typeKeyboard(lang: Lang) = InlineKeyboardMarkup(
-    HabitType.entries.map { t ->
+    TrackType.entries.map { t ->
         listOf(
             CallbackDataInlineKeyboardButton(
                 Strings.typeButtonLabel(lang, t),

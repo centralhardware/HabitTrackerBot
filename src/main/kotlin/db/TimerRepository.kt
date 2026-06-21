@@ -13,19 +13,19 @@ import java.time.Instant
 object TimerRepository {
 
     /**
-     * Starts a timer for [habitId]; false if one is already running (PK conflict). [pendingValuesJson]
+     * Starts a timer for [trackId]; false if one is already running (PK conflict). [pendingValuesJson]
      * is the JSON object of "before"-phase field values to carry until the timer stops (null when none).
      */
-    fun start(habitId: Long, userId: Long, pendingValuesJson: String?): Boolean =
+    fun start(trackId: Long, userId: Long, pendingValuesJson: String?): Boolean =
         using(sessionOf(DatabaseService.dataSource)) { session ->
             session.update(
                 queryOf(
                     """
-                    INSERT INTO running_timers (habit_id, user_id, started_at, pending_values)
+                    INSERT INTO running_timers (track_id, user_id, started_at, pending_values)
                     VALUES (?, ?, now(), ?::jsonb)
-                    ON CONFLICT (habit_id) DO NOTHING
+                    ON CONFLICT (track_id) DO NOTHING
                     """.trimIndent(),
-                    habitId, userId, pendingValuesJson
+                    trackId, userId, pendingValuesJson
                 )
             ) > 0
         }
@@ -35,22 +35,22 @@ object TimerRepository {
     data class StopRow(val startedAt: Instant, val accumulatedSeconds: Double, val paused: Boolean, val pendingValuesJson: String?)
 
     /**
-     * Stops the timer for [habitId], returning its accumulated/started state and the JSON of its
+     * Stops the timer for [trackId], returning its accumulated/started state and the JSON of its
      * stashed "before"-phase field values (or null), or null if none was running.
      */
-    fun stop(habitId: Long, userId: Long): StopRow? =
+    fun stop(trackId: Long, userId: Long): StopRow? =
         sessionOf(DatabaseService.dataSource).use { session ->
             session.run(
                 queryOf(
                     """
                     WITH stopped AS (
                         DELETE FROM running_timers
-                        WHERE habit_id = ? AND user_id = ?
+                        WHERE track_id = ? AND user_id = ?
                         RETURNING started_at, accumulated_seconds, paused_at, pending_values
                     )
                     SELECT started_at, accumulated_seconds, paused_at, pending_values FROM stopped
                     """.trimIndent(),
-                    habitId, userId
+                    trackId, userId
                 ).map {
                     StopRow(
                         it.instant("started_at"),
@@ -72,7 +72,7 @@ object TimerRepository {
      * segment and its stashed "before"-phase values so the caller can record it as a check-in,
      * or null if it wasn't running / already paused.
      */
-    fun pause(habitId: Long, userId: Long): PauseRow? =
+    fun pause(trackId: Long, userId: Long): PauseRow? =
         sessionOf(DatabaseService.dataSource).use { session ->
             session.run(
                 queryOf(
@@ -80,10 +80,10 @@ object TimerRepository {
                     UPDATE running_timers
                     SET accumulated_seconds = accumulated_seconds + EXTRACT(EPOCH FROM (now() - started_at)),
                         paused_at = now()
-                    WHERE habit_id = ? AND user_id = ? AND paused_at IS NULL
+                    WHERE track_id = ? AND user_id = ? AND paused_at IS NULL
                     RETURNING started_at, pending_values
                     """.trimIndent(),
-                    habitId, userId
+                    trackId, userId
                 ).map { PauseRow(it.instant("started_at"), it.stringOrNull("pending_values")) }.asSingle
             )
         }
@@ -92,26 +92,26 @@ object TimerRepository {
      * Resumes a paused timer: restarts the live segment from now and clears the paused marker.
      * No-op (returns false) if the timer is missing or not paused.
      */
-    fun resume(habitId: Long, userId: Long): Boolean =
+    fun resume(trackId: Long, userId: Long): Boolean =
         using(sessionOf(DatabaseService.dataSource)) { session ->
             session.update(
                 queryOf(
                     """
                     UPDATE running_timers
                     SET started_at = now(), paused_at = NULL
-                    WHERE habit_id = ? AND user_id = ? AND paused_at IS NOT NULL
+                    WHERE track_id = ? AND user_id = ? AND paused_at IS NOT NULL
                     """.trimIndent(),
-                    habitId, userId
+                    trackId, userId
                 )
             ) > 0
         }
 
-    fun find(habitId: Long, userId: Long): RunningTimer? =
+    fun find(trackId: Long, userId: Long): RunningTimer? =
         sessionOf(DatabaseService.dataSource).use { session ->
             session.run(
                 queryOf(
-                    "SELECT habit_id, user_id, started_at, accumulated_seconds, paused_at FROM running_timers WHERE habit_id = ? AND user_id = ?",
-                    habitId, userId
+                    "SELECT track_id, user_id, started_at, accumulated_seconds, paused_at FROM running_timers WHERE track_id = ? AND user_id = ?",
+                    trackId, userId
                 ).map { it.toRunningTimer() }.asSingle
             )
         }
@@ -121,19 +121,19 @@ object TimerRepository {
         sessionOf(DatabaseService.dataSource).use { session ->
             session.run(
                 queryOf(
-                    "SELECT habit_id, user_id, started_at, accumulated_seconds, paused_at FROM running_timers WHERE user_id = ?",
+                    "SELECT track_id, user_id, started_at, accumulated_seconds, paused_at FROM running_timers WHERE user_id = ?",
                     userId
                 ).map { it.toRunningTimer() }.asList
             )
         }
 
     /** Records which message currently displays the running timer, so the ticker can edit it. */
-    fun setMessage(habitId: Long, userId: Long, messageId: Long): Boolean =
+    fun setMessage(trackId: Long, userId: Long, messageId: Long): Boolean =
         using(sessionOf(DatabaseService.dataSource)) { session ->
             session.update(
                 queryOf(
-                    "UPDATE running_timers SET message_id = ? WHERE habit_id = ? AND user_id = ?",
-                    messageId, habitId, userId
+                    "UPDATE running_timers SET message_id = ? WHERE track_id = ? AND user_id = ?",
+                    messageId, trackId, userId
                 )
             ) > 0
         }
@@ -144,10 +144,10 @@ object TimerRepository {
             session.run(
                 queryOf(
                     """
-                    SELECT rt.habit_id, rt.user_id, rt.started_at, rt.accumulated_seconds, rt.paused_at, rt.message_id,
+                    SELECT rt.track_id, rt.user_id, rt.started_at, rt.accumulated_seconds, rt.paused_at, rt.message_id,
                            h.name, us.language AS lang, us.timezone AS tz
                     FROM running_timers rt
-                    JOIN habits h ON h.id = rt.habit_id
+                    JOIN tracks h ON h.id = rt.track_id
                     LEFT JOIN user_settings us ON us.user_id = rt.user_id
                     WHERE rt.message_id IS NOT NULL
                       AND h.status = 'active'

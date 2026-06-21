@@ -2,11 +2,11 @@ package mcp
 
 import BotNotifier
 import services.CheckInService
-import services.HabitService
+import services.TrackService
 import Lang
 import Strings
 import dto.CheckRecordArgs
-import dto.HabitType
+import dto.TrackType
 import io.modelcontextprotocol.kotlin.sdk.types.CallToolResult
 import io.modelcontextprotocol.kotlin.sdk.types.ToolAnnotations
 import io.modelcontextprotocol.kotlin.sdk.types.ToolSchema
@@ -20,8 +20,8 @@ import java.time.format.DateTimeParseException
 object CheckRecordTool : TypedMcpTool<CheckRecordArgs>(CheckRecordArgs.serializer()) {
     override val name = "check_record"
     override val description =
-        "Log one ad-hoc \"+1\" check-in for a check habit (the tap-to-count kind). Only works on a check habit with " +
-            "allowAdHoc=true (see habits_list); scheduled-only check habits are rejected. 'habitId' is the check habit. " +
+        "Log one ad-hoc \"+1\" check-in for a check track (the tap-to-count kind). Only works on a check track with " +
+            "allowAdHoc=true (see tracks_list); scheduled-only check tracks are rejected. 'trackId' is the check track. " +
             "Date is optional (YYYY-MM-DD), defaults to today in the user's timezone; future dates are rejected. " +
             "'comment' is optional. Returns the new total count for that date."
     override val inputSchema: ToolSchema = buildSchema()
@@ -33,11 +33,11 @@ object CheckRecordTool : TypedMcpTool<CheckRecordArgs>(CheckRecordArgs.serialize
     )
 
     override fun handle(userId: Long, lang: Lang, tz: ZoneId, args: CheckRecordArgs): CallToolResult {
-        val habit = HabitService.findById(args.habitId, userId)
-            ?: return err("Habit ${args.habitId} not found")
-        if (habit.type != HabitType.CHECK) return err("Habit ${args.habitId} is not a check habit")
-        if (!habit.allowAdHoc) {
-            return err("Habit ${args.habitId} is scheduled-only (allowAdHoc=false); it can't take ad-hoc check-ins")
+        val track = TrackService.findById(args.trackId, userId)
+            ?: return err("Track ${args.trackId} not found")
+        if (track.type != TrackType.CHECK) return err("Track ${args.trackId} is not a check track")
+        if (!track.allowAdHoc) {
+            return err("Track ${args.trackId} is scheduled-only (allowAdHoc=false); it can't take ad-hoc check-ins")
         }
 
         val today = LocalDate.now(tz)
@@ -49,20 +49,20 @@ object CheckRecordTool : TypedMcpTool<CheckRecordArgs>(CheckRecordArgs.serialize
         if (date.isAfter(today)) return err("Cannot check in for a future date ($date > $today in $tz)")
 
         val comment = args.comment?.trim()?.ifEmpty { null }
-        if (!CheckInService.checkInCounter(args.habitId, userId, date, comment)) {
-            return err("Failed to record check-in for habit ${args.habitId}")
+        if (!CheckInService.checkInCounter(args.trackId, userId, date, comment)) {
+            return err("Failed to record check-in for track ${args.trackId}")
         }
 
-        val total = CheckInService.counterCountOn(args.habitId, date)
-        BotNotifier.notify(userId, Strings.mcpRecordedCheck(lang, habit, total, date, comment))
-        return ok("""{"recorded":true,"habitId":${args.habitId},"date":"$date","total":$total}""")
+        val total = CheckInService.counterCountOn(args.trackId, date)
+        BotNotifier.notify(userId, Strings.mcpRecordedCheck(lang, track, total, date, comment))
+        return ok("""{"recorded":true,"trackId":${args.trackId},"date":"$date","total":$total}""")
     }
 
     private fun buildSchema(): ToolSchema {
         val props = buildJsonObject {
-            putJsonObject("habitId") {
+            putJsonObject("trackId") {
                 put("type", "integer")
-                put("description", "The check habit's id (from habits_list). Must have allowAdHoc=true.")
+                put("description", "The check track's id (from tracks_list). Must have allowAdHoc=true.")
             }
             putJsonObject("date") {
                 put("type", "string")
@@ -75,6 +75,6 @@ object CheckRecordTool : TypedMcpTool<CheckRecordArgs>(CheckRecordArgs.serialize
                 put("description", "Optional note attached to the event.")
             }
         }
-        return ToolSchema(properties = props, required = listOf("habitId"))
+        return ToolSchema(properties = props, required = listOf("trackId"))
     }
 }
