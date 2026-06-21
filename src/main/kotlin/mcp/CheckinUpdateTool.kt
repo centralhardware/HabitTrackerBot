@@ -96,8 +96,10 @@ object CheckinUpdateTool : TypedMcpTool<CheckinUpdateArgs>(CheckinUpdateArgs.ser
                 if (old != new) add("$name: $old → $new")
             }
             if (hasComment && outcome.before.comment != newComment) {
-                val old = outcome.before.comment ?: "—"
-                val new = newComment ?: (if (lang == Lang.RU) "комментарий удалён" else "comment cleared")
+                // Quote both sides: a comment can itself contain dashes/arrows, so without delimiters
+                // the " → " separator visually merges into the text and the diff looks like one run-on.
+                val old = outcome.before.comment?.let { "«$it»" } ?: "∅"
+                val new = newComment?.let { "«$it»" } ?: (if (lang == Lang.RU) "∅ (удалён)" else "∅ (cleared)")
                 add("💬 $old → $new")
             }
         }
