@@ -15,7 +15,7 @@ repositories {
 
 val flywayVersion = "12.9.0"
 val mcpSdkVersion = "0.13.0"
-val ktorVersion = "3.5.0"
+val ktorVersion = "3.5.1"
 
 dependencies {
     implementation("com.github.centralhardware:ktgbotapi-commons:eb3d7671")
