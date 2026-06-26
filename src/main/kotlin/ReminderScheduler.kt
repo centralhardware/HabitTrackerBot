@@ -41,7 +41,7 @@ object ReminderScheduler {
             val keyboard = when (reminder.trackType) {
                 // A check track's reminder is a markable slot now (done/skip), never a "+1" nudge.
                 TrackType.CHECK ->
-                    Keyboards.checkIn(reminder.reminderId, reminder.userDate, lang)
+                    Keyboards.checkIn(reminder.reminderId, reminder.userDate, lang, allowSkip = !reminder.logOnly)
                 TrackType.TIMER ->
                     Keyboards.timerControl(reminder.trackId, running = false, reminder.userDate, lang)
                 TrackType.QUANTITY -> null

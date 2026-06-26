@@ -83,6 +83,7 @@ object TrackService {
                 offsetMinutes = r.offsetMinutes,
                 userDate = trackDate,
                 langCode = r.langCode,
+                logOnly = r.logOnly,
             )
         }
     }
@@ -98,6 +99,7 @@ object TrackService {
                 offsetMinutes = r.offsetMinutes,
                 userDate = r.missedDate,
                 langCode = r.langCode,
+                logOnly = r.logOnly,
             )
         }
     }

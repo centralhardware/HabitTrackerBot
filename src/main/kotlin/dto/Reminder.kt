@@ -28,6 +28,7 @@ data class DueReminder(
     val offsetMinutes: Int,
     val userDate: LocalDate,
     val langCode: String?,
+    val logOnly: Boolean = false,
 )
 
 data class RawDue(
@@ -40,6 +41,7 @@ data class RawDue(
     val tzId: String,
     val langCode: String?,
     val reminderDays: List<Int>,
+    val logOnly: Boolean = false,
 )
 
 data class RawMissed(
@@ -50,6 +52,7 @@ data class RawMissed(
     val offsetMinutes: Int,
     val langCode: String?,
     val missedDate: LocalDate,
+    val logOnly: Boolean = false,
 )
 
 data class DueUser(
@@ -68,6 +71,7 @@ fun Row.toRawDue(): RawDue = RawDue(
     tzId = string("tz"),
     langCode = stringOrNull("lang"),
     reminderDays = intArray("reminder_days"),
+    logOnly = boolean("log_only"),
 )
 
 fun Row.toRawMissed(): RawMissed = RawMissed(
@@ -78,6 +82,7 @@ fun Row.toRawMissed(): RawMissed = RawMissed(
     offsetMinutes = int("reminder_time"),
     langCode = stringOrNull("lang"),
     missedDate = localDate("missed_date"),
+    logOnly = boolean("log_only"),
 )
 
 fun Row.toDueUser(): DueUser = DueUser(
