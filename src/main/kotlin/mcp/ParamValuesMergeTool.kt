@@ -21,8 +21,8 @@ object ParamValuesMergeTool : TypedMcpTool<ParamValuesMergeArgs>(ParamValuesMerg
             "[\"brew method\",\"Brew method\"] into \"V60\", or fix a typo. Every check-in using a 'from' value is " +
             "repointed to 'into', and the emptied 'from' tracks are dropped from the dictionary. 'into' may be an " +
             "existing value or a brand-new label (it's created if needed). 'trackId'/'paramId' come from tracks_list. " +
-            "Only values that have recurred have a dictionary track; read the exact strings from checkins_list " +
-            "paramValues[] first. Returns the number of check-ins repointed."
+            "Only values that have recurred have a dictionary track; read the exact strings from tracks_list " +
+            "params[].recurringValues first. Returns the number of check-ins repointed."
     override val inputSchema: ToolSchema = buildSchema()
     override val annotations = ToolAnnotations(
         readOnlyHint = false,
@@ -75,7 +75,7 @@ object ParamValuesMergeTool : TypedMcpTool<ParamValuesMergeArgs>(ParamValuesMerg
             putJsonObject("from") {
                 put("type", "array")
                 put("minItems", 1)
-                put("description", "The values to fold away (exact strings from checkins_list paramValues[]).")
+                put("description", "The values to fold away (exact strings from tracks_list params[].recurringValues).")
                 putJsonObject("items") { put("type", "string") }
             }
             putJsonObject("into") {

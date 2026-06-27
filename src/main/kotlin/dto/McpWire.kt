@@ -22,21 +22,15 @@ data class CheckinsListArgs(
     val to: String? = null,
 )
 
-/** One track's check-ins in a batch [CheckinsListArgs] query. [paramValues] carries each param's
- *  dictionary of recurring values (empty/omitted for tracks that have none yet). */
+/** One track's check-ins in a batch [CheckinsListArgs] query. [valueDict] maps each value id used
+ *  in this track's [checkins] to its actual value, so a value repeated across check-ins is spelled
+ *  out once. (The per-param dictionary of recurring values lives on tracks_list, not here.) */
 @Serializable
 data class TrackCheckins(
     val trackId: Long,
     val found: Boolean,
     val checkins: List<CheckinRecord>,
-    @EncodeDefault(EncodeDefault.Mode.NEVER) val paramValues: List<ParamDictionary> = emptyList(),
-)
-
-/** The distinct dictionary (recurring) values of one param, with per-value usage counts. */
-@Serializable
-data class ParamDictionary(
-    val paramId: Long,
-    val values: List<ParamValueUsage>,
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val valueDict: Map<Int, FieldValue> = emptyMap(),
 )
 
 /** Batch [CheckinsListArgs] response: echoes the resolved date window so callers know what range they got. */

@@ -83,6 +83,9 @@ data class TrackParam(
     // Set only on a timer's extra annotation fields, marking whether they're collected
     // before the timer starts or after it stops. Null on the duration param and elsewhere.
     @EncodeDefault(EncodeDefault.Mode.NEVER) val timerPhase: TimerPhase? = null,
+    // This param's dictionary of recurring (interned) values with usage counts, most-used first.
+    // Populated for the tracks_list tool; empty/omitted elsewhere and when the param has none yet.
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val recurringValues: List<ParamValueUsage> = emptyList(),
 )
 
 /** A track that an expired pause just flipped back to active, with enough to notify its owner. */

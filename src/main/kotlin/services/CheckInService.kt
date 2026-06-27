@@ -12,6 +12,7 @@ import dto.Direction
 import dto.FieldValue
 import dto.Track
 import dto.TrackParam
+import dto.TrackCheckinPage
 import dto.TrackStat
 import dto.TrackStatus
 import dto.TrackType
@@ -162,11 +163,27 @@ object CheckInService {
         return RecentPage(rows.take(pageSize), rows.size > pageSize, safePage)
     }
 
-    fun listInRange(trackId: Long, userId: Long, from: LocalDate, to: LocalDate): List<CheckinRecord>? {
+    fun listInRange(trackId: Long, userId: Long, from: LocalDate, to: LocalDate): TrackCheckinPage? {
         val track = TrackService.findById(trackId, userId) ?: return null
-        return CheckinAnalytics.inRange(
+        val events = CheckinAnalytics.inRange(
             CheckInRepository.loadForTrack(trackId), from, to, isTimer = track.type == TrackType.TIMER,
         )
+        // Intern values per track: a value repeated across check-ins gets one id, spelled out once
+        // in valueDict, so the (potentially long) text isn't echoed in every check-in that uses it.
+        val ids = LinkedHashMap<FieldValue, Int>()
+        val checkins = events.map { e ->
+            CheckinRecord(
+                checkinId = e.checkinId,
+                date = e.date,
+                status = e.status,
+                values = e.values.mapValues { (_, v) -> ids.getOrPut(v) { ids.size + 1 } },
+                offsetMinutes = e.offsetMinutes,
+                comment = e.comment,
+                recordedAt = e.recordedAt,
+                startedAt = e.startedAt,
+            )
+        }
+        return TrackCheckinPage(checkins, ids.entries.associate { (v, id) -> id to v })
     }
 
     /** Number of counter/manual events logged for [trackId] on [date]. */

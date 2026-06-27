@@ -2,13 +2,11 @@ package mcp
 
 import services.CheckInService
 import services.TrackService
-import services.ParamValueService
 import Lang
 import dto.CheckinsListArgs
 import dto.CheckinsListResult
 import dto.TrackCheckins
 import dto.McpJson
-import dto.ParamDictionary
 import io.modelcontextprotocol.kotlin.sdk.types.CallToolResult
 import io.modelcontextprotocol.kotlin.sdk.types.ToolAnnotations
 import io.modelcontextprotocol.kotlin.sdk.types.ToolSchema
@@ -27,15 +25,15 @@ object CheckinsListTool : TypedMcpTool<CheckinsListArgs>(CheckinsListArgs.serial
             "(batch query); omit it or pass an empty array to fetch all of the user's active tracks. The response is " +
             "{ from, to, tracks[] } where from/to echo the resolved window and tracks[] " +
             "has one track per id. Defaults: from = today - 30 days, to = today (in the user's " +
-            "timezone). Maximum range 366 days. Each check-in row has checkinId (pass it to checkin_delete to remove the " +
-            "track), paramId (which field of a multi-field track it belongs to; see tracks_list params; omitted for counter events), date, status " +
-            "(done/skip/pending for scheduled tracks), quantity (for quantity tracks), reminderTime (for scheduled tracks), " +
-            "recordedAt (ISO-8601 instant the track was written; for a timer this is when it was stopped, i.e. the session end), " +
-            "startedAt (ISO-8601 instant; only on a timer's duration row — the session start, derived as recordedAt minus the elapsed seconds), and " +
-            "comment (when set). Unknown track ids are returned with found=false. Each track track also carries " +
-            "paramValues[] — the dictionary of recurring (seen more than once) param values ({ paramId, values:[{ value, uses }] }), " +
-            "most-used first; use it with param_values_merge to fold near-duplicate values together (omitted when the " +
-            "track has no recurring values yet)."
+            "timezone). Maximum range 366 days. Each check-in is one event with checkinId (pass it to checkin_delete to remove the " +
+            "event, or checkin_update to edit it), date, status (done/skip/pending for scheduled tracks), " +
+            "values (a { paramId: valueId } map of the event's per-field values; resolve each valueId via the track's valueDict; " +
+            "see tracks_list params; empty for a bare scheduled slot or a counter event), offsetMinutes (for scheduled tracks), " +
+            "recordedAt (ISO-8601 instant the event was written; for a timer this is when it was stopped, i.e. the session end), " +
+            "startedAt (ISO-8601 instant; only on a timer event — the session start, derived as recordedAt minus the elapsed seconds), and " +
+            "comment (when set). Unknown track ids are returned with found=false. Each track carries valueDict — a { valueId: value } map " +
+            "(a number for numeric params, a string for text params) that the check-ins' values reference, so a value repeated across " +
+            "check-ins is spelled out only once. (The per-param dictionary of recurring values lives on tracks_list params[].recurringValues.)"
     override val inputSchema: ToolSchema = buildSchema()
     override val annotations = ToolAnnotations(readOnlyHint = true, openWorldHint = false)
 
@@ -57,12 +55,13 @@ object CheckinsListTool : TypedMcpTool<CheckinsListArgs>(CheckinsListArgs.serial
         }
         val trackIds = args.trackIds.ifEmpty { TrackService.listActive(userId).map { it.id } }
         val tracks = trackIds.distinct().map { trackId ->
-            val rows = CheckInService.listInRange(trackId, userId, from, to)
-            val paramValues = TrackService.findById(trackId, userId)?.params
-                ?.map { ParamDictionary(it.id, ParamValueService.listValues(it.id)) }
-                ?.filter { it.values.isNotEmpty() }
-                ?: emptyList()
-            TrackCheckins(trackId, found = rows != null, checkins = rows ?: emptyList(), paramValues = paramValues)
+            val page = CheckInService.listInRange(trackId, userId, from, to)
+            TrackCheckins(
+                trackId,
+                found = page != null,
+                checkins = page?.checkins ?: emptyList(),
+                valueDict = page?.valueDict ?: emptyMap(),
+            )
         }
         val result = CheckinsListResult(from = from.toString(), to = to.toString(), tracks = tracks)
         return ok(McpJson.encodeToString(result))

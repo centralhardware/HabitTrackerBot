@@ -230,9 +230,15 @@ object TrackRepository {
             session.run(
                 queryOf(
                     """
-                    SELECT r.id AS reminder_id, h.id AS track_id, h.track_type,
-                           h.user_id, h.name, r.reminder_time, r.reminder_days,
-                           h.log_only, us.timezone AS tz, us.language AS lang
+                    SELECT r.id AS reminder_id,
+                           h.id AS track_id,
+                           h.track_type,
+                           h.user_id,
+                           h.name,
+                           r.reminder_time,
+                           r.reminder_days,
+                           us.timezone AS tz,
+                           us.language AS lang
                     FROM track_reminders r
                     JOIN tracks h ON h.id = r.track_id
                     JOIN user_settings us ON us.user_id = h.user_id
@@ -268,7 +274,9 @@ object TrackRepository {
                 queryOf(
                     """
                     WITH missed AS (
-                        SELECT r.id AS reminder_id, r.track_id, h.user_id,
+                        SELECT r.id AS reminder_id,
+                               r.track_id,
+                               h.user_id,
                                d::date AS missed_date,
                                (d::date
                                 + CASE WHEN r.reminder_time >= 1440 THEN INTERVAL '1 day' ELSE INTERVAL '0' END
@@ -276,7 +284,6 @@ object TrackRepository {
                                ) AT TIME ZONE us.timezone AS fired_at,
                                us.language AS lang_code,
                                h.name AS track_name,
-                               h.log_only,
                                r.reminder_time
                         FROM track_reminders r
                         JOIN tracks h ON h.id = r.track_id
@@ -306,7 +313,11 @@ object TrackRepository {
                     ),
                     ins_events AS (
                         INSERT INTO checkins (user_id, check_date, reminder_id, track_id, comment, checked_at)
-                        SELECT user_id, missed_date, reminder_id, track_id, NULL,
+                        SELECT user_id,
+                               missed_date,
+                               reminder_id,
+                               track_id,
+                               NULL,
                                CASE WHEN now() - fired_at > INTERVAL '24 hours'
                                     THEN now()
                                     ELSE NULL END
@@ -330,8 +341,13 @@ object TrackRepository {
                          AND m.missed_date  = ie.check_date
                         RETURNING checkin_id
                     )
-                    SELECT m.reminder_id, m.track_id, m.user_id, m.track_name AS name,
-                           m.reminder_time, m.lang_code AS lang, m.missed_date, m.log_only
+                    SELECT m.reminder_id,
+                           m.track_id,
+                           m.user_id,
+                           m.track_name AS name,
+                           m.reminder_time,
+                           m.lang_code AS lang,
+                           m.missed_date
                     FROM ins_events ie
                     JOIN missed m
                       ON m.reminder_id = ie.reminder_id

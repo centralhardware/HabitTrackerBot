@@ -1,4 +1,4 @@
-import dto.CheckinRecord
+import dto.CheckinEventValues
 import dto.CheckinStatus
 import dto.CheckinValueRow
 import dto.FieldValue
@@ -47,19 +47,35 @@ object CheckinAnalytics {
      * When [isTimer] is true, the duration row also carries a derived [CheckinRecord.startedAt]
      * (recordedAt − elapsed seconds) so the session's start as well as its end are exposed.
      */
-    fun inRange(rows: List<CheckinValueRow>, from: LocalDate, to: LocalDate, isTimer: Boolean = false): List<CheckinRecord> =
+    fun inRange(rows: List<CheckinValueRow>, from: LocalDate, to: LocalDate, isTimer: Boolean = false): List<CheckinEventValues> =
         rows.filter { it.date in from..to }
-            // status is meaningful only for scheduled tracks; never surface it for quantity/counter rows.
-            .map { row ->
-                val value = row.quantity?.let { FieldValue.Numeric(it) } ?: row.textValue?.let { FieldValue.Text(it) }
+            // One record per event: a multi-field event's rows share checkinId, so gather their
+            // per-param values into one map instead of repeating date/comment/recordedAt per param.
+            .groupBy { it.checkinId }
+            .map { (checkinId, group) ->
+                val head = group.first()
+                val values = group.mapNotNull { row ->
+                    val pid = row.paramId ?: return@mapNotNull null
+                    val value = row.quantity?.let { FieldValue.Numeric(it) } ?: row.textValue?.let { FieldValue.Text(it) }
+                    value?.let { pid to it }
+                }.toMap()
                 // A timer's duration row (the elapsed-seconds value, not a before/after annotation):
                 // start = end − seconds. Only there does deriving a start make sense.
-                val startedAt = row.recordedAt?.takeIf {
-                    isTimer && !row.isScheduled && row.timerPhase == null && row.quantity != null
-                }?.minusSeconds(row.quantity!!.toLong())
-                CheckinRecord(
-                    row.checkinId, row.paramId, row.date, row.status.takeIf { row.isScheduled },
-                    value, row.offsetMinutes, row.comment, row.recordedAt, startedAt,
+                val startedAt = group.firstNotNullOfOrNull { row ->
+                    row.recordedAt?.takeIf {
+                        isTimer && !row.isScheduled && row.timerPhase == null && row.quantity != null
+                    }?.minusSeconds(row.quantity!!.toLong())
+                }
+                CheckinEventValues(
+                    checkinId = checkinId,
+                    date = head.date,
+                    // status is meaningful only for scheduled tracks; never surface it for quantity/counter rows.
+                    status = head.status.takeIf { head.isScheduled },
+                    values = values,
+                    offsetMinutes = head.offsetMinutes,
+                    comment = head.comment,
+                    recordedAt = head.recordedAt,
+                    startedAt = startedAt,
                 )
             }
 

@@ -753,8 +753,7 @@ object Strings {
     }
 
 
-    fun btnDone(l: Lang) = pick(l, "✅ Done", "✅ Готово")
-    fun btnSkip(l: Lang) = pick(l, "❌ Skip", "❌ Пропуск")
+    fun btnDone(l: Lang) = pick(l, "✅ Complete", "✅ Готово")
     fun btnDelete(l: Lang) = pick(l, "🗑 Delete", "🗑 Удалить")
     fun btnPlusOne(l: Lang) = pick(l, "➕1", "➕1")
     fun btnPlusComment(l: Lang) = pick(l, "💬 +1", "💬 +1")

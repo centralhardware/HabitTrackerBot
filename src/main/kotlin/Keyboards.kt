@@ -6,14 +6,14 @@ import java.time.format.DateTimeFormatter
 
 object Keyboards {
 
-    fun checkIn(reminderId: Long, date: LocalDate, lang: Lang, allowSkip: Boolean = true): InlineKeyboardMarkup {
-        val buttons = mutableListOf(
-            CallbackDataInlineKeyboardButton(Strings.btnDone(lang), "ci|$reminderId|$date|done")
+    fun checkIn(reminderId: Long, date: LocalDate, lang: Lang): InlineKeyboardMarkup {
+        return InlineKeyboardMarkup(
+            listOf(
+                listOf(
+                    CallbackDataInlineKeyboardButton(Strings.btnDone(lang), "ci|$reminderId|$date|done")
+                )
+            )
         )
-        if (allowSkip) {
-            buttons += CallbackDataInlineKeyboardButton(Strings.btnSkip(lang), "ci|$reminderId|$date|skip")
-        }
-        return InlineKeyboardMarkup(listOf(buttons))
     }
 
     fun logPlus(trackId: Long, date: LocalDate, lang: Lang): InlineKeyboardMarkup {

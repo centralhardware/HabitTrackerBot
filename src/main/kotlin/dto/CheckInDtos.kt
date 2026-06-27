@@ -77,15 +77,38 @@ data class ResolvedCheckin(
     val checkDate: LocalDate,
 )
 
+/** A track's check-ins with values already interned: [checkins] reference value ids that
+ *  [valueDict] resolves to actual values. The service layer's output for the checkins_list tool. */
+data class TrackCheckinPage(
+    val checkins: List<CheckinRecord>,
+    val valueDict: Map<Int, FieldValue>,
+)
+
+/** One check-in event with its raw per-param values, before they're interned into the track's
+ *  [TrackCheckins.valueDict]. Internal to the analytics/service layer — not serialized. */
+data class CheckinEventValues(
+    val checkinId: Long,
+    val date: LocalDate,
+    val status: CheckinStatus?,
+    val values: Map<Long, FieldValue>,
+    val offsetMinutes: Int?,
+    val comment: String?,
+    val recordedAt: Instant?,
+    val startedAt: Instant?,
+)
+
+/**
+ * One whole check-in event (a single `checkins` row) for the wire. Its per-param values are
+ * given as [values] — a map of paramId → an id into the track's [TrackCheckins.valueDict], so a
+ * value repeated across many check-ins (e.g. the same book name) is spelled out only once in the
+ * dictionary and referenced by id here. [values] is empty for a bare scheduled slot or a counter event.
+ */
 @Serializable
 data class CheckinRecord(
     val checkinId: Long,
-    // Null for counter events, which have no param (just a bare checkins row).
-    @EncodeDefault(EncodeDefault.Mode.NEVER) val paramId: Long? = null,
     @Serializable(LocalDateSerializer::class) val date: LocalDate,
     @EncodeDefault(EncodeDefault.Mode.NEVER) val status: CheckinStatus? = null,
-    // One value per param: a JSON number for numeric params, a JSON string for text params.
-    @EncodeDefault(EncodeDefault.Mode.NEVER) val value: FieldValue? = null,
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val values: Map<Long, Int> = emptyMap(),
     @EncodeDefault(EncodeDefault.Mode.NEVER) val offsetMinutes: Int? = null,
     @EncodeDefault(EncodeDefault.Mode.NEVER) val comment: String? = null,
     // When the row was written (`checkins.checked_at`). For a timer this is the moment it was
