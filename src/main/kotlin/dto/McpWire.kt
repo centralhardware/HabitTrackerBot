@@ -125,3 +125,62 @@ data class CheckinUpdateArgs(
     val clearComment: Boolean = false,
     val values: List<FieldValueArg> = emptyList(),
 )
+
+/**
+ * Edits a track and/or its fields in one call. Top-level scalars edit the track row: 'name', 'logOnly',
+ * 'allowAdHoc' (check tracks only), and — for single-field quantity/timer tracks — 'unit'/'dailyTarget'/
+ * 'direction' (which a single-field track hoists onto the track itself). Per-field edits of a multi-field
+ * track go in [params]. Each scalar uses a value/clear pair so callers can distinguish "leave unchanged"
+ * (omit) from "set empty" (clearX = true).
+ */
+@Serializable
+data class TrackUpdateArgs(
+    val trackId: Long,
+    val name: String? = null,
+    val dailyTarget: Double? = null,
+    val clearDailyTarget: Boolean = false,
+    val unit: String? = null,
+    val clearUnit: Boolean = false,
+    val direction: String? = null,
+    val clearDirection: Boolean = false,
+    val logOnly: Boolean? = null,
+    val allowAdHoc: Boolean? = null,
+    val params: List<TrackParamPatch> = emptyList(),
+    /** Null = leave the schedule untouched; [] = clear all reminders; otherwise the full replacement set. */
+    val reminders: List<ReminderArg>? = null,
+)
+
+/** One field's edit inside [TrackUpdateArgs.params]; same value/clear convention as the track scalars. */
+@Serializable
+data class TrackParamPatch(
+    val paramId: Long,
+    val name: String? = null,
+    val clearName: Boolean = false,
+    val unit: String? = null,
+    val clearUnit: Boolean = false,
+    val dailyTarget: Double? = null,
+    val clearDailyTarget: Boolean = false,
+    val direction: String? = null,
+    val clearDirection: Boolean = false,
+)
+
+@Serializable
+data class TrackParamDeleteArgs(
+    val paramId: Long,
+)
+
+/** action is "pause" | "resume" | "delete"; pauseDays is honoured only for pause (0 = indefinite). */
+@Serializable
+data class TrackLifecycleArgs(
+    val trackId: Long,
+    val action: String,
+    val pauseDays: Int = 0,
+)
+
+/** One reminder slot: give either "HH:MM" (hours 0..47 for next-day slots) or raw offsetMinutes. */
+@Serializable
+data class ReminderArg(
+    val time: String? = null,
+    val offsetMinutes: Int? = null,
+    val days: List<Int> = emptyList(),
+)

@@ -3,6 +3,7 @@ package db
 import services.DatabaseService
 import dto.Track
 import dto.TrackParam
+import dto.TrackReminder
 import dto.TrackType
 import dto.RawDue
 import dto.RawMissed
@@ -381,6 +382,55 @@ object TrackRepository {
                     paramId, userId
                 )
             ) > 0
+        }
+
+    /**
+     * Updates the editable metadata of a single live param owned by [userId]. Sets name, unit,
+     * direction and daily_target to exactly the values on [param] (callers resolve "leave unchanged"
+     * by reading the current param first). Returns false if the param is missing, deleted, or not owned.
+     */
+    fun updateParam(param: TrackParam, userId: Long): Boolean =
+        sessionOf(DatabaseService.dataSource).use { session ->
+            session.update(
+                queryOf(
+                    """
+                    UPDATE track_params p
+                    SET name = ?, unit = ?, direction = ?::track_direction, daily_target = ?
+                    FROM tracks h
+                    WHERE p.id = ? AND p.track_id = h.id AND h.user_id = ?
+                      AND p.deleted = false AND h.status <> 'deleted'
+                    """.trimIndent(),
+                    param.name, param.unit, param.direction?.value, param.dailyTarget,
+                    param.id, userId
+                )
+            ) > 0
+        }
+
+    /**
+     * Replaces every reminder of a track owned by [userId] with [reminders] (an empty list clears
+     * them all). Returns false if the track is missing, deleted, or not owned.
+     */
+    fun replaceReminders(trackId: Long, userId: Long, reminders: List<TrackReminder>): Boolean =
+        using(sessionOf(DatabaseService.dataSource)) { session ->
+            session.transaction { tx ->
+                val owns = tx.run(
+                    queryOf(
+                        "SELECT 1 FROM tracks WHERE id = ? AND user_id = ? AND status <> 'deleted'",
+                        trackId, userId
+                    ).map { it.int(1) }.asSingle
+                ) != null
+                if (!owns) return@transaction false
+                tx.update(queryOf("DELETE FROM track_reminders WHERE track_id = ?", trackId))
+                reminders.forEach { rem ->
+                    tx.execute(
+                        queryOf(
+                            "INSERT INTO track_reminders (track_id, reminder_time, reminder_days) VALUES (?, ?, ?::int[])",
+                            trackId, rem.offsetMinutes, rem.days.toPgArray()
+                        )
+                    )
+                }
+                true
+            }
         }
 
     /** Renders weekday list as a Postgres int[] literal, or null (= every day) when empty. */

@@ -45,6 +45,9 @@ private val tools: List<McpTool> = listOf(
     CheckinDeleteTool,
     ParamValuesMergeTool,
     StatsUserTool,
+    TrackUpdateTool,
+    TrackParamDeleteTool,
+    TrackLifecycleTool,
 )
 
 object McpServer {

@@ -753,6 +753,23 @@ object Strings {
     }
 
 
+    fun mcpTrackUpdated(l: Lang, name: String, lines: List<String>): String {
+        val header = pick(l,
+            "✏️ via MCP — track «$name» updated",
+            "✏️ через MCP — трек «$name» обновлён")
+        return (listOf(header) + lines.map { "  – $it" }).joinToString("\n")
+    }
+
+    fun mcpTrackPaused(l: Lang, name: String, days: Int): String = pick(l,
+        if (days > 0) "⏸ via MCP — track «$name» paused for $days day(s)" else "⏸ via MCP — track «$name» paused",
+        if (days > 0) "⏸ через MCP — трек «$name» на паузе $days дн." else "⏸ через MCP — трек «$name» на паузе")
+
+    fun mcpTrackResumed(l: Lang, name: String) = pick(l,
+        "▶️ via MCP — track «$name» resumed", "▶️ через MCP — трек «$name» возобновлён")
+
+    fun mcpTrackDeleted(l: Lang, name: String) = pick(l,
+        "🗑 via MCP — track «$name» deleted", "🗑 через MCP — трек «$name» удалён")
+
     fun btnDone(l: Lang) = pick(l, "✅ Complete", "✅ Готово")
     fun btnDelete(l: Lang) = pick(l, "🗑 Delete", "🗑 Удалить")
     fun btnPlusOne(l: Lang) = pick(l, "➕1", "➕1")

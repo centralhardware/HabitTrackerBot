@@ -3,6 +3,8 @@ package services
 import db.TrackRepository
 import dto.DueReminder
 import dto.Track
+import dto.TrackParam
+import dto.TrackReminder
 import dto.TrackStatus
 import dto.TrackType
 import dto.ResumedTrack
@@ -25,6 +27,16 @@ object TrackService {
     fun listActive(userId: Long): List<Track> = TrackRepository.listActive(userId)
 
     fun findById(trackId: Long, userId: Long): Track? = TrackRepository.find(trackId, userId)
+
+    /** Persists edited track-level fields of an existing track (reminders/params untouched). */
+    fun update(track: Track): Track = TrackRepository.upsert(track)
+
+    /** Updates the editable metadata (name/unit/direction/dailyTarget) of one live param. */
+    fun updateParam(param: TrackParam, userId: Long): Boolean = TrackRepository.updateParam(param, userId)
+
+    /** Replaces a track's reminder set wholesale (empty list clears all). */
+    fun replaceReminders(trackId: Long, userId: Long, reminders: List<TrackReminder>): Boolean =
+        TrackRepository.replaceReminders(trackId, userId, reminders)
 
     fun softDelete(trackId: Long, userId: Long): Boolean = transition(trackId, userId, TrackStatus.DELETED)
 
