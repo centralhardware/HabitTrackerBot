@@ -353,8 +353,22 @@ private suspend fun BehaviourContext.handleTimer(query: MessageDataCallbackQuery
         }
         "resume" -> {
             val ok = TimerService.resume(trackId, userId)
-            refresh(running = TimerService.find(trackId, userId) != null)
             answerCallbackQuery(query, text = if (ok) Strings.cbTimerResumed(lang) else Strings.cbTimerNotRunning(lang))
+            if (ok) {
+                // Repost the card at the bottom so the ticking timer is the last message again,
+                // instead of editing the old (now stranded) card in place.
+                runCatching { deleteMessage(chatId = chatId, messageId = query.message.messageId) }
+                val elapsed = TimerService.find(trackId, userId)?.let { TimerService.elapsedSeconds(it) } ?: 0.0
+                val todaySeconds = CheckInService.timerSecondsOn(trackId, date)
+                val live = sendMessage(
+                    chatId,
+                    Strings.timerLine(lang, track, running = true, elapsed, todaySeconds),
+                    replyMarkup = Keyboards.timerControl(trackId, running = true, date, lang),
+                )
+                TimerService.setMessage(trackId, userId, live.messageId.long)
+            } else {
+                refresh(running = TimerService.find(trackId, userId) != null)
+            }
         }
         // Stop (optionally + note): stop first (so the elapsed time is frozen and safely recorded),
         // then collect the "after"-phase fields and attach them — together with the "before" values
