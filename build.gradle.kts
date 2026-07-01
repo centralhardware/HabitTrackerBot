@@ -13,7 +13,7 @@ repositories {
     maven("https://jitpack.io")
 }
 
-val flywayVersion = "12.9.0"
+val flywayVersion = "12.10.0"
 val mcpSdkVersion = "0.13.0"
 val ktorVersion = "3.5.1"
 
