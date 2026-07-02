@@ -12,6 +12,7 @@ import kotlinx.coroutines.flow.first
 import dto.CheckinStatus
 import dto.TrackType
 import dto.TimerPhase
+import commands.sendRecentLog
 import services.CheckInService
 import services.TrackService
 import services.TimerService
@@ -265,15 +266,9 @@ private suspend fun BehaviourContext.handleRecent(query: MessageDataCallbackQuer
         answerCallbackQuery(query, text = Strings.cbError(data.lang))
         return
     }
-    val (text, keyboard) = commands.recentLogView(data.lang, data.userId, page)
-    runCatching {
-        editMessageText(
-            chatId = query.message.chat.id,
-            messageId = query.message.messageId,
-            text = text,
-            replyMarkup = keyboard,
-        )
-    }
+    // Rich messages can't be edited in place (no edit-rich API yet), so replace the old bubble with a fresh one.
+    runCatching { deleteMessage(query.message.chat.id, query.message.messageId) }
+    sendRecentLog(query.message.chat.id, page)
     answerCallbackQuery(query)
 }
 

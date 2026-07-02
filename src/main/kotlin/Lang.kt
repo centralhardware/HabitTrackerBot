@@ -239,6 +239,11 @@ object Strings {
 
     fun yourTracks(l: Lang) = pick(l, "Your tracks:", "Ваши треки:")
 
+    fun colTrack(l: Lang) = pick(l, "Track", "Трек")
+    fun colType(l: Lang) = pick(l, "Type", "Тип")
+    fun colReminders(l: Lang) = pick(l, "Reminders", "Напоминания")
+    fun colFields(l: Lang) = pick(l, "Fields", "Поля")
+
     fun noReminders(l: Lang) = pick(l, "no reminders", "без напоминаний")
 
     fun nothingToRemove(l: Lang) = pick(l, "Nothing to remove.", "Удалять нечего.")
@@ -304,6 +309,30 @@ object Strings {
     fun recentHeader(l: Lang) = pick(l, "🗒 Recent check-ins:", "🗒 Последние чек-ины:")
 
     fun noRecentCheckins(l: Lang) = pick(l, "No check-ins yet.", "Чек-инов пока нет.")
+
+    fun colDate(l: Lang) = pick(l, "Date", "Дата")
+    fun colValue(l: Lang) = pick(l, "Value", "Значение")
+    fun colComment(l: Lang) = pick(l, "Comment", "Коммент")
+
+    fun recentTrackName(track: Track?, rc: RecentCheckin): String = track?.name ?: "#${rc.trackId}"
+
+    /** The "value" column for one /log row: status icon for a scheduled slot, else recorded values. */
+    fun recentValueCell(l: Lang, track: Track?, rc: RecentCheckin): String {
+        if (rc.reminderId != null) return when (rc.status) {
+            CheckinStatus.DONE -> "✅"
+            CheckinStatus.SKIP -> "❌"
+            else -> "⏳"
+        }
+        return rc.values.mapNotNull { v ->
+            val param = track?.params?.firstOrNull { it.id == v.paramId }
+            val label = param?.name?.let { "$it: " } ?: ""
+            when (val fv = v.value) {
+                is FieldValue.Numeric -> "$label${paramAmount(l, track, param, fv.v)}"
+                is FieldValue.Text -> "$label${fv.v}"
+                null -> null
+            }
+        }.joinToString(", ")
+    }
 
     fun btnPrevPage(l: Lang) = pick(l, "◀️ Newer", "◀️ Новее")
     fun btnNextPage(l: Lang) = pick(l, "Older ▶️", "Старее ▶️")
