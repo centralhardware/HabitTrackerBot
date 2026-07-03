@@ -9,14 +9,15 @@ import userId
 import dev.inmo.tgbotapi.extensions.api.send.sendMessage
 import dev.inmo.tgbotapi.extensions.behaviour_builder.BehaviourContext
 import dev.inmo.tgbotapi.extensions.behaviour_builder.triggers_handling.onCommand
+import dev.inmo.tgbotapi.extensions.behaviour_builder.triggers_handling.onCommandWithArgs
 import dev.inmo.tgbotapi.utils.buildEntities
 import dev.inmo.tgbotapi.utils.code
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 
 fun BehaviourContext.registerMcpCommands() {
-    onCommand("mcp_new") { message ->
-        val label = commandArgs(message.content.text).take(64).ifBlank { "default" }
+    onCommandWithArgs("mcp_new") { message, args ->
+        val label = args.joinToString(" ").trim().take(64).ifBlank { "default" }
 
         val issued = McpTokenService.issue(data.userId, label)
 
@@ -51,11 +52,11 @@ fun BehaviourContext.registerMcpCommands() {
         sendMessage(message.chat.id, body)
     }
 
-    onCommand("mcp_revoke") { message ->
-        val id = commandArgs(message.content.text).toLongOrNull()
+    onCommandWithArgs("mcp_revoke") { message, args ->
+        val id = args.firstOrNull()?.toLongOrNull()
         if (id == null) {
             sendMessage(message.chat.id, Strings.mcpRevokeUsage(data.lang))
-            return@onCommand
+            return@onCommandWithArgs
         }
         val ok = McpTokenService.revoke(id, data.userId)
         sendMessage(
@@ -63,9 +64,4 @@ fun BehaviourContext.registerMcpCommands() {
             if (ok) Strings.mcpTokenRevoked(data.lang, id) else Strings.mcpTokenNotFound(data.lang, id)
         )
     }
-}
-
-private fun commandArgs(text: String): String {
-    val space = text.indexOf(' ')
-    return if (space == -1) "" else text.substring(space + 1).trim()
 }
