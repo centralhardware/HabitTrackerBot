@@ -10,6 +10,7 @@ import dto.TrackStat
 import dto.TrackType
 import dto.TrackWeekStat
 import dto.ParamType
+import dto.TimerPhase
 import java.time.LocalDate
 import kotlin.math.roundToLong
 
@@ -412,9 +413,12 @@ object Strings {
         "«$name» должно быть числом (например 1.5). Попробуйте ещё раз или отправьте «-», чтобы пропустить:")
 
     /** A timer track's line: shows running-since elapsed time, or today's accumulated total when idle. */
-    fun timerLine(l: Lang, h: Track, running: Boolean, elapsedSeconds: Double, todaySeconds: Double, paused: Boolean = false): String {
+    fun timerLine(
+        l: Lang, h: Track, running: Boolean, elapsedSeconds: Double, todaySeconds: Double,
+        paused: Boolean = false, beforeValues: Map<Long, String> = emptyMap(),
+    ): String {
         val target = h.dailyTarget
-        return if (running) {
+        val head = if (running) {
             val state = if (paused) pick(l, "paused", "пауза") else pick(l, "running", "идёт")
             "⏱ ${h.name} — $state: ${formatElapsed(elapsedSeconds)}"
         } else {
@@ -422,6 +426,21 @@ object Strings {
             val targetPart = target?.let { " / ${formatDuration(l, it)}" } ?: ""
             "⏱ ${h.name} — $todayPart$targetPart"
         }
+        return head + timerActiveFields(h, beforeValues)
+    }
+
+    /**
+     * The "before"-phase annotation fields (paramId → text) a running timer stashed at start, rendered
+     * one per line below its live head so the card shows which session it belongs to (e.g. the book
+     * being read). Empty when the timer carries no such values.
+     */
+    private fun timerActiveFields(h: Track, beforeValues: Map<Long, String>): String {
+        if (beforeValues.isEmpty()) return ""
+        val lines = h.params
+            .filter { it.timerPhase == TimerPhase.BEFORE }
+            .sortedBy { it.position }
+            .mapNotNull { p -> beforeValues[p.id]?.takeIf { it.isNotBlank() }?.let { v -> "  – ${p.name?.let { "$it: " } ?: ""}$v" } }
+        return if (lines.isEmpty()) "" else "\n" + lines.joinToString("\n")
     }
 
     fun cbTimerStarted(l: Lang) = pick(l, "Timer started", "Таймер запущен")

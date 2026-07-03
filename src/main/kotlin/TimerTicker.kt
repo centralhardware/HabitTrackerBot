@@ -7,6 +7,7 @@ import dev.inmo.tgbotapi.types.toChatId
 import dto.Track
 import dto.TrackType
 import services.TimerService
+import services.TrackService
 import java.time.Duration
 import java.time.Instant
 import java.time.LocalDate
@@ -48,11 +49,14 @@ object TimerTicker {
                 val lang = t.langCode?.let { runCatching { Lang.valueOf(it) }.getOrNull() } ?: Lang.EN
                 val zone = t.tzId?.let { runCatching { ZoneId.of(it) }.getOrNull() }
                 val date = if (zone != null) LocalDate.now(zone) else LocalDate.now()
-                val track = Track(id = t.trackId, name = t.name, type = TrackType.TIMER)
+                // Load the full track (with params) only when its "before" values must be rendered,
+                // so the live card can label them; a bare timer keeps the cheap synthetic track.
+                val track = if (t.beforeValues.isEmpty()) Track(id = t.trackId, name = t.name, type = TrackType.TIMER)
+                    else TrackService.findById(t.trackId, t.userId) ?: Track(id = t.trackId, name = t.name, type = TrackType.TIMER)
                 editMessageText(
                     chatId = t.userId.toChatId(),
                     messageId = MessageId(t.messageId),
-                    text = Strings.timerLine(lang, track, running = true, elapsed, todaySeconds = 0.0),
+                    text = Strings.timerLine(lang, track, running = true, elapsed, todaySeconds = 0.0, beforeValues = t.beforeValues),
                     replyMarkup = Keyboards.timerControl(t.trackId, running = true, date, lang),
                 )
             }.onFailure { e ->

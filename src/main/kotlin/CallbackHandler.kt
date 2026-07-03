@@ -290,7 +290,7 @@ private suspend fun BehaviourContext.handleTimer(query: MessageDataCallbackQuery
             editMessageText(
                 chatId = query.message.chat.id,
                 messageId = query.message.messageId,
-                text = Strings.timerLine(lang, track, running, elapsed, todaySeconds, paused),
+                text = Strings.timerLine(lang, track, running, elapsed, todaySeconds, paused, timer?.beforeValues ?: emptyMap()),
                 replyMarkup = Keyboards.timerControl(trackId, running, date, lang, paused)
             )
         }
@@ -332,7 +332,7 @@ private suspend fun BehaviourContext.handleTimer(query: MessageDataCallbackQuery
                     val todaySeconds = CheckInService.timerSecondsOn(trackId, date)
                     val live = sendMessage(
                         chatId,
-                        Strings.timerLine(lang, track, running = true, elapsed, todaySeconds),
+                        Strings.timerLine(lang, track, running = true, elapsed, todaySeconds, beforeValues = before),
                         replyMarkup = Keyboards.timerControl(trackId, running = true, date, lang),
                     )
                     TimerService.setMessage(trackId, userId, live.messageId.long)
@@ -353,11 +353,12 @@ private suspend fun BehaviourContext.handleTimer(query: MessageDataCallbackQuery
                 // Repost the card at the bottom so the ticking timer is the last message again,
                 // instead of editing the old (now stranded) card in place.
                 runCatching { deleteMessage(chatId = chatId, messageId = query.message.messageId) }
-                val elapsed = TimerService.find(trackId, userId)?.let { TimerService.elapsedSeconds(it) } ?: 0.0
+                val timer = TimerService.find(trackId, userId)
+                val elapsed = timer?.let { TimerService.elapsedSeconds(it) } ?: 0.0
                 val todaySeconds = CheckInService.timerSecondsOn(trackId, date)
                 val live = sendMessage(
                     chatId,
-                    Strings.timerLine(lang, track, running = true, elapsed, todaySeconds),
+                    Strings.timerLine(lang, track, running = true, elapsed, todaySeconds, beforeValues = timer?.beforeValues ?: emptyMap()),
                     replyMarkup = Keyboards.timerControl(trackId, running = true, date, lang),
                 )
                 TimerService.setMessage(trackId, userId, live.messageId.long)

@@ -110,7 +110,7 @@ object TimerRepository {
         sessionOf(DatabaseService.dataSource).use { session ->
             session.run(
                 queryOf(
-                    "SELECT track_id, user_id, started_at, accumulated_seconds, paused_at FROM running_timers WHERE track_id = ? AND user_id = ?",
+                    "SELECT track_id, user_id, started_at, accumulated_seconds, paused_at, pending_values FROM running_timers WHERE track_id = ? AND user_id = ?",
                     trackId, userId
                 ).map { it.toRunningTimer() }.asSingle
             )
@@ -121,7 +121,7 @@ object TimerRepository {
         sessionOf(DatabaseService.dataSource).use { session ->
             session.run(
                 queryOf(
-                    "SELECT track_id, user_id, started_at, accumulated_seconds, paused_at FROM running_timers WHERE user_id = ?",
+                    "SELECT track_id, user_id, started_at, accumulated_seconds, paused_at, pending_values FROM running_timers WHERE user_id = ?",
                     userId
                 ).map { it.toRunningTimer() }.asList
             )
@@ -145,7 +145,7 @@ object TimerRepository {
                 queryOf(
                     """
                     SELECT rt.track_id, rt.user_id, rt.started_at, rt.accumulated_seconds, rt.paused_at, rt.message_id,
-                           h.name, us.language AS lang, us.timezone AS tz
+                           rt.pending_values, h.name, us.language AS lang, us.timezone AS tz
                     FROM running_timers rt
                     JOIN tracks h ON h.id = rt.track_id
                     LEFT JOIN user_settings us ON us.user_id = rt.user_id
