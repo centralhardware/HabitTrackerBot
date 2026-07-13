@@ -14,7 +14,7 @@ repositories {
 }
 
 val flywayVersion = "12.11.0"
-val mcpSdkVersion = "0.13.0"
+val mcpSdkVersion = "0.14.0"
 val ktorVersion = "3.5.1"
 
 dependencies {
