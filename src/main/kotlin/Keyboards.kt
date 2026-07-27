@@ -16,18 +16,6 @@ object Keyboards {
         )
     }
 
-    fun logPlus(trackId: Long, date: LocalDate, lang: Lang): InlineKeyboardMarkup {
-        return InlineKeyboardMarkup(
-            listOf(
-                listOf(
-                    CallbackDataInlineKeyboardButton(Strings.btnPlusOne(lang), "lg|$trackId|$date|1"),
-                    CallbackDataInlineKeyboardButton(Strings.btnPlusComment(lang), "lg|$trackId|$date|c"),
-                    CallbackDataInlineKeyboardButton(Strings.btnDelete(lang), "lg|$trackId|$date|del")
-                )
-            )
-        )
-    }
-
     /** Start/stop/pause control for a timer track. Payload: `tm|<trackId>|<date>|start|stop|stopc|pause|resume`. */
     fun timerControl(trackId: Long, running: Boolean, date: LocalDate, lang: Lang, paused: Boolean = false): InlineKeyboardMarkup {
         if (!running)

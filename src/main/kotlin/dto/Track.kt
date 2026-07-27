@@ -8,9 +8,8 @@ import kotliquery.Row
 
 @Serializable
 enum class TrackType(val value: String) {
-    // A "did I do the thing?" track. Its behavior is the product of two facts: whether it has
-    // reminders (schedule -> markable done/skip slots) and whether it allows ad-hoc check-ins
-    // (allowAdHoc -> a "+1" event any time). Merges the former `scheduled` and `counter` types.
+    // A "did I do the thing?" track: a schedule of reminders whose fired occurrences become
+    // markable done/skip slots. Scheduled-only (a check track must have at least one reminder).
     @SerialName("check") CHECK("check"),
     @SerialName("quantity") QUANTITY("quantity"),
     @SerialName("timer") TIMER("timer");
@@ -104,9 +103,6 @@ data class Track(
     val status: TrackStatus = TrackStatus.ACTIVE,
     @EncodeDefault(EncodeDefault.Mode.NEVER) val params: List<TrackParam> = emptyList(),
     @EncodeDefault(EncodeDefault.Mode.NEVER) val logOnly: Boolean = false,
-    /** CHECK tracks only: whether arbitrary "+1" check-ins may be logged any time, independent
-     *  of any schedule. A check track must have a schedule and/or this flag (never neither). */
-    @EncodeDefault(EncodeDefault.Mode.NEVER) val allowAdHoc: Boolean = false,
 ) {
     /** A multi-field quantity track: more than one param. Single-field tracks hoist their
      *  param's metadata onto the track row, so callers can treat them as plain tracks.
@@ -129,7 +125,6 @@ fun Row.toTrack(): Track = Track(
     direction = Direction.parse(stringOrNull("direction")),
     status = TrackStatus.parse(stringOrNull("status")),
     logOnly = boolean("log_only"),
-    allowAdHoc = boolean("allow_adhoc"),
 )
 
 fun Row.toTrackParam(): TrackParam = TrackParam(

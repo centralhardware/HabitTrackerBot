@@ -32,15 +32,6 @@ object CheckInService {
         )
     }
 
-    fun checkInCounter(trackId: Long, userId: Long, date: LocalDate, comment: String? = null): Boolean {
-        val track = TrackService.findById(trackId, userId) ?: return false
-        if (track.type != TrackType.CHECK || !track.allowAdHoc) return false
-        // An ad-hoc check-in is just a bare checkins row — no param, status or value to store.
-        return CheckInRepository.insertEvent(
-            CheckinEvent(userId, date, reminderId = null, trackId = trackId, comment = comment?.trim()?.ifEmpty { null }),
-        ) > 0
-    }
-
     fun recordQuantity(
         trackId: Long,
         userId: Long,
@@ -185,10 +176,6 @@ object CheckInService {
         }
         return TrackCheckinPage(checkins, ids.entries.associate { (v, id) -> id to v })
     }
-
-    /** Number of counter/manual events logged for [trackId] on [date]. */
-    fun counterCountOn(trackId: Long, date: LocalDate): Int =
-        CheckinAnalytics.countOn(CheckInRepository.loadForTrack(trackId), date)
 
     /** The id of the most recent check-in for [trackId]/[userId], or 0 if none. */
     fun latestCheckin(trackId: Long, userId: Long): Long =

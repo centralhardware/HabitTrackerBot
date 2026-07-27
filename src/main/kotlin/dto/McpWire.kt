@@ -92,13 +92,6 @@ fun FieldValueArg.parse(paramType: ParamType): FieldValue? = when (paramType) {
 }
 
 @Serializable
-data class CheckRecordArgs(
-    val trackId: Long,
-    val date: String? = null,
-    val comment: String? = null,
-)
-
-@Serializable
 data class CheckinDeleteArgs(
     val checkinId: Long,
 )
@@ -128,7 +121,7 @@ data class CheckinUpdateArgs(
 
 /**
  * Edits a track and/or its fields in one call. Top-level scalars edit the track row: 'name', 'logOnly',
- * 'allowAdHoc' (check tracks only), and — for single-field quantity/timer tracks — 'unit'/'dailyTarget'/
+ * and — for single-field quantity/timer tracks — 'unit'/'dailyTarget'/
  * 'direction' (which a single-field track hoists onto the track itself). Per-field edits of a multi-field
  * track go in [params]. Each scalar uses a value/clear pair so callers can distinguish "leave unchanged"
  * (omit) from "set empty" (clearX = true).
@@ -144,7 +137,6 @@ data class TrackUpdateArgs(
     val direction: String? = null,
     val clearDirection: Boolean = false,
     val logOnly: Boolean? = null,
-    val allowAdHoc: Boolean? = null,
     val params: List<TrackParamPatch> = emptyList(),
     /** Null = leave the schedule untouched; [] = clear all reminders; otherwise the full replacement set. */
     val reminders: List<ReminderArg>? = null,
@@ -167,6 +159,39 @@ data class TrackParamPatch(
 @Serializable
 data class TrackParamDeleteArgs(
     val paramId: Long,
+)
+
+/**
+ * Creates a new track. 'type' is "check" | "quantity" | "timer".
+ * - check: a scheduled done/skip track — requires at least one reminder; takes no fields/unit/target.
+ * - quantity: one or more numeric/text fields. Pass [params] for the fields, or leave it empty and
+ *   give top-level unit/dailyTarget/direction for a single numeric field.
+ * - timer: tracks elapsed time. Optional top-level dailyTarget (in seconds)/unit/direction, and
+ *   optional [params] as before/after annotation fields (each with a timerPhase). Takes no reminders.
+ * 'logOnly' makes it a journal (no targets/streaks/stats).
+ */
+@Serializable
+data class TrackCreateArgs(
+    val name: String,
+    val type: String,
+    val logOnly: Boolean = false,
+    val unit: String? = null,
+    val dailyTarget: Double? = null,
+    val direction: String? = null,
+    val params: List<TrackFieldArg> = emptyList(),
+    val reminders: List<ReminderArg> = emptyList(),
+)
+
+/** One field of a new track. 'paramType' is "number" (default) or "text". 'timerPhase' ("before"/
+ *  "after") applies to timer annotation fields only. unit/dailyTarget/direction apply to number fields. */
+@Serializable
+data class TrackFieldArg(
+    val name: String? = null,
+    val paramType: String = "number",
+    val unit: String? = null,
+    val dailyTarget: Double? = null,
+    val direction: String? = null,
+    val timerPhase: String? = null,
 )
 
 /** action is "pause" | "resume" | "delete"; pauseDays is honoured only for pause (0 = indefinite). */
