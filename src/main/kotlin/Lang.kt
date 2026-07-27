@@ -8,7 +8,6 @@ import dto.Track
 import dto.TrackParam
 import dto.TrackStat
 import dto.TrackType
-import dto.TrackWeekStat
 import dto.ParamType
 import dto.TimerPhase
 import java.time.LocalDate
@@ -204,11 +203,6 @@ object Strings {
         val tail = buildString {
             when (h.type) {
                 TrackType.CHECK -> {
-                    if (h.allowAdHoc) {
-                        append(" — ${pick(l, "any time", "в любое время")}")
-                        h.dailyTarget?.toInt()?.let { append(" — ${pick(l, "target: $it/day", "цель: $it/день")}") }
-                        h.direction?.let { append(" — ${directionLabel(l, it)}") }
-                    }
                     if (times.isNotEmpty()) append(" — $times")
                 }
                 TrackType.QUANTITY -> {
@@ -573,77 +567,6 @@ object Strings {
             "⏱ $today$targetPart · ${t.windowDays}д $recent · всё $overall")
     }
 
-    fun weeklySummary(
-        l: Lang,
-        from: LocalDate,
-        to: LocalDate,
-        stats: List<TrackWeekStat>
-    ): String? {
-        if (stats.isEmpty()) return null
-        val activity = stats.any { s ->
-            s.scheduledDone + s.scheduledSkip + s.counterTotal > 0 || s.quantityTotal > 0.0
-        }
-        if (!activity) return null
-
-        return buildString {
-            appendLine(pick(l,
-                "📊 Past week ($from – $to):",
-                "📊 Прошлая неделя ($from – $to):"))
-            stats.forEach { s ->
-                appendLine("• ${s.name}")
-                when (s.type) {
-                    // A check track shows its scheduled (done/skip) block when it has reminders and
-                    // its ad-hoc counter block when it allows ad-hoc check-ins; both may appear.
-                    TrackType.CHECK -> {
-                        if (s.hasSchedule) {
-                            val total = s.scheduledDone + s.scheduledSkip
-                            val rate = if (total > 0) "%.0f%%".format(java.util.Locale.ROOT, s.scheduledDone * 100.0 / total) else "—"
-                            appendLine("    ✅ ${s.scheduledDone}   ❌ ${s.scheduledSkip}   ${statsCompletion(l)}: $rate")
-                        }
-                        if (s.allowAdHoc) {
-                            val avg = if (s.counterDays > 0) "%.1f".format(java.util.Locale.ROOT, s.counterTotal.toDouble() / s.counterDays) else "0"
-                            val dirSuffix = s.direction?.let { "   (${directionShort(l, it)})" } ?: ""
-                            appendLine(pick(l,
-                                "    total: ${s.counterTotal}   days: ${s.counterDays}   avg/day: $avg$dirSuffix",
-                                "    всего: ${s.counterTotal}   дней: ${s.counterDays}   среднее: $avg$dirSuffix"))
-                            if (s.dailyTarget != null) {
-                                appendLine(pick(l,
-                                    "    🎯 target hit: ${s.targetHitDays}/7",
-                                    "    🎯 цель достигнута: ${s.targetHitDays}/7"))
-                            }
-                        }
-                    }
-                    TrackType.QUANTITY -> {
-                        val unit = s.unit?.let { " $it" } ?: ""
-                        val avg = if (s.quantityDays > 0) formatAmount(s.quantityTotal / s.quantityDays) else "0"
-                        val dirSuffix = s.direction?.let { "   (${directionShort(l, it)})" } ?: ""
-                        appendLine(pick(l,
-                            "    total: ${formatAmount(s.quantityTotal)}$unit   days: ${s.quantityDays}   avg/day: $avg$unit$dirSuffix",
-                            "    всего: ${formatAmount(s.quantityTotal)}$unit   дней: ${s.quantityDays}   среднее: $avg$unit$dirSuffix"))
-                        if (s.dailyTarget != null) {
-                            appendLine(pick(l,
-                                "    🎯 target hit: ${s.targetHitDays}/7",
-                                "    🎯 цель достигнута: ${s.targetHitDays}/7"))
-                        }
-                    }
-                    TrackType.TIMER -> {
-                        val total = formatDuration(l, s.quantityTotal)
-                        val avg = if (s.quantityDays > 0) formatDuration(l, s.quantityTotal / s.quantityDays) else formatDuration(l, 0.0)
-                        val dirSuffix = s.direction?.let { "   (${directionShort(l, it)})" } ?: ""
-                        appendLine(pick(l,
-                            "    total: $total   days: ${s.quantityDays}   avg/day: $avg$dirSuffix",
-                            "    всего: $total   дней: ${s.quantityDays}   среднее: $avg$dirSuffix"))
-                        if (s.dailyTarget != null) {
-                            appendLine(pick(l,
-                                "    🎯 target hit: ${s.targetHitDays}/7",
-                                "    🎯 цель достигнута: ${s.targetHitDays}/7"))
-                        }
-                    }
-                }
-            }
-        }.trimEnd()
-    }
-
     fun tzNotSet(l: Lang) = pick(l,
         "Timezone is not set. Set it with /tz <IANA name>, e.g. /tz Europe/Moscow",
         "Часовой пояс не задан. Задайте через /tz <IANA>, например /tz Europe/Moscow")
@@ -924,40 +847,18 @@ object BotCommandsI18n {
     fun list(l: Lang): List<Pair<String, String>> = when (l) {
         Lang.EN -> listOf(
             "checkin" to "today's check-ins",
-            "log" to "recent check-ins",
             "timer" to "start/stop time tracking",
-            "stats" to "statistics",
-            "tracks" to "list tracks",
-            "addtrack" to "add a track (interactive)",
-            "cancel" to "cancel the current /addtrack dialog",
-            "pause" to "pause a track",
-            "resume" to "resume a paused track",
-            "removetrack" to "remove a track",
-            "deleteparam" to "delete a track field",
             "tz" to "show or set your timezone",
             "lang" to "switch language (en/ru)",
-            "calendar" to "subscribe to a track calendar (iCal)",
-            "calendar_off" to "disable the calendar subscription",
             "mcp_new" to "create an MCP API token",
             "mcp_list" to "list MCP API tokens",
             "mcp_revoke" to "revoke an MCP API token",
         )
         Lang.RU -> listOf(
             "checkin" to "чек-ины за сегодня",
-            "log" to "последние чек-ины",
             "timer" to "старт/стоп отслеживания времени",
-            "stats" to "статистика",
-            "tracks" to "список треков",
-            "addtrack" to "добавить трек (интерактивно)",
-            "cancel" to "отменить текущий диалог /addtrack",
-            "pause" to "поставить трек на паузу",
-            "resume" to "возобновить трек",
-            "removetrack" to "удалить трек",
-            "deleteparam" to "удалить поле трека",
             "tz" to "показать или задать часовой пояс",
             "lang" to "сменить язык (en/ru)",
-            "calendar" to "подписка на календарь треков (iCal)",
-            "calendar_off" to "отключить подписку на календарь",
             "mcp_new" to "создать токен MCP API",
             "mcp_list" to "список токенов MCP API",
             "mcp_revoke" to "отозвать токен MCP API",

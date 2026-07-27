@@ -25,8 +25,7 @@ object TrackUpdateTool : TypedMcpTool<TrackUpdateArgs>(TrackUpdateArgs.serialize
     override val name = "track_update"
     override val description =
         "Edit a track's settings (not its check-ins). 'trackId' comes from tracks_list. Top-level fields edit the " +
-            "track: 'name'; 'logOnly' (true = journal only, no targets/streaks/stats); 'allowAdHoc' (check tracks only — " +
-            "whether \"+1\" check-ins are allowed any time; a check track must keep a schedule and/or allowAdHoc); and, " +
+            "track: 'name'; 'logOnly' (true = journal only, no targets/streaks/stats); and, " +
             "for a single-field quantity/timer track, 'dailyTarget'/'unit'/'direction' (\"more\"/\"less\"). " +
             "To edit the fields of a multi-field track, pass 'params': [{ paramId, name, unit, dailyTarget, direction }] " +
             "(paramId from tracks_list params[].id). Any of those scalars has a matching clearX flag (clearUnit, " +
@@ -93,14 +92,6 @@ object TrackUpdateTool : TypedMcpTool<TrackUpdateArgs>(TrackUpdateArgs.serialize
             }
         }
 
-        if (args.allowAdHoc != null) {
-            if (track.type != TrackType.CHECK) return err("'allowAdHoc' applies only to check tracks")
-            if (args.allowAdHoc != track.allowAdHoc) {
-                updated = updated.copy(allowAdHoc = args.allowAdHoc)
-                lines += "allowAdHoc → ${args.allowAdHoc}"
-            }
-        }
-
         // Resolve the schedule (null = untouched). Validate up front so a bad slot fails before any write.
         var newReminders: List<TrackReminder>? = null
         if (args.reminders != null) {
@@ -112,11 +103,12 @@ object TrackUpdateTool : TypedMcpTool<TrackUpdateArgs>(TrackUpdateArgs.serialize
             }
         }
 
-        // Check-track invariant on the *final* state: it must keep a schedule and/or ad-hoc check-ins.
+        // Check-track invariant on the *final* state: a check track is scheduled-only, so it must
+        // keep at least one reminder.
         if (track.type == TrackType.CHECK) {
             val finalReminders = newReminders ?: track.reminders
-            if (finalReminders.isEmpty() && !updated.allowAdHoc)
-                return err("A check track must keep at least one reminder or allowAdHoc enabled")
+            if (finalReminders.isEmpty())
+                return err("A check track must keep at least one reminder")
         }
 
         // Resolve per-field edits up front so a bad patch fails before anything is written.
@@ -233,7 +225,6 @@ object TrackUpdateTool : TypedMcpTool<TrackUpdateArgs>(TrackUpdateArgs.serialize
             putJsonObject("trackId") { put("type", "integer"); put("description", "The track's id (from tracks_list).") }
             putJsonObject("name") { put("type", "string"); put("description", "New track name (non-blank).") }
             putJsonObject("logOnly") { put("type", "boolean"); put("description", "Journal-only mode: no targets/streaks/stats.") }
-            putJsonObject("allowAdHoc") { put("type", "boolean"); put("description", "Check tracks only: allow ad-hoc \"+1\" check-ins.") }
             putJsonObject("dailyTarget") { put("type", "number"); put("description", "Single-field quantity/timer only: daily target (≥0).") }
             putJsonObject("clearDailyTarget") { put("type", "boolean"); put("description", "Set true to remove the daily target.") }
             putJsonObject("unit") { put("type", "string"); put("description", "Single-field quantity/timer only: measurement unit.") }

@@ -2,7 +2,6 @@ import dto.CheckinEventValues
 import dto.CheckinStatus
 import dto.CheckinValueRow
 import dto.FieldValue
-import dto.WeekTotals
 import java.time.LocalDate
 
 /**
@@ -15,10 +14,6 @@ import java.time.LocalDate
  * only when their status is `done`.
  */
 object CheckinAnalytics {
-
-    /** Number of counter/manual events on [date] (old `todayCounterCount`). */
-    fun countOn(rows: List<CheckinValueRow>, date: LocalDate): Int =
-        rows.count { !it.isScheduled && it.date == date }
 
     /** Earliest check-in date, or null when there is no history. */
     fun firstDate(rows: List<CheckinValueRow>): LocalDate? =
@@ -78,31 +73,4 @@ object CheckinAnalytics {
                     startedAt = startedAt,
                 )
             }
-
-    /** Weekly totals over [from]..[to] (old `WeeklySummaryRepository.weeklyTotals`). */
-    fun weekTotals(rows: List<CheckinValueRow>, from: LocalDate, to: LocalDate): WeekTotals {
-        val window = rows.filter { it.date in from..to }
-        val counterEvents = window.filter { !it.isScheduled && it.quantity == null && it.textValue == null && it.timerPhase == null }
-        val quantityEvents = window.filter { !it.isScheduled && it.quantity != null && it.timerPhase == null }
-        return WeekTotals(
-            done = window.count { it.isScheduled && it.status == CheckinStatus.DONE },
-            skip = window.count { it.isScheduled && it.status == CheckinStatus.SKIP },
-            total = counterEvents.size,
-            days = counterEvents.mapTo(mutableSetOf()) { it.date }.size,
-            quantityTotal = quantityEvents.sumOf { it.quantity!! },
-            quantityDays = quantityEvents.mapTo(mutableSetOf()) { it.date }.size,
-        )
-    }
-
-    /** Per-day counter-event counts within [from]..[to] (old `counterCountsInRange`). */
-    fun counterCountsPerDay(rows: List<CheckinValueRow>, from: LocalDate, to: LocalDate): Map<LocalDate, Int> =
-        rows.filter { !it.isScheduled && it.date in from..to }
-            .groupingBy { it.date }
-            .eachCount()
-
-    /** Per-day quantity sums within [from]..[to] (old `quantitySumsInRange`). */
-    fun quantitySumsPerDayInRange(rows: List<CheckinValueRow>, from: LocalDate, to: LocalDate): Map<LocalDate, Double> =
-        rows.filter { !it.isScheduled && it.quantity != null && it.timerPhase == null && it.date in from..to }
-            .groupBy { it.date }
-            .mapValues { (_, day) -> day.sumOf { it.quantity!! } }
 }

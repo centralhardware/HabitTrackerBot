@@ -1,18 +1,9 @@
 import ReminderScheduler.sendDueReminders
 import TimerTicker.tickRunningTimers
-import commands.addtrack.registerAddTrackCommand
-import commands.registerCalendarCommand
 import commands.registerCheckInCommand
-import commands.registerDeleteParamCommand
-import commands.registerLogCommand
-import commands.registerTracksCommand
 import commands.registerMcpCommands
-import commands.registerPauseCommand
-import commands.registerRemoveTrackCommand
-import commands.registerResumeCommand
 import commands.registerLangCommand
 import commands.registerStartCommand
-import commands.registerStatsCommand
 import commands.registerTimerCommand
 import commands.registerTzCommand
 import dev.inmo.krontab.doInfinity
@@ -50,20 +41,11 @@ suspend fun main() {
         setDefaultChatMenuButton(MenuButton.Commands)
 
         registerStartCommand()
-        registerAddTrackCommand()
-        registerTracksCommand()
-        registerRemoveTrackCommand()
-        registerDeleteParamCommand()
-        registerPauseCommand()
-        registerResumeCommand()
         registerCheckInCommand()
-        registerLogCommand()
         registerTimerCommand()
-        registerStatsCommand()
         registerTzCommand()
         registerLangCommand()
         registerMcpCommands()
-        registerCalendarCommand()
         registerCallbackHandler()
 
         launch {
@@ -76,8 +58,6 @@ suspend fun main() {
                 }.onFailure { KSLog.error("autoResumeExpired failed", it) }
                 runCatching { sendDueReminders() }
                     .onFailure { KSLog.error("sendDueReminders failed", it) }
-                runCatching { sendWeeklySummaries() }
-                    .onFailure { KSLog.error("sendWeeklySummaries failed", it) }
             }
         }
 

@@ -14,15 +14,15 @@ object TracksListTool : McpTool {
     override val name = "tracks_list"
     override val description =
         "List the authenticated user's active tracks. Call this first — every other tool takes ids returned here. " +
-            "Each track has: id (use as trackId), name, type (check = done/skip track, quantity = numeric amount, " +
-            "timer = tracked time), status, and params[] (the trackable fields). A check track marks reminder slots when " +
-            "it has reminders and/or accepts ad-hoc \"+1\" check-ins when allowAdHoc=true (use check_record for those). " +
+            "Each track has: id (use as trackId), name, type (check = scheduled done/skip track, quantity = numeric amount, " +
+            "timer = tracked time), status, and params[] (the trackable fields). A check track marks the reminder slots " +
+            "from its schedule as done/skip. " +
             "A single-field track has one param and hoists its unit/dailyTarget/direction onto the track row itself, so " +
             "you can read them there; a multi-field quantity track (multiField=true) exposes several params[], each with " +
             "its own id, name and unit — use params[].id as the paramId for quantity_record and to read checkins_list " +
             "rows. Each param may carry recurringValues[] — its dictionary of recurring (seen more than once) values " +
             "({ value, uses }), most-used first; pass these to param_values_merge to fold near-duplicates together " +
-            "(omitted when the param has none yet). Optional per-track fields (dailyTarget, unit, direction, logOnly, allowAdHoc) are omitted when unset."
+            "(omitted when the param has none yet). Optional per-track fields (dailyTarget, unit, direction, logOnly) are omitted when unset."
     override val inputSchema: ToolSchema = emptyObjectSchema()
     override val annotations = ToolAnnotations(readOnlyHint = true, openWorldHint = false)
 

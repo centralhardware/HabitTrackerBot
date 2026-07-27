@@ -31,7 +31,7 @@ object TrackRepository {
                 queryOf(
                     """
                     SELECT h.id, h.user_id, h.name, h.track_type, h.daily_target,
-                           h.unit, h.direction, h.status, h.log_only, h.allow_adhoc
+                           h.unit, h.direction, h.status, h.log_only
                     FROM tracks h
                     WHERE h.user_id = ? AND h.status <> 'deleted'
                     ORDER BY h.created_at
@@ -97,12 +97,12 @@ object TrackRepository {
                 val id = tx.updateAndReturnGeneratedKey(
                     queryOf(
                         """
-                        INSERT INTO tracks (user_id, name, track_type, daily_target, unit, direction, status, log_only, allow_adhoc)
-                        VALUES (?, ?, ?::track_type, ?, ?, ?::track_direction, ?::track_status, ?, ?)
+                        INSERT INTO tracks (user_id, name, track_type, daily_target, unit, direction, status, log_only)
+                        VALUES (?, ?, ?::track_type, ?, ?, ?::track_direction, ?::track_status, ?)
                         """.trimIndent(),
                         track.userId, track.name, track.type.value,
                         track.dailyTarget, track.unit, track.direction?.value,
-                        track.status.value, track.logOnly, track.allowAdHoc
+                        track.status.value, track.logOnly
                     )
                 ) ?: error("Failed to insert track")
 
@@ -156,14 +156,13 @@ object TrackRepository {
                         direction    = ?::track_direction,
                         status       = ?::track_status,
                         log_only     = ?,
-                        allow_adhoc  = ?,
                         paused_at    = CASE WHEN ?::track_status = 'paused'  AND status <> 'paused'  THEN now() ELSE paused_at  END,
                         deleted_at   = CASE WHEN ?::track_status = 'deleted' AND status <> 'deleted' THEN now() ELSE deleted_at END,
                         paused_until = CASE WHEN ?::track_status <> 'paused' THEN NULL ELSE paused_until END
                     WHERE id = ? AND user_id = ?
                     """.trimIndent(),
                     track.name, track.type.value, track.dailyTarget, track.unit, track.direction?.value,
-                    track.status.value, track.logOnly, track.allowAdHoc,
+                    track.status.value, track.logOnly,
                     track.status.value, track.status.value, track.status.value,
                     track.id, track.userId
                 )
